@@ -60,6 +60,7 @@ ___________________________________________________________________*/
 #include "web_utils.h"
 #include "tnc_utils.h"
 #include "ntp_utils.h"
+#include "sd_utils.h"
 #include "wx_utils.h"
 #include "display.h"
 #include "utils.h"
@@ -110,6 +111,7 @@ void setup() {
     POWER_Utils::setup();
     Utils::setupDisplay();
     LoRa_Utils::setup();
+    SD_Utils::setup();
     Utils::validateFreqs();
     GPS_Utils::setup();
     STATION_Utils::loadBlacklistAndManagers();
@@ -203,6 +205,8 @@ void loop() {
             if (Config.tnc.enableServer) TNC_Utils::sendToClients(packet, true);    // Send received packet to TNC KISS
             if (Config.tnc.enableSerial) TNC_Utils::sendToSerial(packet, true);     // Send received packet to Serial KISS
             if (Config.mqtt.active) MQTT_Utils::sendToMqtt(packet);                 // Send received packet to MQTT
+
+            SD_Utils::endEntry();       // digi decision is known by now, write the SD log line
         }
 
         if (Config.aprs_is.active) APRS_IS_Utils::listenAPRSIS();           // listen received packet from APRSIS

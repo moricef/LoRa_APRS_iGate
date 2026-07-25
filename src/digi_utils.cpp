@@ -23,6 +23,7 @@
 #include "digi_utils.h"
 #include "wifi_utils.h"
 #include "lora_utils.h"
+#include "sd_utils.h"
 #include "display.h"
 #include "utils.h"
 
@@ -197,7 +198,10 @@ namespace DIGI_Utils {
         if (Sender == stationCallsign) return;          // Avoid listening to self packets
         if (!thirdPartyPacket && Config.tacticalCallsign == "" && !Utils::callsignIsValid(Sender)) return;  // No thirdParty + no tactical y no valid callsign
 
-        if (STATION_Utils::isIn25SegHashBuffer(Sender, temp.substring(temp.indexOf(":") + 2))) return;
+        if (STATION_Utils::isIn25SegHashBuffer(Sender, temp.substring(temp.indexOf(":") + 2))) {
+            SD_Utils::setDecision("DUP");
+            return;
+        }
 
         STATION_Utils::updateLastHeard(Sender);
         Utils::typeOfPacket(temp, 2);               // Digi
@@ -215,9 +219,12 @@ namespace DIGI_Utils {
 
         String loraPacket = generateDigipeatedPacket(packet.substring(3), thirdPartyPacket);
         if (loraPacket != "") {
+            SD_Utils::setDecision("RELAY");
             STATION_Utils::addToOutputPacketBuffer(loraPacket);
             if (Config.digi.ecoMode != 1) displayToggle(true);
             lastScreenOn = millis();
+        } else {
+            SD_Utils::setDecision("PATH");
         }
     }
 

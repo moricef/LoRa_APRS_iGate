@@ -26,6 +26,7 @@
 #include "syslog_utils.h"
 #include "map_utils.h"
 #include "ntp_utils.h"
+#include "sd_utils.h"
 #include "display.h"
 #include "utils.h"
 
@@ -299,7 +300,14 @@ namespace LoRa_Utils {
                             if (Config.syslog.active && networkManager->isConnected()) {
                                 SYSLOG_Utils::log(1, packet, rssi, snr, freqError); // RX
                             }
+
+                            SD_Utils::beginEntry(packet.substring(3), rssi, snr, freqError);  // decision is filled in later by the digi
                         } else {
+                            if (packet.substring(0,3) == "\x3c\xff\x01") {   // blacklisted sender (non LoRa APRS frames are not logged)
+                                SD_Utils::beginEntry(packet.substring(3), radio.getRSSI(), radio.getSNR(), radio.getFrequencyError());
+                                SD_Utils::setDecision("BLACK");
+                                SD_Utils::endEntry();
+                            }
                             packet = "";
                         }
                         return packet;
@@ -312,6 +320,7 @@ namespace LoRa_Utils {
                     if (Config.syslog.active && networkManager->isConnected()) {
                         SYSLOG_Utils::log(0, packet, rssi, snr, freqError); // CRC
                     }
+                    SD_Utils::logCRC(rssi, snr, freqError);
                     packet = "";
                 } else {
                     Utils::print(F("failed, code "));
