@@ -27,6 +27,7 @@
 #include "map_utils.h"
 #include "ntp_utils.h"
 #include "sd_utils.h"
+#include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
 
@@ -253,12 +254,19 @@ namespace LoRa_Utils {
         String packet = "";
         int state = radio.readData(packet);
         if (state == RADIOLIB_ERR_NONE) {
+            rssi        = radio.getRSSI();
+            snr         = radio.getSNR();
+            freqError   = radio.getFrequencyError();
             Utils::println("<--- LoRa Packet Rx : " + packet.substring(3));
         } else {
             packet = "";
         }
         return packet;
     }
+
+    int   getLastRssi()      { return rssi; }
+    float getLastSnr()       { return snr; }
+    int   getLastFreqError() { return freqError; }
 
     String receivePacket() {
         String packet = "";
@@ -302,11 +310,13 @@ namespace LoRa_Utils {
                             }
 
                             SD_Utils::beginEntry(packet.substring(3), rssi, snr, freqError);  // decision is filled in later by the digi
+                            TELEMETRY_Utils::incRx();
                         } else {
                             if (packet.substring(0,3) == "\x3c\xff\x01") {   // blacklisted sender (non LoRa APRS frames are not logged)
                                 SD_Utils::beginEntry(packet.substring(3), radio.getRSSI(), radio.getSNR(), radio.getFrequencyError());
                                 SD_Utils::setDecision("BLACK");
                                 SD_Utils::endEntry();
+                                TELEMETRY_Utils::incDrop();
                             }
                             packet = "";
                         }

@@ -21,6 +21,8 @@
 #include "sleep_utils.h"
 #include "digi_utils.h"
 #include "lora_utils.h"
+#include "sd_utils.h"
+#include "telemetry_utils.h"
 
 
 extern  Configuration   Config;
@@ -40,7 +42,10 @@ namespace SLEEP_Utils {
         if (wakeUpFlag) {
             String packet = LoRa_Utils::receivePacketFromSleep();
             if (packet != "") {
+                SD_Utils::beginEntry(packet.substring(3), LoRa_Utils::getLastRssi(), LoRa_Utils::getLastSnr(), LoRa_Utils::getLastFreqError());
+                TELEMETRY_Utils::incRx();
                 DIGI_Utils::processLoRaPacket(packet);
+                SD_Utils::endEntry();
             }
             wakeUpFlag = false;
         }
@@ -80,7 +85,9 @@ namespace SLEEP_Utils {
     }
 
     void checkSerial() {
-        if (Config.digi.ecoMode == 1) Serial.end();
+        #ifndef ECOMODE_KEEP_SERIAL
+            if (Config.digi.ecoMode == 1) Serial.end();
+        #endif
     }
 
 }

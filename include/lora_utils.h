@@ -32,6 +32,9 @@ namespace LoRa_Utils {
     void    changeFreqRx();
     void    wakeRadio();
     void    sleepRadio();
+    int     getLastRssi();
+    float   getLastSnr();
+    int     getLastFreqError();
 
 }
 

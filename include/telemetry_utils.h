@@ -28,6 +28,9 @@ namespace TELEMETRY_Utils {
     String  generateEncodedTelemetryBytes(float value, bool counterBytes, byte telemetryType);
     String  generateEncodedTelemetry();
     void    checkEUPInterval();
+    void    incRx();
+    void    incRelay();
+    void    incDrop();
 
 }
 

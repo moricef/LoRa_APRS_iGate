@@ -24,6 +24,7 @@
 #include "wifi_utils.h"
 #include "lora_utils.h"
 #include "sd_utils.h"
+#include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
 
@@ -180,7 +181,7 @@ namespace DIGI_Utils {
     }
 
     void processLoRaPacket(const String& packet) {
-        if (packet.indexOf("NOGATE") >= 0) return;
+        if (packet.indexOf("NOGATE") >= 0) { TELEMETRY_Utils::incDrop(); return; }
 
         bool thirdPartyPacket = false;
         String temp, Sender;
@@ -195,11 +196,12 @@ namespace DIGI_Utils {
         }
 
         String stationCallsign = Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign;
-        if (Sender == stationCallsign) return;          // Avoid listening to self packets
-        if (!thirdPartyPacket && Config.tacticalCallsign == "" && !Utils::callsignIsValid(Sender)) return;  // No thirdParty + no tactical y no valid callsign
+        if (Sender == stationCallsign) { TELEMETRY_Utils::incDrop(); return; }          // Avoid listening to self packets
+        if (!thirdPartyPacket && Config.tacticalCallsign == "" && !Utils::callsignIsValid(Sender)) { TELEMETRY_Utils::incDrop(); return; }  // No thirdParty + no tactical y no valid callsign
 
         if (STATION_Utils::isIn25SegHashBuffer(Sender, temp.substring(temp.indexOf(":") + 2))) {
             SD_Utils::setDecision("DUP");
+            TELEMETRY_Utils::incDrop();
             return;
         }
 
@@ -215,16 +217,18 @@ namespace DIGI_Utils {
                 queryMessage = APRS_IS_Utils::processReceivedLoRaMessage(Sender, AddresseeAndMessage, thirdPartyPacket);
             }
         }
-        if (queryMessage) return;                   // answer should not be repeated.
+        if (queryMessage) { TELEMETRY_Utils::incDrop(); return; }                   // answer should not be repeated.
 
         String loraPacket = generateDigipeatedPacket(packet.substring(3), thirdPartyPacket);
         if (loraPacket != "") {
             SD_Utils::setDecision("RELAY");
+            TELEMETRY_Utils::incRelay();
             STATION_Utils::addToOutputPacketBuffer(loraPacket);
             if (Config.digi.ecoMode != 1) displayToggle(true);
             lastScreenOn = millis();
         } else {
             SD_Utils::setDecision("PATH");
+            TELEMETRY_Utils::incDrop();
         }
     }
 

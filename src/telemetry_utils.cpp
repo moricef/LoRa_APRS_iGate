@@ -35,6 +35,10 @@ int         telemetryCounter    = random(1,999);
 uint32_t    telemetryEUPTime    = 0;
 bool        sendEUP             = false;    // Equations Units Parameters
 
+static uint16_t rxCount    = 0;             // frames heard (valid LoRa APRS) since last telemetry
+static uint16_t relayCount = 0;             // frames digipeated since last telemetry
+static uint16_t dropCount  = 0;             // frames rejected by the digi (DUP, PATH, BLACK, self, NOGATE, etc.) since last telemetry
+
 
 namespace TELEMETRY_Utils {
 
@@ -51,6 +55,9 @@ namespace TELEMETRY_Utils {
         std::vector<String> coefficients;
         if (Config.battery.sendInternalVoltage) coefficients.push_back("0,0.01,0");
         if (Config.battery.sendExternalVoltage) coefficients.push_back("0,0.02,0");
+        coefficients.push_back("0,1,0");
+        coefficients.push_back("0,1,0");
+        coefficients.push_back("0,1,0");
         return coefficients;
     }
 
@@ -58,6 +65,9 @@ namespace TELEMETRY_Utils {
         std::vector<String> labels;
         if (Config.battery.sendInternalVoltage) labels.push_back("VDC");
         if (Config.battery.sendExternalVoltage) labels.push_back("VDC");
+        labels.push_back("pkt");
+        labels.push_back("pkt");
+        labels.push_back("pkt");
         return labels;
     }
 
@@ -65,6 +75,9 @@ namespace TELEMETRY_Utils {
         std::vector<String> names;
         if (Config.battery.sendInternalVoltage) names.push_back("V_Batt");
         if (Config.battery.sendExternalVoltage) names.push_back("V_Ext");
+        names.push_back("RX");
+        names.push_back("Relay");
+        names.push_back("Drop");
         return names;
     }
 
@@ -124,9 +137,17 @@ namespace TELEMETRY_Utils {
         if (telemetryCounter == 1000) telemetryCounter = 0;
         if (Config.battery.sendInternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkInternalVoltage(), false, 0);
         if (Config.battery.sendExternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkExternalVoltage(), false, Config.battery.useExternalI2CSensor ? 0 : 1);
+        telemetry += generateEncodedTelemetryBytes(rxCount,    true, 0);
+        telemetry += generateEncodedTelemetryBytes(relayCount, true, 0);
+        telemetry += generateEncodedTelemetryBytes(dropCount,  true, 0);
+        rxCount = relayCount = dropCount = 0;                       // reset deltas after emission
         telemetry += "|";
         return telemetry;
     }
+
+    void incRx()    { if (rxCount    < 8280) rxCount++; }           // saturating (2-char base-91 max)
+    void incRelay() { if (relayCount < 8280) relayCount++; }
+    void incDrop()  { if (dropCount  < 8280) dropCount++; }
 
     void checkEUPInterval() {
         if (telemetryEUPTime == 0 || millis() - telemetryEUPTime > 24UL * 60UL * 60UL * 1000UL) {
