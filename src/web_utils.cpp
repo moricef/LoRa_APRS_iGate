@@ -258,6 +258,7 @@ namespace WEB_Utils {
         Config.personalNote                 = getParamStringSafe("personalNote", Config.personalNote);
 
         Config.blacklist                    = getParamStringSafe("blacklist", Config.blacklist);
+        Config.rxtWhitelist                 = getParamStringSafe("rxtWhitelist", Config.rxtWhitelist);
 
         Config.digi.mode                    = getParamIntSafe("digi.mode", Config.digi.mode);
         Config.digi.ecoMode                 = getParamIntSafe("digi.ecoMode", Config.digi.ecoMode);
@@ -322,6 +323,7 @@ namespace WEB_Utils {
         Config.tnc.enableSerial             = request->hasParam("tnc.enableSerial", true);
         Config.tnc.acceptOwn                = request->hasParam("tnc.acceptOwn", true);
         Config.tnc.aprsBridgeActive         = request->hasParam("tnc.aprsBridgeActive", true);
+        Config.tnc.protocol                 = getParamStringSafe("tnc.protocol", Config.tnc.protocol);
 
         Config.mqtt.active                  = request->hasParam("mqtt.active", true);
         if (Config.mqtt.active) {

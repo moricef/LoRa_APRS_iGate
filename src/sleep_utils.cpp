@@ -42,9 +42,7 @@ namespace SLEEP_Utils {
         if (wakeUpFlag) {
             String packet = LoRa_Utils::receivePacketFromSleep();
             if (packet != "") {
-                SD_Utils::beginEntry(packet.substring(3), LoRa_Utils::getLastRssi(), LoRa_Utils::getLastSnr(), LoRa_Utils::getLastFreqError());
-                TELEMETRY_Utils::incRx();
-                DIGI_Utils::processLoRaPacket(packet);
+                DIGI_Utils::processLoRaPacket(packet);      // receivePacket() already opened the SD entry
                 SD_Utils::endEntry();
             }
             wakeUpFlag = false;

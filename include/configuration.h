@@ -132,6 +132,7 @@ public:
     bool    enableSerial;
     bool    acceptOwn;
     bool    aprsBridgeActive;
+    String  protocol;    // "TNC2" or "KISS" -- governs both serial and IP output/input format
 };
 
 class OTA {
@@ -180,6 +181,7 @@ public:
     int                     startupDelay;
     String                  personalNote;
     String                  blacklist;
+    String                  rxtWhitelist;    // space-delimited callsigns of RXT-capable digis, e.g. "TSRXAX TSRXBX SOMTNX"
     std::vector<WiFi_AP>    wifiAPs;
     WiFi_Auto_AP            wifiAutoAP;
     BEACON                  beacon;

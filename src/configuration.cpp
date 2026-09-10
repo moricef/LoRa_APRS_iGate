@@ -89,6 +89,8 @@ bool Configuration::writeFile() {
 
         data["blacklist"]                           = blacklist;
 
+        data["rxtWhitelist"]                        = rxtWhitelist;
+
         data["digi"]["mode"]                        = digi.mode;
         data["digi"]["ecoMode"]                     = digi.ecoMode;
         if (digi.ecoMode == 1) data["aprs_is"]["active"] = false;
@@ -157,6 +159,7 @@ bool Configuration::writeFile() {
         data["tnc"]["enableSerial"]                 = tnc.enableSerial;
         data["tnc"]["acceptOwn"]                    = tnc.acceptOwn;
         data["tnc"]["aprsBridgeActive"]             = tnc.aprsBridgeActive;
+        data["tnc"]["protocol"]                     = tnc.protocol;
 
         data["mqtt"]["active"]                      = mqtt.active;
         data["mqtt"]["server"]                      = mqtt.server;
@@ -280,6 +283,9 @@ bool Configuration::readFile() {
         if (data["blacklist"].isNull()) needsRewrite = true;
         blacklist                       = data["blacklist"] | "station callsign";
 
+        if (data["rxtWhitelist"].isNull()) needsRewrite = true;
+        rxtWhitelist                    = data["rxtWhitelist"] | "";
+
         if (data["digi"]["mode"].isNull() ||
             data["digi"]["ecoMode"].isNull() ||
             data["digi"]["backupDigiMode"].isNull()) needsRewrite = true;
@@ -369,11 +375,13 @@ bool Configuration::readFile() {
         if (data["tnc"]["enableServer"].isNull() ||
             data["tnc"]["enableSerial"].isNull() ||
             data["tnc"]["acceptOwn"].isNull() ||
-            data["tnc"]["aprsBridgeActive"].isNull()) needsRewrite = true;
+            data["tnc"]["aprsBridgeActive"].isNull() ||
+            data["tnc"]["protocol"].isNull()) needsRewrite = true;
         tnc.enableServer                = data["tnc"]["enableServer"] | false;
         tnc.enableSerial                = data["tnc"]["enableSerial"] | false;
         tnc.acceptOwn                   = data["tnc"]["acceptOwn"] | false;
         tnc.aprsBridgeActive            = data["tnc"]["aprsBridgeActive"] | false;
+        tnc.protocol                    = data["tnc"]["protocol"] | "TNC2";
 
         if (data["mqtt"]["active"].isNull() ||
             data["mqtt"]["server"].isNull() ||
@@ -490,6 +498,8 @@ void Configuration::setDefaultValues() {
 
     blacklist                       = "";
 
+    rxtWhitelist                    = "";
+
     digi.mode                       = 0;
     digi.ecoMode                    = 0;
     digi.backupDigiMode             = false;
@@ -538,6 +548,7 @@ void Configuration::setDefaultValues() {
     tnc.enableSerial                = false;
     tnc.acceptOwn                   = false;
     tnc.aprsBridgeActive            = false;
+    tnc.protocol                    = "TNC2";
 
     mqtt.active                     = false;
     mqtt.server                     = "";
