@@ -91,6 +91,46 @@ String hardwareName() {
 #endif
 }
 
+bool aliasSeparator(char character) {
+    return character == ' ' || character == ',' || character == '\t' ||
+           character == '\r' || character == '\n';
+}
+
+bool matchesNumberedAlias(const String& text, const String& alias) {
+    if (alias.length() == 0 || !text.startsWith(alias)) return false;
+    if (text.length() == alias.length()) return true;
+
+    int dash = text.indexOf('-', alias.length() + 1);
+    if (dash < 0 || dash + 1 >= static_cast<int>(text.length())) return false;
+    for (int i = alias.length(); i < dash; ++i) {
+        if (!isDigit(static_cast<unsigned char>(text[i]))) return false;
+    }
+    for (int i = dash + 1; i < static_cast<int>(text.length()); ++i) {
+        if (!isDigit(static_cast<unsigned char>(text[i]))) return false;
+    }
+    return dash > static_cast<int>(alias.length());
+}
+
+bool isRoutingAlias(const String& text) {
+    if (text == "RELAY" || matchesNumberedAlias(text, "WIDE") ||
+        matchesNumberedAlias(text, "TRACE")) return true;
+
+    const String& configured = Config.digi.regionalAliases;
+    unsigned int start = 0;
+    while (start < configured.length()) {
+        while (start < configured.length() && aliasSeparator(configured[start])) ++start;
+        if (start >= configured.length()) break;
+        int end = start;
+        while (end < static_cast<int>(configured.length()) &&
+               !aliasSeparator(configured[end])) ++end;
+        String alias = configured.substring(start, end);
+        alias.toUpperCase();
+        if (matchesNumberedAlias(text, alias)) return true;
+        start = end + 1;
+    }
+    return false;
+}
+
 void addAddress(JsonObject object, const String& rawText, bool pathElement = false) {
     String text = rawText;
     bool repeated = pathElement && text.endsWith("*");
@@ -124,7 +164,7 @@ void addAddress(JsonObject object, const String& rawText, bool pathElement = fal
             object["kind"] = "q_construct";
         } else if (upper == "TCPIP" || upper == "TCPXX" || upper == "NOGATE" || upper == "RFONLY") {
             object["kind"] = "internet";
-        } else if (upper.startsWith("WIDE") || upper.startsWith("TRACE")) {
+        } else if (isRoutingAlias(upper)) {
             object["kind"] = "alias";
         } else if (call.length() > 0) {
             object["kind"] = "station";

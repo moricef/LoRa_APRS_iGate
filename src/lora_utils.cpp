@@ -334,7 +334,8 @@ namespace LoRa_Utils {
         // chain of hops is a fact about the path, not about which of those
         // hops happened to be RXT-instrumented.
         std::vector<String> usedPathNodes;
-        for (const std::string& node : RXT_Protocol::usedPathNodes(packet.c_str())) {
+        for (const std::string& node : RXT_Protocol::usedPathNodes(
+                 packet.c_str(), Config.digi.regionalAliases.c_str())) {
             usedPathNodes.push_back(node.c_str());
         }
 

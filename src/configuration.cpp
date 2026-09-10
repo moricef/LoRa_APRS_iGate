@@ -94,6 +94,8 @@ bool Configuration::writeFile() {
 
         data["digi"]["mode"]                        = digi.mode;
         data["digi"]["ecoMode"]                     = digi.ecoMode;
+        data["digi"]["regionalAliases"]             = digi.regionalAliases;
+        data["digi"]["regionalMaxHops"]             = digi.regionalMaxHops;
         if (digi.ecoMode == 1) data["aprs_is"]["active"] = false;
         #if defined(HAS_A7670)
             if (digi.ecoMode == 1) data["digi"]["ecoMode"] = 2;
@@ -301,7 +303,9 @@ bool Configuration::readFile() {
 
         if (data["digi"]["mode"].isNull() ||
             data["digi"]["ecoMode"].isNull() ||
-            data["digi"]["backupDigiMode"].isNull()) needsRewrite = true;
+            data["digi"]["backupDigiMode"].isNull() ||
+            data["digi"]["regionalAliases"].isNull() ||
+            data["digi"]["regionalMaxHops"].isNull()) needsRewrite = true;
         digi.mode                       = data["digi"]["mode"] | 0;
         digi.ecoMode                    = data["digi"]["ecoMode"] | 0;
         if (digi.ecoMode == 1) shouldSleepStop = false;
@@ -309,6 +313,8 @@ bool Configuration::readFile() {
             if (digi.ecoMode == 1) digi.ecoMode = 2;
         #endif
         digi.backupDigiMode             = data["digi"]["backupDigiMode"] | false;
+        digi.regionalAliases            = data["digi"]["regionalAliases"] | "WIDE";
+        digi.regionalMaxHops            = constrain(data["digi"]["regionalMaxHops"] | 2, 1, 9);
 
         if (data["lora"]["rxActive"].isNull() ||
             data["lora"]["rxFreq"].isNull() ||
@@ -521,6 +527,8 @@ void Configuration::setDefaultValues() {
     digi.mode                       = 0;
     digi.ecoMode                    = 0;
     digi.backupDigiMode             = false;
+    digi.regionalAliases            = "WIDE";
+    digi.regionalMaxHops            = 2;
 
     loramodule.rxActive             = true;
     loramodule.rxFreq               = 433775000;

@@ -74,6 +74,10 @@ int main() {
                     "SUNSET>APLRG1,SOMTNX,TSRXBX*,TSRXAX*:payload"),
                 {"SOMTNX", "TSRXBX", "TSRXAX"});
     expectNodes("unused path", RXT_Protocol::usedPathNodes("SRC>DST,WIDE1-1,WIDE2-1:payload"), {});
+    expectNodes("configured regional alias is not a physical hop",
+                RXT_Protocol::usedPathNodes(
+                    "SRC>DST,F6DEV,ARIEG2-1*:payload", "WIDE ARIEG"),
+                {"F6DEV"});
     expectNodes("payload comma is not a path",
                 RXT_Protocol::usedPathNodes("SRC>DST:payload,with,commas"), {});
 

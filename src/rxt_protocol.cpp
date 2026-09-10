@@ -20,7 +20,27 @@ size_t trailerStart(const std::string& packet) {
     return start != std::string::npos && start > lowerBound ? start : std::string::npos;
 }
 
-bool isRoutingAlias(const std::string& node) {
+bool isAliasSeparator(char character) {
+    return character == ' ' || character == ',' || character == '\t' ||
+           character == '\r' || character == '\n';
+}
+
+bool matchesNumberedAlias(const std::string& upper, const std::string& alias) {
+    if (alias.empty() || upper.compare(0, alias.size(), alias) != 0) return false;
+    if (upper.size() == alias.size()) return true;
+
+    size_t dash = upper.find('-', alias.size() + 1);
+    if (dash == std::string::npos || dash + 1 >= upper.size()) return false;
+    for (size_t i = alias.size(); i < dash; ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(upper[i]))) return false;
+    }
+    for (size_t i = dash + 1; i < upper.size(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(upper[i]))) return false;
+    }
+    return dash > alias.size();
+}
+
+bool isRoutingAlias(const std::string& node, const std::string& regionalAliases) {
     std::string upper = node;
     std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) {
         return static_cast<char>(std::toupper(c));
@@ -28,16 +48,24 @@ bool isRoutingAlias(const std::string& node) {
 
     if (upper == "RELAY") return true;
 
-    size_t prefixLength = 0;
-    if (upper.compare(0, 4, "WIDE") == 0) prefixLength = 4;
-    else if (upper.compare(0, 5, "TRACE") == 0) prefixLength = 5;
-    else return false;
-
-    if (upper.size() == prefixLength) return true;
-    for (size_t i = prefixLength; i < upper.size(); ++i) {
-        if (!std::isdigit(static_cast<unsigned char>(upper[i])) && upper[i] != '-') return false;
+    if (matchesNumberedAlias(upper, "WIDE") || matchesNumberedAlias(upper, "TRACE")) {
+        return true;
     }
-    return true;
+
+    size_t start = 0;
+    while (start < regionalAliases.size()) {
+        while (start < regionalAliases.size() && isAliasSeparator(regionalAliases[start])) ++start;
+        if (start >= regionalAliases.size()) break;
+        size_t end = start;
+        while (end < regionalAliases.size() && !isAliasSeparator(regionalAliases[end])) ++end;
+        std::string alias = regionalAliases.substr(start, end - start);
+        std::transform(alias.begin(), alias.end(), alias.begin(), [](unsigned char c) {
+            return static_cast<char>(std::toupper(c));
+        });
+        if (matchesNumberedAlias(upper, alias)) return true;
+        start = end + 1;
+    }
+    return false;
 }
 
 }
@@ -69,7 +97,8 @@ std::string stripTrailer(const std::string& packet, std::string* outTuples) {
     return packet;
 }
 
-std::vector<std::string> usedPathNodes(const std::string& packet) {
+std::vector<std::string> usedPathNodes(const std::string& packet,
+                                       const std::string& regionalAliases) {
     std::vector<std::string> pathElements;
     size_t gt = packet.find('>');
     size_t colon = packet.find(':', gt == std::string::npos ? 0 : gt + 1);
@@ -101,7 +130,7 @@ std::vector<std::string> usedPathNodes(const std::string& packet) {
     // callsign; retaining it would invent links such as WIDE2-2 -> F4MLV-10.
     std::vector<std::string> pathNodes;
     for (const std::string& node : pathElements) {
-        if (!isRoutingAlias(node)) pathNodes.push_back(node);
+        if (!isRoutingAlias(node, regionalAliases)) pathNodes.push_back(node);
     }
     return pathNodes;
 }
