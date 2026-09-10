@@ -142,7 +142,7 @@ namespace APRS_IS_Utils {
 
     String buildPacketToUpload(const String& packet) {
         int colonIndex = packet.indexOf(":");
-        String packetToUpload = packet.substring(3, colonIndex);
+        String packetToUpload = packet.substring(0, colonIndex);
         if (Config.aprs_is.active && passcodeValid && Config.aprs_is.messagesToRF) {
             packetToUpload += ",qAR,";
         } else {
@@ -151,12 +151,7 @@ namespace APRS_IS_Utils {
         packetToUpload += Config.callsign;
         packetToUpload += checkForStartingBytes(packet.substring(colonIndex));
 
-        // Belt-and-suspenders: RXT trailers should already be gone by this
-        // point (stripped once in LoRa_Utils::receivePacket(), the sole
-        // upstream source of RF packets). This is a second, independent
-        // strip at the actual APRS-IS upload boundary -- a no-op in normal
-        // operation, but it means this guarantee doesn't rest entirely on
-        // a call site in a different file continuing to behave correctly.
+        // RXT is an RF-only extension. Remove it at the APRS-IS boundary.
         return LoRa_Utils::stripRxtTrailer(packetToUpload);
     }
 
@@ -210,10 +205,10 @@ namespace APRS_IS_Utils {
             if (packet.indexOf("NOGATE") == -1 && packet.indexOf("RFONLY") == -1) {
                 int firstColonIndex = packet.indexOf(":");
                 if (firstColonIndex > 5 && firstColonIndex < (packet.length() - 1) && packet[firstColonIndex + 1] != '}' && packet.indexOf("TCPIP") == -1) {
-                    const String& Sender = packet.substring(3, packet.indexOf(">"));
+                    const String& Sender = packet.substring(0, packet.indexOf(">"));
                     if (Sender != Config.callsign && Utils::callsignIsValid(Sender)) {
                         STATION_Utils::updateLastHeard(Sender);
-                        Utils::typeOfPacket(packet.substring(3), 0);  // LoRa-APRS
+                        Utils::typeOfPacket(packet, 0);  // LoRa-APRS
                         int doubleColonIndex = packet.indexOf("::");
                         const String& AddresseeAndMessage = packet.substring(doubleColonIndex + 2);
                         String Addressee = AddresseeAndMessage.substring(0, AddresseeAndMessage.indexOf(":"));

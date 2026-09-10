@@ -19,6 +19,7 @@
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 #include "configuration.h"
+#include "lora_utils.h"
 #include "station_utils.h"
 #include "mqtt_utils.h"
 
@@ -36,7 +37,7 @@ namespace MQTT_Utils {
             Serial.println("Can not send to MQTT because it is not connected");
             return;
         }
-        const String cleanPacket    = packet.substring(3);
+        const String cleanPacket    = LoRa_Utils::stripRxtTrailer(packet);
         const String sender         = cleanPacket.substring(0, cleanPacket.indexOf(">"));
         const String topic          = String(Config.mqtt.topic + "/" + sender);
 

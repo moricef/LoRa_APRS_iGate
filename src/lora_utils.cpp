@@ -28,6 +28,7 @@
 #include "map_utils.h"
 #include "ntp_utils.h"
 #include "sd_utils.h"
+#include "rxt_protocol.h"
 #include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
@@ -36,11 +37,6 @@
 extern Configuration    Config;
 extern NetworkManager   *networkManager;
 extern bool             packetIsBeacon;
-// Set true only around the single genuine digipeat-relay call site
-// (digi_utils.cpp, via STATION_Utils::addToOutputPacketBuffer's
-// eligibleForRxt parameter). Defaults false everywhere else -- see
-// sendNewPacket()'s allowRxt logic below.
-extern bool             packetEligibleForRxt;
 
 extern std::vector<ReceivedPacket> receivedPackets;
 
@@ -244,106 +240,14 @@ namespace LoRa_Utils {
     }
 
     String attachRxtTrailer(const String& packet, const String& newTuple) {
-        String cleanPacket = packet;
-        int len = cleanPacket.length();
-        
-        // Check if the packet ends with '}'
-        if (len > 6 && cleanPacket.charAt(len - 1) == '}') {
-            int trailerIdx = -1;
-            for (int i = len - 2; i >= 0 && i > len - 20; i--) {
-                if (cleanPacket.charAt(i) == '{') {
-                    trailerIdx = i;
-                    break;
-                }
-            }
-            
-            if (trailerIdx != -1) {
-                int innerLen = (len - 1) - (trailerIdx + 1);
-                String innerContent = cleanPacket.substring(trailerIdx + 1, len - 1);
-                bool validRxt = true;
-                
-                // Cap matches stripRxtTrailer's own <=12 (3 tuples) exactly.
-                // A mismatched, looser cap here would let a 4th tuple attach
-                // successfully on the wire while stripRxtTrailer downstream
-                // (on every receiving node, including this one) rejects the
-                // resulting 16-char blob as invalid -- silently destroying
-                // the 3 legitimate tuples too, not just failing to record a
-                // 4th hop.
-                if (innerLen > 0 && (innerLen % 4 == 0) && innerLen <= 12) {
-                    for (int i = 0; i < innerContent.length(); i++) {
-                        char c = innerContent.charAt(i);
-                        if (c < 33 || c > 122) {
-                            validRxt = false;
-                            break;
-                        }
-                    }
-                } else {
-                    validRxt = false;
-                }
-                
-                String prefix = cleanPacket.substring(0, trailerIdx);
-                
-                if (validRxt) {
-                    if (innerLen >= 12) {
-                        // Already at the 3-hop cap. Preserve the 3 existing,
-                        // valid, decodable tuples unchanged rather than
-                        // appending a 4th (which stripRxtTrailer would then
-                        // reject wholesale) or discarding them in favor of
-                        // just this new one. The 4th hop's measurement is
-                        // simply not recorded -- the packet and its first
-                        // three hops of RXT history stay fully intact.
-                        return cleanPacket;
-                    }
-                    return prefix + "{" + innerContent + newTuple + "}";
-                } else {
-                    return prefix + "{" + newTuple + "}";
-                }
-            }
-        }
-        
-        return cleanPacket + "{" + newTuple + "}";
+        return String(RXT_Protocol::attachTrailer(packet.c_str(), newTuple.c_str()).c_str());
     }        
 
     String stripRxtTrailer(const String& packet, String* outTuple) {
-        int len = packet.length();
-        if (len > 6 && packet.endsWith("}")) {
-            int trailerIdx = -1;
-            for (int i = len - 2; i >= 0 && i > len - 20; i--) {
-                if (packet.charAt(i) == '{') {
-                    trailerIdx = i;
-                    break;
-                }
-            }
-            
-            if (trailerIdx != -1) {
-                int innerLen = (len - 1) - (trailerIdx + 1);
-                String innerContent = packet.substring(trailerIdx + 1, len - 1);
-                bool validRxt = true;
-                
-                if (innerLen > 0 && (innerLen % 4 == 0) && innerLen <= 12) {
-                    for (size_t i = 0; i < innerContent.length(); i++) {
-                        char c = innerContent.charAt(i);
-                        if (c < 33 || c > 122) {
-                            validRxt = false;
-                            break;
-                        }
-                    }
-                } else {
-                    validRxt = false;
-                }
-                
-                if (validRxt) {
-                    if (outTuple != nullptr) {
-                        *outTuple = innerContent;
-                    }
-                    return packet.substring(0, trailerIdx);
-                }
-            }
-        }
-        if (outTuple != nullptr) {
-            *outTuple = "";
-        }
-        return packet;
+        std::string tuples;
+        std::string clean = RXT_Protocol::stripTrailer(packet.c_str(), outTuple == nullptr ? nullptr : &tuples);
+        if (outTuple != nullptr) *outTuple = tuples.c_str();
+        return String(clean.c_str());
     }
 
     String getLastRxtField() {
@@ -371,8 +275,13 @@ namespace LoRa_Utils {
         String baseCall = callsign;
         int dashIdx = baseCall.indexOf('-');
         if (dashIdx > 0) baseCall = baseCall.substring(0, dashIdx);
+        baseCall.toUpperCase();
         for (size_t i = 0; i < rxtWhitelistLoaded.size(); i++) {
-            if (baseCall.equals(rxtWhitelistLoaded[i])) return true;
+            String whitelistCall = rxtWhitelistLoaded[i];
+            int whitelistDashIdx = whitelistCall.indexOf('-');
+            if (whitelistDashIdx > 0) whitelistCall = whitelistCall.substring(0, whitelistDashIdx);
+            whitelistCall.toUpperCase();
+            if (baseCall.equals(whitelistCall)) return true;
         }
         return false;
     }
@@ -416,46 +325,15 @@ namespace LoRa_Utils {
             sourceCall = packet.substring(0, gtIdx);
         }
 
-        // Build the full path node list, but stop right after the last
+        // Build the full path node list through the last
         // starred element -- anything beyond it (e.g. a trailing WIDE2-1)
         // hasn't transmitted this packet yet and must not be treated as a hop.
         // This runs regardless of whether a trailer is present: the physical
         // chain of hops is a fact about the path, not about which of those
         // hops happened to be RXT-instrumented.
         std::vector<String> usedPathNodes;
-        int commaIdx = packet.indexOf(',');
-        if (commaIdx != -1 && gtIdx != -1) {
-            int colonIdx = packet.indexOf(':');
-            String pathPart = packet.substring(commaIdx + 1, (colonIdx != -1 ? colonIdx : packet.length()));
-
-            int start = 0;
-            bool reachedEnd = false;
-            bool foundStar = false;
-            while (!reachedEnd) {
-                int nextComma = pathPart.indexOf(',', start);
-                String node = (nextComma != -1) ? pathPart.substring(start, nextComma)
-                                                 : pathPart.substring(start);
-                reachedEnd = (nextComma == -1);
-
-                bool wasStarred = node.indexOf('*') != -1;
-                node.replace("*", "");
-                if (node.length() > 0) {
-                    usedPathNodes.push_back(node);
-                }
-                if (wasStarred) {
-                    foundStar = true;
-                    break; // everything after the star is unconsumed
-                }
-
-                start = nextComma + 1;
-            }
-            if (!foundStar) {
-                // No star anywhere in the path means this packet hasn't
-                // been digipeated at all yet -- zero hops have actually
-                // occurred. Every token we saw was an unconsumed alias
-                // (WIDE1-1, WIDE2-2, etc.), not a real or NA-able hop.
-                usedPathNodes.clear();
-            }
+        for (const std::string& node : RXT_Protocol::usedPathNodes(packet.c_str())) {
+            usedPathNodes.push_back(node.c_str());
         }
 
         if (usedPathNodes.empty()) {
@@ -662,12 +540,16 @@ namespace LoRa_Utils {
         }
     }
 
-    void sendNewPacket(const String& rawPacket) {
+    RxtRxContext captureRxtRxContext() {
+        return {rxCompletedMillis > 0, rssi, snr, freqOffset, rxCompletedMillis};
+    }
+
+    void sendNewPacket(const String& rawPacket, const RxtRxContext* rxtContext) {
         if (!Config.loramodule.txActive) return;
 
         unsigned long dwellTimeMs = 0;
-        if (rxCompletedMillis > 0) {
-            dwellTimeMs = millis() - rxCompletedMillis;
+        if (rxtContext != nullptr && rxtContext->valid) {
+            dwellTimeMs = millis() - rxtContext->completedAt;
         }
 
         if (Config.loramodule.txFreq != Config.loramodule.rxFreq) {
@@ -688,14 +570,13 @@ namespace LoRa_Utils {
         unsigned long channelWaitMs = millis() - cadStart;
         unsigned long totalDwellAndChannelMs = dwellTimeMs + channelWaitMs;
 
-        // Only ever true for a genuine relay of a frame this station's own
-        // LoRa receiver just heard (set via packetEligibleForRxt, mirroring
-        // packetIsBeacon's set/reset pattern). Self-originated content --
+        // A context exists only for a genuine relay of a frame this station's
+        // LoRa receiver just heard. Self-originated content --
         // beacons, telemetry, APRS-IS-to-RF conversions, local TNC client
         // traffic, query/command responses -- has no real RF reception
         // behind it and must never carry RXT data, regardless of this
         // packet's payload shape.
-        bool allowRxt = packetEligibleForRxt;
+        bool allowRxt = rxtContext != nullptr && rxtContext->valid;
         int colonIdx = rawPacket.indexOf(':');
         if (colonIdx != -1) {
             int gtIdx = rawPacket.indexOf('>');
@@ -709,7 +590,7 @@ namespace LoRa_Utils {
 
         String finalPacket = rawPacket;
         if (allowRxt) {
-            String localTuple = buildRxtTuple(rssi, snr, freqOffset, totalDwellAndChannelMs);
+            String localTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, totalDwellAndChannelMs);
             String pendingPacket = attachRxtTrailer(rawPacket, localTuple);
             String fullPayloadWithHeader = "\x3c\xff\x01" + pendingPacket;
 
@@ -717,7 +598,7 @@ namespace LoRa_Utils {
             unsigned long timeOnAirMs = radio.getTimeOnAir(totalBytes) / 1000; 
 
             unsigned long finalTTH = totalDwellAndChannelMs + timeOnAirMs;
-            String finalTuple = buildRxtTuple(rssi, snr, freqOffset, finalTTH);
+            String finalTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, finalTTH);
             finalPacket = attachRxtTrailer(rawPacket, finalTuple);
         }
 
@@ -745,7 +626,6 @@ namespace LoRa_Utils {
             }
         }
 
-        rxCompletedMillis = 0;
     }
 
     String receivePacket() {

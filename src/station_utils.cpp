@@ -36,10 +36,12 @@ std::vector<String>             managers;
 std::vector<LastHeardStation>   lastHeardObjects;
 
 struct OutputPacketBuffer {
-    String      packet;
-    bool        isBeacon;
-    bool        eligibleForRxt;
-    OutputPacketBuffer(const String& p, bool b, bool r) : packet(p), isBeacon(b), eligibleForRxt(r) {}
+    String                    packet;
+    bool                      isBeacon;
+    LoRa_Utils::RxtRxContext  rxtContext;
+    OutputPacketBuffer(const String& p, bool b, bool r)
+        : packet(p), isBeacon(b), rxtContext(r ? LoRa_Utils::captureRxtRxContext()
+                                               : LoRa_Utils::RxtRxContext{false, 0, 0.0f, 0, 0}) {}
 };
 std::vector<OutputPacketBuffer> outputPacketBuffer;
 
@@ -51,13 +53,6 @@ std::vector<Packet25SegBuffer>  packet25SegBuffer;
 
 bool saveNewDigiEcoModeConfig   = false;
 bool packetIsBeacon             = false;
-// Mirrors packetIsBeacon's pattern exactly: set immediately before calling
-// LoRa_Utils::sendNewPacket(), reset immediately after. sendNewPacket() reads
-// this to decide whether attaching an RXT tuple is even legitimate for this
-// specific transmission -- see the extern declaration and allowRxt logic in
-// lora_utils.cpp for why this must default false and only ever be set true
-// around a genuine digipeat relay.
-bool packetEligibleForRxt        = false;
 
 
 namespace STATION_Utils {
@@ -222,10 +217,10 @@ namespace STATION_Utils {
         while (currentIndex < outputPacketBuffer.size()) {                  // this sends all packets from output buffer
             delay(3000);                                                    // and cleans buffer to avoid sending packets with time offset
             if (outputPacketBuffer[currentIndex].isBeacon) packetIsBeacon = true;
-            packetEligibleForRxt = outputPacketBuffer[currentIndex].eligibleForRxt;
-            LoRa_Utils::sendNewPacket(outputPacketBuffer[currentIndex].packet);    // next time it wakes up
+            const LoRa_Utils::RxtRxContext* rxtContext = outputPacketBuffer[currentIndex].rxtContext.valid
+                ? &outputPacketBuffer[currentIndex].rxtContext : nullptr;
+            LoRa_Utils::sendNewPacket(outputPacketBuffer[currentIndex].packet, rxtContext);    // next time it wakes up
             if (outputPacketBuffer[currentIndex].isBeacon) packetIsBeacon = false;
-            packetEligibleForRxt = false;
             currentIndex++;
         }
         outputPacketBuffer.clear();
@@ -242,19 +237,19 @@ namespace STATION_Utils {
     void processOutputPacketBuffer() {
         if (outputPacketBuffer.size() > 0) {
             if (outputPacketBuffer[0].isBeacon) packetIsBeacon = true;
-            packetEligibleForRxt = outputPacketBuffer[0].eligibleForRxt;
-            LoRa_Utils::sendNewPacket(outputPacketBuffer[0].packet);
+            const LoRa_Utils::RxtRxContext* rxtContext = outputPacketBuffer[0].rxtContext.valid
+                ? &outputPacketBuffer[0].rxtContext : nullptr;
+            LoRa_Utils::sendNewPacket(outputPacketBuffer[0].packet, rxtContext);
             if (outputPacketBuffer[0].isBeacon) packetIsBeacon = false;
-            packetEligibleForRxt = false;
             outputPacketBuffer.erase(outputPacketBuffer.begin());
         }
         if (shouldSleepLowVoltage) {
             while (outputPacketBuffer.size() > 0) {
                 if (outputPacketBuffer[0].isBeacon) packetIsBeacon = true;
-                packetEligibleForRxt = outputPacketBuffer[0].eligibleForRxt;
-                LoRa_Utils::sendNewPacket(outputPacketBuffer[0].packet);
+                const LoRa_Utils::RxtRxContext* rxtContext = outputPacketBuffer[0].rxtContext.valid
+                    ? &outputPacketBuffer[0].rxtContext : nullptr;
+                LoRa_Utils::sendNewPacket(outputPacketBuffer[0].packet, rxtContext);
                 if (outputPacketBuffer[0].isBeacon) packetIsBeacon = false;
-                packetEligibleForRxt = false;
                 outputPacketBuffer.erase(outputPacketBuffer.begin());
                 delay(4000);
             }

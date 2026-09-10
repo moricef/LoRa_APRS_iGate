@@ -20,6 +20,8 @@
 #include "ESPmDNS.h"
 #include "configuration.h"
 #include "station_utils.h"
+#include "kiss_protocol.h"
+#include "kiss_utils.h"
 #include "aprs_is_utils.h"
 #include "tnc_utils.h"
 #include "utils.h"
@@ -47,6 +49,10 @@ String inputSerialBuffer = "";
 
 namespace TNC_Utils {
 
+    bool usesKissProtocol() {
+        return Config.tnc.protocol.equalsIgnoreCase("KISS");
+    }
+
     void setup() {
         if (Config.tnc.enableServer && Config.digi.ecoMode == 0) {
             tncServer.stop();
@@ -60,7 +66,7 @@ namespace TNC_Utils {
             if (!MDNS.addService("tnc", "tcp", TNC_PORT)) {
                 Serial.println("Error: Could not add mDNS service");
             }
-            Serial.println("TNC server started successfully (TNC2 text mode)");
+            Serial.println("TNC server started successfully (" + Config.tnc.protocol + " mode)");
             Serial.println("mDNS Host: " + host + ".local");
         }
     }
@@ -73,7 +79,7 @@ namespace TNC_Utils {
                 WiFiClient* client = clients[i];
                 if (client == nullptr) {
                     clients[i] = new WiFiClient(new_client);
-                    Utils::println("New TNC2 client connected");
+                    Utils::println("New TNC client connected");
                     placed = true;
                     break;
                 }
@@ -82,15 +88,49 @@ namespace TNC_Utils {
                 // All MAX_CLIENTS slots full -- reject explicitly rather
                 // than accepting at the TCP level and then silently
                 // abandoning the connection with no close and no log line.
-                Utils::println("TNC2 client rejected: max clients (" + String(MAX_CLIENTS) + ") already connected");
+                Utils::println("TNC client rejected: max clients (" + String(MAX_CLIENTS) + ") already connected");
                 new_client.stop();
             }
         }
     }
 
+    void processInputFrame(const String& frame, int bufferIndex, const String& protocol) {
+        if (bufferIndex != -1) {
+            Utils::print("<--- Got from " + protocol + "     : ");
+            Utils::println(frame);
+        }
+
+        int gtIdx = frame.indexOf('>');
+        if (gtIdx == -1) return;
+
+        String sender = frame.substring(0, gtIdx);
+        if (Config.tnc.acceptOwn || sender != Config.callsign) {
+            if (Config.loramodule.txActive) STATION_Utils::addToOutputPacketBuffer(frame);
+            if (Config.tnc.aprsBridgeActive && Config.aprs_is.active && passcodeValid && aprsIsClient.connected()) {
+                APRS_IS_Utils::upload(frame);
+            }
+        } else {
+            Utils::println("Ignored own frame from " + protocol);
+        }
+    }
+
     void handleInputData(char character, int bufferIndex) {
         String* data = (bufferIndex == -1) ? &inputSerialBuffer : &inputServerBuffer[bufferIndex];
-        
+
+        if (usesKissProtocol()) {
+            if (data->length() == 0 && character != (char)FEND) return;
+            data->concat(character);
+
+            if (character == (char)FEND && data->length() > 3) {
+                bool isDataFrame = false;
+                const String frame = decodeKISS(*data, isDataFrame);
+                if (isDataFrame) processInputFrame(frame, bufferIndex, "KISS");
+                data->clear();
+            }
+            if (data->length() > 255) data->clear();
+            return;
+        }
+
         if (character == '\r') return;
 
         if (character == '\n') {
@@ -99,24 +139,7 @@ namespace TNC_Utils {
                 frame.trim();
                 
                 if (frame.length() > 0) {
-                    if (bufferIndex != -1) {
-                        Utils::print("<--- Got from TNC2     : ");
-                        Utils::println(frame);
-                    }
-
-                    int gtIdx = frame.indexOf('>');
-                    if (gtIdx != -1) {
-                        String sender = frame.substring(0, gtIdx);
-
-                        if (Config.tnc.acceptOwn || sender != Config.callsign) {
-                            if (Config.loramodule.txActive) STATION_Utils::addToOutputPacketBuffer(frame);
-                            if (Config.tnc.aprsBridgeActive && Config.aprs_is.active && passcodeValid && aprsIsClient.connected()) {
-                                APRS_IS_Utils::upload(frame);
-                            }
-                        } else {
-                            Utils::println("Ignored own frame from TNC2 line");
-                        }
-                    }
+                    processInputFrame(frame, bufferIndex, "TNC2");
                 }
             }
             data->clear();
@@ -169,11 +192,8 @@ namespace TNC_Utils {
     void sendToClients(const String& packet, bool levelInfo, const std::vector<LoRa_Utils::RxtHopMetric>& hopMetrics) {
         if (packet.length() == 0) return;
 
-        // packet now arrives with any RXT trailer still attached (needed
-        // upstream so a second RXT digi can concatenate onto it when
-        // forwarding). Strip it here for the client-facing line -- TNC
-        // clients should only ever see the clean APRS packet.
-        String lineToSend = LoRa_Utils::stripRxtTrailer(packet) + "\r\n"; // Line 1: Clean APRS packet
+        String cleanPacket = LoRa_Utils::stripRxtTrailer(packet);
+        String lineToSend = usesKissProtocol() ? encodeKISS(cleanPacket) : cleanPacket + "\r\n";
 
         for (int i = 0; i < MAX_CLIENTS; i++) {
             auto client = clients[i];
@@ -182,8 +202,8 @@ namespace TNC_Utils {
                     // Send Line 1
                     client->print(lineToSend);
                     
-                    // Send Line 2: Local receiver metrics
-                    if (levelInfo) {
+                    // Metrics are text records and must never enter a KISS stream.
+                    if (!usesKissProtocol() && levelInfo) {
                         client->print("RSSI:" + String(rssi) + " SNR:" + signedFloat(snr, 2) + " FO:" + signedInt(freqOffset) + "\r\n");
                     }
 
@@ -191,7 +211,7 @@ namespace TNC_Utils {
                     // Printed receiver-first (toNode<--fromNode) so the
                     // measuring node is always the leading callsign, matching
                     // the LOCAL line's implicit "receiver = me" convention.
-                    for (const auto& hop : hopMetrics) {
+                    if (!usesKissProtocol()) for (const auto& hop : hopMetrics) {
                         if (hop.hasData) {
                             client->print(hop.toNode + "<--" + hop.fromNode +
                                           " RSSI:" + String(hop.rssi) +
@@ -209,19 +229,22 @@ namespace TNC_Utils {
                 }
             }
         }
-        Utils::print("---> Sent to TNC2     : ");
-        Utils::println(packet);
+        Utils::print("---> Sent to TNC       : ");
+        Utils::println(cleanPacket);
     }
 
     void sendToSerial(const String& packet, bool levelInfo, const std::vector<LoRa_Utils::RxtHopMetric>& hopMetrics) {
         if (packet.length() == 0) return;
 
-        // packet now arrives with any RXT trailer still attached (needed
-        // upstream so a second RXT digi can concatenate onto it when
-        // forwarding). Strip it here for the client-facing line -- serial
-        // clients should only ever see the clean APRS packet.
+        String cleanPacket = LoRa_Utils::stripRxtTrailer(packet);
+        if (usesKissProtocol()) {
+            Serial.print(encodeKISS(cleanPacket));
+            Serial.flush();
+            return;
+        }
+
         Serial.print("\r\n");
-        Serial.print(LoRa_Utils::stripRxtTrailer(packet) + "\r\n");
+        Serial.print(cleanPacket + "\r\n");
         Serial.flush();
         
         // Line 2: Local receiver metrics

@@ -25,7 +25,15 @@
 
 namespace LoRa_Utils {
 
-struct RxtHopMetric {
+    struct RxtRxContext {
+        bool valid;
+        int rssi;
+        float snr;
+        int fo;
+        unsigned long completedAt;
+    };
+
+    struct RxtHopMetric {
         String fromNode; // The node that transmitted (e.g., N7AIL-15 or previous digi)
         String toNode;   // The digi that received and reported (e.g., SOMTNX, TSRXAX)
         bool hasData;    // false = this hop exists in the path but no RXT-enabled
@@ -39,7 +47,8 @@ struct RxtHopMetric {
     };
     void    setup();
     void    loadRxtWhitelist();
-    void    sendNewPacket(const String& newPacket);
+    RxtRxContext captureRxtRxContext();
+    void    sendNewPacket(const String& newPacket, const RxtRxContext* rxtContext = nullptr);
     String  receivePacketFromSleep();
     String  receivePacket();
     String  stripRxtTrailer(const String& packet, String* outTuple = nullptr);

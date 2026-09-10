@@ -48,7 +48,8 @@ namespace SYSLOG_Utils {
             char nextChar               = packet[colonIndex + 1];
             int greaterThanIndex        = packet.indexOf(">");
             int telemetryPacketIndex    = packet.indexOf(":T#");
-            String sender               = packet.substring(3, greaterThanIndex);
+            int senderStart             = packet.startsWith("tcp") || packet.startsWith("\x3c\xff\x01") ? 3 : 0;
+            String sender               = packet.substring(senderStart, greaterThanIndex);
 
             switch (type) {
                 case 0:     // CRC
