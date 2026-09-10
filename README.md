@@ -22,6 +22,8 @@ ____________________________________________________
 | --- | --- |
 | ![new menu](images/1.png) | ![map](images/2.png) |
 
+Experimental branch documentation: [RXT telemetry](docs/RXT.md).
+
 ____________________________________________________
 
 ## You can support this project to continue to grow:
