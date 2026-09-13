@@ -1,0 +1,32 @@
+{
+  "name": "LoRa APRS iGate - TTGO LoRa32 v2.1 SD (RXT)",
+  "version": "4.0.1RXT (2026-09-07)",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "firmware/ttgo-lora32-v21_SD/bootloader.bin",
+          "offset": 4096
+        },
+        {
+          "path": "firmware/ttgo-lora32-v21_SD/partitions.bin",
+          "offset": 32768
+        },
+        {
+          "path": "firmware/ttgo-lora32-v21_SD/boot_app0.bin",
+          "offset": 57344
+        },
+        {
+          "path": "firmware/ttgo-lora32-v21_SD/firmware.bin",
+          "offset": 65536
+        },
+        {
+          "path": "firmware/ttgo-lora32-v21_SD/spiffs.bin",
+          "offset": 3997696
+        }
+      ]
+    }
+  ]
+}

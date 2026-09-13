@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173f35">
+  <title>LoRa APRS iGate - Web Flasher</title>
+  <link rel="icon" href="favicon.png">
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17201d;
+      --muted: #59635f;
+      --line: #cbd2ce;
+      --paper: #ffffff;
+      --page: #edf1ef;
+      --green: #176b55;
+      --green-dark: #0f4d3d;
+      --amber: #8a5300;
+      --amber-bg: #fff4dc;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    main {
+      width: min(720px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 32px 24px 40px;
+      background: var(--paper);
+      border-inline: 1px solid var(--line);
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 14px;
+      align-items: center;
+      padding-bottom: 22px;
+      border-bottom: 3px solid var(--green);
+    }
+
+    header img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+    }
+
+    h1, h2 { letter-spacing: 0; }
+
+    h1 {
+      margin: 0;
+      font-size: 1.65rem;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .device {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .device h2 {
+      margin: 0 0 4px;
+      font-size: 1.15rem;
+    }
+
+    .version {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    esp-web-install-button {
+      --esp-tools-button-color: var(--green);
+      --esp-tools-button-text-color: #ffffff;
+    }
+
+    esp-web-install-button button {
+      width: 100%;
+      min-height: 48px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--green);
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    esp-web-install-button button:hover { background: var(--green-dark); }
+
+    .notice {
+      margin: 24px 0;
+      padding: 14px 16px;
+      border: 1px solid #e1b55d;
+      border-left: 5px solid var(--amber);
+      border-radius: 6px;
+      background: var(--amber-bg);
+    }
+
+    .notice strong { color: #613b00; }
+
+    h2.section-title {
+      margin: 28px 0 10px;
+      font-size: 1.05rem;
+    }
+
+    ol, ul {
+      margin: 8px 0 0;
+      padding-left: 1.4rem;
+    }
+
+    li + li { margin-top: 7px; }
+
+    code {
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: #eef2f0;
+      font-size: 0.92em;
+    }
+
+    footer {
+      margin-top: 32px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    a { color: var(--green-dark); }
+
+    @media (max-width: 540px) {
+      main {
+        padding: max(20px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));
+        border: 0;
+      }
+
+      header {
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 11px;
+      }
+
+      header img { width: 44px; height: 44px; }
+      h1 { font-size: 1.3rem; }
+      .subtitle { font-size: 0.86rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="favicon.png" alt="APRS">
+      <div>
+        <h1>LoRa APRS iGate / Digipeater</h1>
+        <p class="subtitle">Web Flasher du fork moricef</p>
+      </div>
+    </header>
+
+    <section class="device" aria-labelledby="device-title">
+      <h2 id="device-title">TTGO LoRa32 v2.1 avec carte microSD</h2>
+      <p class="version">Firmware 4.0.1RXT - 7 septembre 2026 - ESP32 / 433 MHz</p>
+      <esp-web-install-button manifest="manifest-ttgo-lora32-v21-sd.json">
+        <button slot="activate">Installer le firmware</button>
+        <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
+        <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
+      </esp-web-install-button>
+    </section>
+
+    <div class="notice">
+      <strong>La configuration sera effacée.</strong> Téléchargez d'abord sa sauvegarde JSON depuis la WebConfig. Après le flash, reconnectez-vous au point d'accès de l'iGate et restaurez cette sauvegarde.
+    </div>
+
+    <h2 class="section-title">Installation</h2>
+    <ol>
+      <li>Fermez le moniteur série et tout logiciel utilisant le port USB.</li>
+      <li>Reliez la carte au PC avec un câble USB de données.</li>
+      <li>Cliquez sur <strong>Installer le firmware</strong>, puis choisissez le port série de l'ESP32.</li>
+      <li>Après le redémarrage, ouvrez <code>http://192.168.4.1</code> depuis le Wi-Fi de configuration de la station.</li>
+    </ol>
+
+    <h2 class="section-title">Contenu de cette version</h2>
+    <ul>
+      <li>journal des paquets sur carte microSD ;</li>
+      <li>télémétrie APRS RX / Relay / Drop ;</li>
+      <li>télémétrie RXT multi-sauts de N7UV ;</li>
+      <li>traitement exact des jetons WIDE2-n.</li>
+    </ul>
+
+    <footer>
+      Fork : <a href="https://github.com/moricef/LoRa_APRS_iGate/tree/feature/rxt-integration">moricef/LoRa_APRS_iGate</a><br>
+      Projet original : <a href="https://github.com/richonguzman/LoRa_APRS_iGate">CA2RXU LoRa APRS iGate</a>
+    </footer>
+  </main>
+</body>
+</html>
