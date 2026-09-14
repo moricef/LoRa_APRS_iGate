@@ -88,30 +88,6 @@
       font-size: 0.9rem;
     }
 
-    .install-options {
-      display: grid;
-      grid-template-columns: 1.25fr 1fr;
-      gap: 24px;
-      text-align: left;
-    }
-
-    .install-option h3 {
-      margin: 0 0 4px;
-      font-size: 1rem;
-    }
-
-    .install-option p {
-      min-height: 3em;
-      margin: 0 0 14px;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .install-option.full {
-      padding-left: 24px;
-      border-left: 1px solid var(--line);
-    }
-
     esp-web-install-button {
       --esp-tools-button-color: var(--green);
       --esp-tools-button-text-color: #ffffff;
@@ -130,14 +106,6 @@
     }
 
     esp-web-install-button button:hover { background: var(--green-dark); }
-
-    .install-option.full esp-web-install-button button {
-      background: #526078;
-    }
-
-    .install-option.full esp-web-install-button button:hover {
-      background: #64738e;
-    }
 
     .notice {
       margin: 24px 0;
@@ -208,13 +176,6 @@
       h1 { font-size: 1.3rem; }
       .subtitle { font-size: 0.86rem; }
       .device { padding: 20px 16px; }
-      .install-options { grid-template-columns: 1fr; }
-      .install-option p { min-height: 0; }
-      .install-option.full {
-        padding: 20px 0 0;
-        border-top: 1px solid var(--line);
-        border-left: 0;
-      }
       .details { grid-template-columns: 1fr; }
     }
   </style>
@@ -232,31 +193,15 @@
     <section class="device" aria-labelledby="device-title">
       <h2 id="device-title">TTGO LoRa32 v2.1 avec carte microSD</h2>
       <p class="version">Firmware 4.0.1RXT - 14 septembre 2026 - ESP32 / 433 MHz</p>
-      <div class="install-options">
-        <div class="install-option">
-          <h3>Mise à jour</h3>
-          <p>Remplace uniquement le firmware. La configuration actuelle est conservée.</p>
-          <esp-web-install-button manifest="manifest-update-ttgo-lora32-v21-sd.json">
-            <button slot="activate">Mettre à jour</button>
-            <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
-            <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
-          </esp-web-install-button>
-        </div>
-
-        <div class="install-option full">
-          <h3>Installation complète</h3>
-          <p>Réinstalle toutes les partitions et remet la configuration à zéro.</p>
-          <esp-web-install-button manifest="manifest-ttgo-lora32-v21-sd.json">
-            <button slot="activate">Tout réinstaller</button>
-            <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
-            <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
-          </esp-web-install-button>
-        </div>
-      </div>
+      <esp-web-install-button manifest="manifest-ttgo-lora32-v21-sd.json">
+        <button slot="activate">Installer ou réparer le firmware</button>
+        <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
+        <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
+      </esp-web-install-button>
     </section>
 
     <div class="notice">
-      <strong>Installation complète uniquement :</strong> téléchargez d'abord la sauvegarde JSON depuis la WebConfig. Cette opération efface la configuration et la remplace par les valeurs par défaut.
+      <strong>Installation complète :</strong> téléchargez d'abord la sauvegarde JSON depuis la WebConfig. Cette opération réinstalle toutes les partitions et remplace la configuration par les valeurs par défaut.
     </div>
 
     <div class="details">
@@ -265,7 +210,7 @@
         <ol>
           <li>Fermez le moniteur série et tout logiciel utilisant le port USB.</li>
           <li>Reliez la carte au PC avec un câble USB de données.</li>
-          <li>Cliquez sur <strong>Mettre à jour</strong>, puis choisissez le port série de l'ESP32.</li>
+          <li>Cliquez sur <strong>Installer ou réparer le firmware</strong>, puis choisissez le port série de l'ESP32.</li>
           <li>Après le redémarrage, ouvrez <code>http://192.168.4.1</code> depuis le Wi-Fi de configuration de la station.</li>
         </ol>
       </section>
