@@ -193,7 +193,7 @@ namespace TNC_Utils {
         if (packet.length() == 0) return;
 
         String cleanPacket = LoRa_Utils::stripRxtTrailer(packet);
-        String lineToSend = usesKissProtocol() ? encodeKISS(cleanPacket) : cleanPacket + "\r\n";
+        String lineToSend = usesKissProtocol() ? encodeKISS(cleanPacket) : "\r\n" + cleanPacket + "\r\n";
 
         for (int i = 0; i < MAX_CLIENTS; i++) {
             auto client = clients[i];
@@ -204,7 +204,7 @@ namespace TNC_Utils {
                     
                     // Metrics are text records and must never enter a KISS stream.
                     if (!usesKissProtocol() && levelInfo) {
-                        client->print("RSSI:" + String(rssi) + " SNR:" + signedFloat(snr, 2) + " FO:" + signedInt(freqOffset) + "\r\n");
+                        client->print("LOCAL -- RSSI:" + String(rssi) + " SNR:" + signedFloat(snr, 2) + " FO:" + signedInt(freqOffset) + "\r\n");
                     }
 
                     // Send Line 3+: full hop chain -- real data or NA per hop.
