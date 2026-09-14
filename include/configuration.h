@@ -181,7 +181,7 @@ public:
     int                     startupDelay;
     String                  personalNote;
     String                  blacklist;
-    String                  rxtWhitelist;    // space-delimited callsigns of RXT-capable digis, e.g. "TSRXAX TSRXBX SOMTNX"
+    String                  rxtWhitelist;    // exact space-delimited callsigns (including SSID when present) of RXT-capable digis
     std::vector<WiFi_AP>    wifiAPs;
     WiFi_Auto_AP            wifiAutoAP;
     BEACON                  beacon;

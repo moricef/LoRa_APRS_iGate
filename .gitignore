@@ -8,3 +8,8 @@
 installer/firmware
 installer/*.bin
 **/__pycache__/
+
+# Local agent and RXT analysis notes
+/AGENTS.md
+/docs/RXT_APRSIS_BOUNDARY.md
+/docs/RXT_APRSIS_BOUNDARY_fr.md

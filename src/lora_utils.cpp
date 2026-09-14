@@ -272,16 +272,16 @@ namespace LoRa_Utils {
     }
 
     bool isRxtWhitelisted(const String& callsign) {
-        String baseCall = callsign;
-        int dashIdx = baseCall.indexOf('-');
-        if (dashIdx > 0) baseCall = baseCall.substring(0, dashIdx);
-        baseCall.toUpperCase();
+        String candidate = callsign;
+        candidate.trim();
+        candidate.toUpperCase();
         for (size_t i = 0; i < rxtWhitelistLoaded.size(); i++) {
             String whitelistCall = rxtWhitelistLoaded[i];
-            int whitelistDashIdx = whitelistCall.indexOf('-');
-            if (whitelistDashIdx > 0) whitelistCall = whitelistCall.substring(0, whitelistDashIdx);
+            whitelistCall.trim();
             whitelistCall.toUpperCase();
-            if (baseCall.equals(whitelistCall)) return true;
+            // RXT capability belongs to one exact AX.25 station identity.
+            // F4GCF-4 and F4GCF-10 must therefore remain distinct.
+            if (candidate.equals(whitelistCall)) return true;
         }
         return false;
     }
@@ -586,16 +586,10 @@ namespace LoRa_Utils {
         // behind it and must never carry RXT data, regardless of this
         // packet's payload shape.
         bool allowRxt = rxtContext != nullptr && rxtContext->valid;
-        int colonIdx = rawPacket.indexOf(':');
-        if (colonIdx != -1) {
-            int gtIdx = rawPacket.indexOf('>');
-            if (colonIdx > gtIdx) {
-                String payload = rawPacket.substring(colonIdx + 1);
-                if (payload.length() > 0 && payload.charAt(0) == ':') {
-                    allowRxt = false;
-                }
-            }
-        }
+        // Appending data to an APRS message can corrupt its message number,
+        // ACK or REJ. Check the effective data type after unwrapping any
+        // third-party frame(s), not only the outer payload.
+        if (RXT_Protocol::isAprsMessage(rawPacket.c_str())) allowRxt = false;
 
         String finalPacket = rawPacket;
         String finalTuple = "";

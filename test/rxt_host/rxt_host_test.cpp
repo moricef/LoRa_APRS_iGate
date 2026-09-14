@@ -21,6 +21,12 @@ void expectNodes(const std::string& name, const std::vector<std::string>& actual
     failures++;
 }
 
+void expectBool(const std::string& name, bool actual, bool expected) {
+    if (actual == expected) return;
+    std::cerr << "FAIL " << name << ": expected " << expected << ", got " << actual << '\n';
+    failures++;
+}
+
 }
 
 int main() {
@@ -51,7 +57,21 @@ int main() {
                 "SRC>DST:payload{hello}");
     expectEqual("no tuples from ordinary suffix", tuples, "");
 
+    expectBool("direct APRS message",
+               RXT_Protocol::isAprsMessage("SRC>DST::TARGET   :hello{1"), true);
+    expectBool("direct ACK",
+               RXT_Protocol::isAprsMessage("SRC>DST::TARGET   :ack1"), true);
+    expectBool("third-party APRS message",
+               RXT_Protocol::isAprsMessage("IGATE>DST:}SRC>DST::TARGET   :hello{1"), true);
+    expectBool("nested third-party APRS message",
+               RXT_Protocol::isAprsMessage("OUTER>DST:}IGATE>DST:}SRC>DST::TARGET   :rej1"), true);
+    expectBool("ordinary position",
+               RXT_Protocol::isAprsMessage("SRC>DST:!4903.50N/07201.75W-Test"), false);
+    expectBool("third-party position",
+               RXT_Protocol::isAprsMessage("IGATE>DST:}SRC>DST:!4903.50N/07201.75W-Test"), false);
+    expectBool("malformed packet", RXT_Protocol::isAprsMessage("not a packet"), false);
+
     if (failures != 0) return 1;
-    std::cout << "RXT host tests: 12 passed, 0 failed\n";
+    std::cout << "RXT host tests: 19 passed, 0 failed\n";
     return 0;
 }

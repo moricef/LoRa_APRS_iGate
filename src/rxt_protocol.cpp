@@ -77,4 +77,25 @@ std::vector<std::string> usedPathNodes(const std::string& packet) {
     return pathNodes;
 }
 
+bool isAprsMessage(const std::string& packet) {
+    std::string current = packet;
+
+    // A third-party packet starts its information field with '}' followed by
+    // another complete TNC2 frame. Unwrap each level before deciding which
+    // APRS data type is actually being carried.
+    while (true) {
+        size_t gt = current.find('>');
+        size_t colon = current.find(':', gt == std::string::npos ? 0 : gt + 1);
+        if (gt == std::string::npos || colon == std::string::npos || colon + 1 >= current.size()) {
+            return false;
+        }
+
+        char dataType = current[colon + 1];
+        if (dataType == ':') return true;
+        if (dataType != '}') return false;
+
+        current = current.substr(colon + 2);
+    }
+}
+
 }
