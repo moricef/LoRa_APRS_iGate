@@ -21,10 +21,6 @@
         {
           "path": "firmware/ttgo-lora32-v21_SD/firmware.bin",
           "offset": 65536
-        },
-        {
-          "path": "firmware/ttgo-lora32-v21_SD/spiffs.bin",
-          "offset": 3997696
         }
       ]
     }

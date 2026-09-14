@@ -194,14 +194,14 @@
       <h2 id="device-title">TTGO LoRa32 v2.1 avec carte microSD</h2>
       <p class="version">Firmware 4.0.1RXT - 14 septembre 2026 - ESP32 / 433 MHz</p>
       <esp-web-install-button manifest="manifest-ttgo-lora32-v21-sd.json">
-        <button slot="activate">Installer ou réparer le firmware</button>
+        <button slot="activate">Installer ou mettre à jour</button>
         <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
         <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
       </esp-web-install-button>
     </section>
 
     <div class="notice">
-      <strong>Installation complète :</strong> téléchargez d'abord la sauvegarde JSON depuis la WebConfig. Cette opération réinstalle toutes les partitions et remplace la configuration par les valeurs par défaut.
+      <strong>Sauvegardez d'abord la configuration JSON.</strong> Dans la fenêtre d'installation, laissez l'effacement désactivé pour conserver la configuration. Activez-le uniquement pour repartir des valeurs par défaut ou réparer une flash endommagée.
     </div>
 
     <div class="details">
@@ -210,8 +210,9 @@
         <ol>
           <li>Fermez le moniteur série et tout logiciel utilisant le port USB.</li>
           <li>Reliez la carte au PC avec un câble USB de données.</li>
-          <li>Cliquez sur <strong>Installer ou réparer le firmware</strong>, puis choisissez le port série de l'ESP32.</li>
-          <li>Après le redémarrage, ouvrez <code>http://192.168.4.1</code> depuis le Wi-Fi de configuration de la station.</li>
+          <li>Cliquez sur <strong>Installer ou mettre à jour</strong>, puis choisissez le port série de l'ESP32.</li>
+          <li>Laissez l'effacement désactivé pour une mise à jour, ou activez-le pour une installation propre.</li>
+          <li>Après un effacement, connectez-vous au point d'accès de la station et ouvrez <code>http://192.168.4.1</code>.</li>
         </ol>
       </section>
 
