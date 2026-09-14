@@ -36,7 +36,8 @@ braces. The implementation retains at most three tuples (12 characters).
 RXT is attached only to a genuine digipeated RF packet. Locally generated
 beacons, APRS telemetry, query responses, APRS-IS-to-RF packets, MQTT input
 and TNC input have no receive context and never receive an RXT tuple. APRS
-messages are also excluded.
+messages, ACKs and REJs are also excluded, including when the message is
+carried inside one or more third-party (`}`) frames.
 
 ## Per-packet measurements
 
@@ -59,8 +60,10 @@ Entries after the last `*` are unconsumed and are not reported as hops.
 
 `rxtWhitelist` is a space-separated list of digipeaters known to append RXT
 tuples. It is configured in the WebUI under the station blacklist/manager
-section and loaded at startup. Matching is case-insensitive and ignores SSIDs,
-so `F4MLV` and `F4MLV-10` are equivalent.
+section and loaded at startup. Matching is case-insensitive but otherwise
+exact, including the SSID when present. For example, `F4GCF-4` and
+`F4GCF-10` are distinct stations. This prevents a tuple from being assigned
+to another station sharing the same base callsign.
 
 Legacy digipeaters may appear in the physical path but do not consume an RXT
 tuple. TNC2 output reports these hops as `NA`.
@@ -152,6 +155,6 @@ pio run -e ttgo-lora32-v21 -e ttgo-lora32-v21_SD
 ```
 
 Host tests cover trailer append/strip behavior, the three-tuple cap,
-multi-star paths, single-star paths, unused paths and commas in APRS payloads.
-Hardware validation is still required for RF multi-hop RXT and both TNC
-transport modes.
+multi-star paths, single-star paths, unused paths, commas in APRS payloads,
+and message detection through nested third-party frames. Hardware validation
+is still required for RF multi-hop RXT and both TNC transport modes.
