@@ -97,6 +97,10 @@ namespace DIGI_Utils {
 
     String buildPacket(const String& path, const String& packet, bool thirdParty, bool crossFreq) {
         String stationCallsign  = (Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign);
+        stationCallsign.trim();
+        if (stationCallsign == "" || stationCallsign.equalsIgnoreCase("undefined") || stationCallsign.equalsIgnoreCase("null")) {
+            return "";
+        }
         String suffix           = thirdParty ? ":}" : ":";
         int suffixIndex         = packet.indexOf(suffix);
         String packetToRepeat;

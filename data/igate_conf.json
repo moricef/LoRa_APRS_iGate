@@ -1,5 +1,6 @@
 {
     "callsign": "NOCALL-10",
+    "tacticalCallsign": "",
     "wifi": {
         "autoAP": {
             "password": "1234567890",

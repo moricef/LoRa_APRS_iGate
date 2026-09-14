@@ -222,6 +222,12 @@ namespace WEB_Utils {
 
         Config.callsign                     = getParamStringSafe("callsign", Config.callsign);
         Config.tacticalCallsign             = getParamStringSafe("tacticalCallsign", Config.tacticalCallsign);
+        if (Config.callsign.equalsIgnoreCase("undefined") || Config.callsign.equalsIgnoreCase("null")) {
+            Config.callsign = "NOCALL-10";
+        }
+        if (Config.tacticalCallsign.equalsIgnoreCase("undefined") || Config.tacticalCallsign.equalsIgnoreCase("null")) {
+            Config.tacticalCallsign = "";
+        }
         Config.wifiAutoAP.enabled           = request->hasParam("wifi.autoAP.enabled", true);
         Config.wifiAutoAP.password          = getParamStringSafe("wifi.autoAP.password", Config.wifiAutoAP.password);
         Config.wifiAutoAP.timeout           = getParamIntSafe("wifi.autoAP.timeout", Config.wifiAutoAP.timeout);

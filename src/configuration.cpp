@@ -232,6 +232,14 @@ bool Configuration::readFile() {
         callsign                        = data["callsign"] | "NOCALL-10";
         if (data["tacticalCallsign"].isNull()) needsRewrite = true;
         tacticalCallsign                = data["tacticalCallsign"] | "";
+        if (callsign.equalsIgnoreCase("undefined") || callsign.equalsIgnoreCase("null")) {
+            callsign = "NOCALL-10";
+            needsRewrite = true;
+        }
+        if (tacticalCallsign.equalsIgnoreCase("undefined") || tacticalCallsign.equalsIgnoreCase("null")) {
+            tacticalCallsign = "";
+            needsRewrite = true;
+        }
 
         if (data["aprs_is"]["active"].isNull() ||
             data["aprs_is"]["passcode"].isNull() ||
