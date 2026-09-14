@@ -1,7 +1,12 @@
 # Web Flasher du fork
 
 Le flasher publie uniquement le variant `ttgo-lora32-v21_SD` de la branche
-`feature/rxt-integration`.
+`feature/rxt-integration`. Il propose deux opérations :
+
+- `manifest-update-ttgo-lora32-v21-sd.json` écrit seulement `firmware.bin`
+  et conserve la configuration SPIFFS ;
+- `manifest-ttgo-lora32-v21-sd.json` réalise une installation complète et
+  remplace la configuration.
 
 ## Mettre les binaires à jour
 
@@ -16,8 +21,8 @@ cp .pio/build/ttgo-lora32-v21_SD/spiffs.bin docs/firmware/ttgo-lora32-v21_SD/
 cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin docs/firmware/ttgo-lora32-v21_SD/
 ```
 
-Mettre également à jour la version et la date dans `index.html` et dans
-`manifest-ttgo-lora32-v21-sd.json`.
+Mettre également à jour la version et la date dans `index.html` et dans les
+deux manifestes JSON.
 
 Régénérer ensuite `firmware/ttgo-lora32-v21_SD/SHA256SUMS` avec :
 
