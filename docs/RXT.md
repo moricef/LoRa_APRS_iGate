@@ -73,12 +73,31 @@ placeholder `RXT_NODE_n<--UNKNOWN`. The tuple is never silently discarded.
 
 The RXT trailer is retained while a packet remains on RF so another
 RXT-capable digipeater can append its measurement. It is removed before the
-packet is sent to APRS-IS, MQTT, SD logs, the WebUI map or a TNC client.
+packet is sent to APRS-IS, MQTT, the WebUI map or a TNC client.
 
 In TNC2 mode, clients receive the clean APRS packet followed by local receiver
 metrics and decoded hop records. In KISS mode, clients receive only the
 KISS-encoded APRS frame; textual metrics are never inserted into the binary
 stream. The `tnc.protocol` setting controls both serial and TCP input/output.
+
+## SD logging
+
+The SD variant records RXT in `/aprs_rx.csv` using this schema:
+
+```text
+t_ms,event,rssi_dbm,snr_db,ferr_hz,tth_ms,rxt_rx_hex,rxt_tx_hex,tnc2
+```
+
+Normal receive rows contain the complete received RXT trailer in
+`rxt_rx_hex`. Each successfully transmitted RXT relay adds an `RXT_TX` row
+with the local receiver measurements, final TTH and local tuple in
+`rxt_tx_hex`. Tuples are hexadecimal so every printable RXT character,
+including commas and quotes, remains valid CSV. The TNC2 frame stays in the
+last column because APRS frames can contain unquoted commas.
+
+The logger writes a `# columns=...` marker after every `# boot`, allowing a
+file created by an older firmware to continue with the new schema without
+being mistaken for old six-column rows.
 
 ## APRS telemetry counters
 

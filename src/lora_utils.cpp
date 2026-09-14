@@ -598,6 +598,8 @@ namespace LoRa_Utils {
         }
 
         String finalPacket = rawPacket;
+        String finalTuple = "";
+        unsigned long finalTTH = 0;
         if (allowRxt) {
             String localTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, totalDwellAndChannelMs);
             String pendingPacket = attachRxtTrailer(rawPacket, localTuple);
@@ -606,8 +608,8 @@ namespace LoRa_Utils {
             size_t totalBytes = fullPayloadWithHeader.length();
             unsigned long timeOnAirMs = radio.getTimeOnAir(totalBytes) / 1000; 
 
-            unsigned long finalTTH = totalDwellAndChannelMs + timeOnAirMs;
-            String finalTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, finalTTH);
+            finalTTH = totalDwellAndChannelMs + timeOnAirMs;
+            finalTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, finalTTH);
             finalPacket = attachRxtTrailer(rawPacket, finalTuple);
         }
 
@@ -620,6 +622,10 @@ namespace LoRa_Utils {
             }
             Utils::print("---> LoRa Packet Tx : ");
             Utils::println(finalPacket);
+            if (allowRxt) {
+                SD_Utils::logRxtTx(finalPacket, rxtContext->rssi, rxtContext->snr,
+                                   rxtContext->fo, finalTTH, finalTuple);
+            }
         } else {
             Utils::print(F("failed, code "));
             Utils::println(String(state));
@@ -698,7 +704,7 @@ namespace LoRa_Utils {
                                     SYSLOG_Utils::log(1, cleanPacket, rssi, snr, freqOffset);
                                 }
 
-                                SD_Utils::beginEntry(cleanPacket, rssi, snr, freqOffset);   // decision is filled in later by the digi
+                                SD_Utils::beginEntry(cleanPacket, rssi, snr, freqOffset, lastRxtField); // decision is filled in later by the digi
                                 TELEMETRY_Utils::incRx();
                             } else {                                        // blacklisted sender
                                 SD_Utils::beginEntry(packet, radio.getRSSI(), radio.getSNR(), radio.getFrequencyError());

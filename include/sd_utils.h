@@ -23,7 +23,7 @@
 #include "board_pinout.h"
 
 /*  One CSV line per received frame on the microSD card:
- *      t_ms,decision,rssi_dbm,snr_db,ferr_hz,tnc2
+ *      t_ms,event,rssi_dbm,snr_db,ferr_hz,tth_ms,rxt_rx_hex,rxt_tx_hex,tnc2
  *  t_ms is relative to boot (millis()), the frame is the last field so its
  *  commas need no quoting. Decisions:
  *      RELAY   digipeated (queued in the output buffer)
@@ -33,6 +33,7 @@
  *      DROP    dropped for any other reason (own packet, NOGATE, invalid
  *              callsign, query answered, digi disabled)
  *      CRC     CRC error, no frame decoded (edge of coverage)
+ *      RXT_TX  successfully transmitted relay carrying the local RXT tuple
  */
 
 namespace SD_Utils {
@@ -40,18 +41,23 @@ namespace SD_Utils {
     #ifdef HAS_SD_LOG
 
         void setup();
-        void beginEntry(const String& tnc2Packet, const int rssi, const float snr, const int freqError);
+        void beginEntry(const String& tnc2Packet, const int rssi, const float snr,
+                        const int freqError, const String& receivedRxt = "");
         void setDecision(const char* decision);
         void endEntry();
         void logCRC(const int rssi, const float snr, const int freqError);
+        void logRxtTx(const String& tnc2Packet, const int rssi, const float snr,
+                      const int freqError, const unsigned long tth, const String& tuple);
 
     #else
 
         inline void setup() {}
-        inline void beginEntry(const String&, const int, const float, const int) {}
+        inline void beginEntry(const String&, const int, const float, const int, const String& = "") {}
         inline void setDecision(const char*) {}
         inline void endEntry() {}
         inline void logCRC(const int, const float, const int) {}
+        inline void logRxtTx(const String&, const int, const float, const int,
+                             const unsigned long, const String&) {}
 
     #endif
 
