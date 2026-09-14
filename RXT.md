@@ -124,6 +124,19 @@ Changing that format requires coordination between all RXT implementations.
 An ordinary brace suffix of any other length is preserved when a new RXT
 tuple is appended.
 
+## Configuration migration
+
+Older default configuration images may omit `tacticalCallsign`. Assigning
+that missing JSON property directly to the WebUI input can turn JavaScript's
+`undefined` value into the literal text `"undefined"`; saving the form would
+then make a digipeater replace a WIDE alias with `undefined*`.
+
+The WebUI now treats a missing callsign property as an empty value. The
+firmware also removes persisted `"undefined"` or `"null"` sentinel values at
+startup and when saving the WebUI form. As a final RF safeguard, digipeating
+is refused if the selected station identity is still empty or contains one
+of those sentinels.
+
 ## Verification
 
 Run the host protocol tests:
