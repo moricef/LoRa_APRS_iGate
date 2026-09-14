@@ -1,12 +1,15 @@
 # Web Flasher du fork
 
 Le flasher publie uniquement le variant `ttgo-lora32-v21_SD` de la branche
-`feature/rxt-integration`. Il propose deux opérations :
+`feature/rxt-integration`. Il réalise une installation complète et remplace
+la configuration SPIFFS.
 
-- `manifest-update-ttgo-lora32-v21-sd.json` écrit seulement `firmware.bin`
-  et conserve la configuration SPIFFS ;
-- `manifest-ttgo-lora32-v21-sd.json` réalise une installation complète et
-  remplace la configuration.
+ESP Web Tools efface toute la flash par défaut lorsqu'il considère
+l'opération comme une nouvelle installation. Ce firmware ne fournissant pas
+de détection Improv Serial, un manifeste contenant seulement `firmware.bin`
+ne constitue pas un mécanisme de mise à jour sûr : il peut laisser la carte
+sans bootloader ni table de partitions. Les mises à jour conservant la
+configuration doivent passer par ElegantOTA.
 
 ## Mettre les binaires à jour
 
@@ -21,8 +24,8 @@ cp .pio/build/ttgo-lora32-v21_SD/spiffs.bin docs/firmware/ttgo-lora32-v21_SD/
 cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin docs/firmware/ttgo-lora32-v21_SD/
 ```
 
-Mettre également à jour la version et la date dans `index.html` et dans les
-deux manifestes JSON.
+Mettre également à jour la version et la date dans `index.html` et dans
+`manifest-ttgo-lora32-v21-sd.json`.
 
 Régénérer ensuite `firmware/ttgo-lora32-v21_SD/SHA256SUMS` avec :
 
