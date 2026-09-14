@@ -65,6 +65,10 @@ so `F4MLV` and `F4MLV-10` are equivalent.
 Legacy digipeaters may appear in the physical path but do not consume an RXT
 tuple. TNC2 output reports these hops as `NA`.
 
+If a valid tuple cannot be associated with a path entry because the whitelist
+is missing or incomplete, TNC2 still reports its decoded values under the
+placeholder `RXT_NODE_n<--UNKNOWN`. The tuple is never silently discarded.
+
 ## Output boundaries
 
 The RXT trailer is retained while a packet remains on RF so another

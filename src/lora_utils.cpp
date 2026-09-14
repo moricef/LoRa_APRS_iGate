@@ -396,6 +396,7 @@ namespace LoRa_Utils {
         // matching the order the packet was actually relayed toward this
         // receiver.
         std::vector<RxtHopMetric> fullChainMetrics;
+        std::vector<bool> realHopEmitted(realHops.size(), false);
         std::vector<String> fullChain;
         fullChain.push_back(sourceCall);
         for (size_t i = 0; i < usedPathNodes.size(); i++) fullChain.push_back(usedPathNodes[i]);
@@ -408,6 +409,7 @@ namespace LoRa_Utils {
             for (size_t j = 0; j < realHops.size(); j++) {
                 if (realHops[j].fromNode == from && realHops[j].toNode == to) {
                     fullChainMetrics.push_back(realHops[j]);
+                    realHopEmitted[j] = true;
                     found = true;
                     break;
                 }
@@ -423,6 +425,13 @@ namespace LoRa_Utils {
                 naHop.tth  = 0;
                 fullChainMetrics.push_back(naHop);
             }
+        }
+
+        // A missing or incomplete whitelist must not make valid RXT data
+        // disappear from TNC2 output. Keep unresolved tuples visible with
+        // their placeholder identity, newest tuple first like the hop chain.
+        for (int i = (int)realHops.size() - 1; i >= 0; i--) {
+            if (!realHopEmitted[i]) fullChainMetrics.push_back(realHops[i]);
         }
 
         return fullChainMetrics;
