@@ -136,6 +136,7 @@ function loadSettings(settings) {
 
     // Black List
     document.getElementById("blacklist").value                          = settings.blacklist;
+    document.getElementById("rxtWhitelist").value                      = settings.rxtWhitelist || "";
 
     // Digi
     document.getElementById("digi.mode").value                          = settings.digi.mode;
