@@ -1,5 +1,15 @@
 # RXT telemetry
 
+## WebUI control
+
+The **Enable RXT relay telemetry** switch controls whether this digi appends
+its own RXT tuple to eligible packets that it relays over RF. It is enabled by
+default to preserve the existing RXT firmware behaviour.
+
+Turning the switch off does not disable RXT reception or decoding, the local
+RXT dashboard, `/rxt.json`, or the removal of RXT trailers before packets are
+uploaded to APRS-IS. APRS-IS cleanup is deliberately unconditional.
+
 This branch integrates N7UV's experimental receive telemetry (RXT) with the
 WIDE2 token fix, SD logging, APRS telemetry counters, MQTT, APRS-IS and the
 TNC interfaces.
@@ -83,6 +93,24 @@ metrics and decoded hop records. In KISS mode, clients receive only the
 KISS-encoded APRS frame; textual metrics are never inserted into the binary
 stream. The `tnc.protocol` setting controls both serial and TCP input/output.
 
+## Web dashboard
+
+The WebUI RXT panel keeps the last ten received frames carrying an RXT
+trailer. It shows the clean APRS frame, the local receiver RSSI/SNR/frequency
+offset, the raw tuple field and one decoded row per physical hop, including
+`NA` for legacy hops and placeholder names for tuples that cannot be
+associated with the configured whitelist. The newest frame is shown first
+and the panel refreshes every five seconds while it is open.
+
+The same records are available from `GET /rxt.json`. Each record includes an
+`age_ms` value measured from RF reception to the HTTP response. This monotonic
+age lets polling clients distinguish a new observation from one of the same
+ten retained records without depending on clocks or time zones. The JSON uses
+explicit unit-bearing field names: local measurements are grouped under `local`, while
+the decoded chain is returned as `rxt_hops` with `rssi_dbm`, `snr_db`,
+`fo_hz` and `tth_ms`. The `packet` field is the clean TNC2 frame without its
+RF-only RXT trailer; `rxt_raw` preserves the tuple characters separately.
+
 ## SD logging
 
 The SD variant records RXT in `/aprs_rx.csv` using this schema:
@@ -102,20 +130,26 @@ The logger writes a `# columns=...` marker after every `# boot`, allowing a
 file created by an older firmware to continue with the new schema without
 being mistaken for old six-column rows.
 
-## APRS telemetry counters
+## APRS telemetry activity rates
 
-The separate APRS encoded telemetry contains three interval counters:
+The separate APRS encoded telemetry contains three rates normalized using the
+actual elapsed time since the previous encoded telemetry report:
 
 | Parameter | Meaning |
 | --- | --- |
-| RX | Valid LoRa APRS packets accepted by the receiver |
-| Relay | Packets accepted and queued for digipeating |
-| Drop | Packets rejected by blacklist, duplicate, path, self or NOGATE rules |
+| RX_rate | Valid LoRa APRS packets accepted by the receiver, in packets/hour |
+| RelRate | Packets accepted and queued for digipeating, in packets/hour |
+| DrpRate | Packets rejected by blacklist, duplicate, path, self or NOGATE rules, in packets/hour |
 
-Each counter saturates at 8280 and resets after an encoded telemetry report is
-generated. These counters are currently emitted only when encoded battery
-voltage telemetry is enabled, at least one voltage channel is selected, and
-weather telemetry is inactive. They do not consume RXT tuples.
+The raw counters reset after a report is generated. The transmitted hourly
+rate saturates at 8280, the maximum value of the two-character base-91 field.
+Using the real measurement duration also keeps manually requested or delayed
+beacons comparable with regularly scheduled reports. The APRS metadata labels
+the three values `RX_rate`, `RelRate`, and `DrpRate`, all with the `pkt/h` unit,
+so APRS clients do not present counts accumulated over unlike intervals as if
+they were comparable. These rates are currently emitted only when encoded
+battery voltage telemetry is enabled, at least one voltage channel is selected,
+and weather telemetry is inactive. They do not consume RXT tuples.
 
 ## Compatibility limitation
 
