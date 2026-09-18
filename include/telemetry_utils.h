@@ -26,6 +26,7 @@ namespace TELEMETRY_Utils {
 
     void    sendEquationsUnitsParameters();
     String  generateEncodedTelemetryBytes(float value, bool counterBytes, byte telemetryType);
+    uint16_t counterRatePerHour(uint32_t count, uint32_t elapsedMs);
     String  generateEncodedTelemetry();
     void    checkEUPInterval();
     void    incRx();

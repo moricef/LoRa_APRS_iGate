@@ -585,7 +585,7 @@ namespace LoRa_Utils {
         // traffic, query/command responses -- has no real RF reception
         // behind it and must never carry RXT data, regardless of this
         // packet's payload shape.
-        bool allowRxt = rxtContext != nullptr && rxtContext->valid;
+        bool allowRxt = Config.rxtEnabled && rxtContext != nullptr && rxtContext->valid;
         // Appending data to an APRS message can corrupt its message number,
         // ACK or REJ. Check the effective data type after unwrapping any
         // third-party frame(s), not only the outer payload.

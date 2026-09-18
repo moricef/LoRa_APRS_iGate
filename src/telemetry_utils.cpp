@@ -35,9 +35,10 @@ int         telemetryCounter    = random(1,999);
 uint32_t    telemetryEUPTime    = 0;
 bool        sendEUP             = false;    // Equations Units Parameters
 
-static uint16_t rxCount    = 0;             // frames heard (valid LoRa APRS) since last telemetry
-static uint16_t relayCount = 0;             // frames digipeated since last telemetry
-static uint16_t dropCount  = 0;             // frames rejected by the digi (DUP, PATH, BLACK, self, NOGATE, etc.) since last telemetry
+static uint32_t rxCount             = 0;    // frames heard (valid LoRa APRS) since last telemetry
+static uint32_t relayCount          = 0;    // frames digipeated since last telemetry
+static uint32_t dropCount           = 0;    // frames rejected by the digi (DUP, PATH, BLACK, self, NOGATE, etc.) since last telemetry
+static uint32_t telemetryWindowStart = 0;   // millis() at the previous encoded telemetry report
 
 
 namespace TELEMETRY_Utils {
@@ -65,9 +66,9 @@ namespace TELEMETRY_Utils {
         std::vector<String> labels;
         if (Config.battery.sendInternalVoltage) labels.push_back("VDC");
         if (Config.battery.sendExternalVoltage) labels.push_back("VDC");
-        labels.push_back("pkt");
-        labels.push_back("pkt");
-        labels.push_back("pkt");
+        labels.push_back("pkt/h");
+        labels.push_back("pkt/h");
+        labels.push_back("pkt/h");
         return labels;
     }
 
@@ -75,9 +76,9 @@ namespace TELEMETRY_Utils {
         std::vector<String> names;
         if (Config.battery.sendInternalVoltage) names.push_back("V_Batt");
         if (Config.battery.sendExternalVoltage) names.push_back("V_Ext");
-        names.push_back("RX");
-        names.push_back("Relay");
-        names.push_back("Drop");
+        names.push_back("RX_rate");
+        names.push_back("RelRate");
+        names.push_back("DrpRate");
         return names;
     }
 
@@ -132,24 +133,37 @@ namespace TELEMETRY_Utils {
         return encodedBytes;
     }
 
+    uint16_t counterRatePerHour(uint32_t count, uint32_t elapsedMs) {
+        if (elapsedMs == 0) return 0;
+        uint64_t rate = (static_cast<uint64_t>(count) * 3600000ULL + elapsedMs / 2) / elapsedMs;
+        return static_cast<uint16_t>((rate > 8280ULL) ? 8280ULL : rate);
+    }
+
     String generateEncodedTelemetry() {
+        const uint32_t now       = millis();
+        const uint32_t elapsedMs = now - telemetryWindowStart;
+        const uint16_t rxRate    = counterRatePerHour(rxCount, elapsedMs);
+        const uint16_t relayRate = counterRatePerHour(relayCount, elapsedMs);
+        const uint16_t dropRate  = counterRatePerHour(dropCount, elapsedMs);
+
         String telemetry = "|";
         telemetry += generateEncodedTelemetryBytes(telemetryCounter, true, 0);
         telemetryCounter++;
         if (telemetryCounter == 1000) telemetryCounter = 0;
         if (Config.battery.sendInternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkInternalVoltage(), false, 0);
         if (Config.battery.sendExternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkExternalVoltage(), false, Config.battery.useExternalI2CSensor ? 0 : 1);
-        telemetry += generateEncodedTelemetryBytes(rxCount,    true, 0);
-        telemetry += generateEncodedTelemetryBytes(relayCount, true, 0);
-        telemetry += generateEncodedTelemetryBytes(dropCount,  true, 0);
-        rxCount = relayCount = dropCount = 0;                       // reset deltas after emission
+        telemetry += generateEncodedTelemetryBytes(rxRate,    true, 0);
+        telemetry += generateEncodedTelemetryBytes(relayRate, true, 0);
+        telemetry += generateEncodedTelemetryBytes(dropRate,  true, 0);
+        rxCount = relayCount = dropCount = 0;
+        telemetryWindowStart = now;
         telemetry += "|";
         return telemetry;
     }
 
-    void incRx()    { if (rxCount    < 8280) rxCount++; }           // saturating (2-char base-91 max)
-    void incRelay() { if (relayCount < 8280) relayCount++; }
-    void incDrop()  { if (dropCount  < 8280) dropCount++; }
+    void incRx()    { if (rxCount    < UINT32_MAX) rxCount++; }
+    void incRelay() { if (relayCount < UINT32_MAX) relayCount++; }
+    void incDrop()  { if (dropCount  < UINT32_MAX) dropCount++; }
 
     void checkEUPInterval() {
         if (telemetryEUPTime == 0 || millis() - telemetryEUPTime > 24UL * 60UL * 60UL * 1000UL) {

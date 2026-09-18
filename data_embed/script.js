@@ -136,6 +136,7 @@ function loadSettings(settings) {
 
     // Black List
     document.getElementById("blacklist").value                          = settings.blacklist;
+    document.getElementById("rxtEnabled").checked                      = settings.rxtEnabled !== false;
     document.getElementById("rxtWhitelist").value                      = settings.rxtWhitelist || "";
 
     // Digi
@@ -641,6 +642,97 @@ document.querySelector('a[href="/received-packets"]').addEventListener('click', 
 
     fetchReceivedPackets();
 })
+
+
+/* ---------- RXT receive telemetry ---------- */
+
+let rxtTimer = null;
+
+function appendRxtCell(row, value, className, rowSpan) {
+    const cell = document.createElement("td");
+    cell.textContent = value;
+    if (className) cell.className = className;
+    if (rowSpan > 1) cell.rowSpan = rowSpan;
+    row.appendChild(cell);
+}
+
+function loadRxtDashboard(entries) {
+    const body = document.querySelector("#rxt-table tbody");
+    const empty = document.getElementById("rxt-empty");
+    if (!body || !empty) return;
+
+    body.replaceChildren();
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+        empty.classList.remove("d-none");
+        return;
+    }
+
+    empty.classList.add("d-none");
+
+    entries.slice().reverse().forEach((entry) => {
+        const hops = Array.isArray(entry.rxt_hops) && entry.rxt_hops.length > 0
+            ? entry.rxt_hops
+            : [{ from: "UNKNOWN", to: "RXT_NODE", has_data: false }];
+
+        hops.forEach((hop, hopIndex) => {
+            const row = document.createElement("tr");
+
+            if (hopIndex === 0) {
+                const local = entry.local || {};
+                const localRx = Number.isFinite(Number(local.rssi_dbm))
+                    ? `${local.rssi_dbm} dBm / ${Number(local.snr_db) >= 0 ? "+" : ""}${Number(local.snr_db).toFixed(2)} dB / ${Number(local.fo_hz) >= 0 ? "+" : ""}${local.fo_hz} Hz`
+                    : "NA";
+
+                appendRxtCell(row, entry.rx_time || "", "rxt-time", hops.length);
+                appendRxtCell(row, entry.packet || "", "rxt-frame", hops.length);
+                appendRxtCell(row, localRx, "rxt-local", hops.length);
+                appendRxtCell(row, entry.rxt_raw ? `{${entry.rxt_raw}}` : "", "rxt-raw", hops.length);
+            }
+
+            appendRxtCell(row, hop.from || "UNKNOWN", "rxt-call", 1);
+            appendRxtCell(row, hop.to || "UNKNOWN", "rxt-call", 1);
+
+            if (hop.has_data) {
+                appendRxtCell(row, `${hop.rssi_dbm} dBm`, "rxt-value", 1);
+                appendRxtCell(row, `${Number(hop.snr_db) >= 0 ? "+" : ""}${Number(hop.snr_db).toFixed(2)} dB`, "rxt-value", 1);
+                appendRxtCell(row, `${Number(hop.fo_hz) >= 0 ? "+" : ""}${hop.fo_hz} Hz`, "rxt-value", 1);
+                appendRxtCell(row, `${hop.tth_ms} ms`, "rxt-value", 1);
+            } else {
+                appendRxtCell(row, "NA", "rxt-na", 1);
+                appendRxtCell(row, "—", "rxt-na", 1);
+                appendRxtCell(row, "—", "rxt-na", 1);
+                appendRxtCell(row, "—", "rxt-na", 1);
+            }
+
+            body.appendChild(row);
+        });
+    });
+}
+
+function fetchRxtDashboard() {
+    fetch("/rxt.json?_t=" + Date.now())
+    .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    })
+    .then(loadRxtDashboard)
+    .catch((err) => {
+        console.error("Failed to load RXT telemetry", err);
+    });
+}
+
+window.showRxt = function () {
+    fetchRxtDashboard();
+
+    if (rxtTimer) clearInterval(rxtTimer);
+    rxtTimer = setInterval(function () {
+        const section = document.getElementById("sec-rxt");
+        if (section && section.classList.contains("active")) {
+            fetchRxtDashboard();
+        }
+    }, 5000);
+};
 
 
 /* ---------- Stations Map (Leaflet, CDN) ---------- */

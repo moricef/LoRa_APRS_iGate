@@ -23,11 +23,13 @@
 #include "map_utils.h"
 #include "display.h"
 #include "utils.h"
+#include "lora_utils.h"
 
 
 extern Configuration               Config;
 extern uint32_t                    lastBeaconTx;
 extern std::vector<ReceivedPacket> receivedPackets;
+extern std::vector<LoRa_Utils::RxtDashboardEntry> rxtDashboardEntries;
 
 extern const char web_index_html[] asm("_binary_data_embed_index_html_gz_start");
 extern const char web_index_html_end[] asm("_binary_data_embed_index_html_gz_end");
@@ -171,6 +173,38 @@ namespace WEB_Utils {
         request->send(200, "application/json", buffer);
     }
 
+    void handleRxtDashboard(AsyncWebServerRequest *request) {
+        JsonDocument data;
+
+        for (size_t i = 0; i < rxtDashboardEntries.size(); i++) {
+            const LoRa_Utils::RxtDashboardEntry& entry = rxtDashboardEntries[i];
+            data[i]["rx_time"] = entry.rxTime;
+            data[i]["age_ms"]  = static_cast<uint32_t>(millis() - entry.receivedAtMillis);
+            data[i]["packet"]   = entry.packet;
+            data[i]["rxt_raw"]  = entry.rawTuples;
+            data[i]["local"]["rssi_dbm"] = entry.localRssi;
+            data[i]["local"]["snr_db"]   = entry.localSnr;
+            data[i]["local"]["fo_hz"]    = entry.localFo;
+
+            for (size_t j = 0; j < entry.hops.size(); j++) {
+                const LoRa_Utils::RxtHopMetric& hop = entry.hops[j];
+                data[i]["rxt_hops"][j]["from"]     = hop.fromNode;
+                data[i]["rxt_hops"][j]["to"]       = hop.toNode;
+                data[i]["rxt_hops"][j]["has_data"] = hop.hasData;
+                if (hop.hasData) {
+                    data[i]["rxt_hops"][j]["rssi_dbm"] = hop.rssi;
+                    data[i]["rxt_hops"][j]["snr_db"]   = hop.snr;
+                    data[i]["rxt_hops"][j]["fo_hz"]    = hop.fo;
+                    data[i]["rxt_hops"][j]["tth_ms"]   = hop.tth;
+                }
+            }
+        }
+
+        String buffer;
+        serializeJson(data, buffer);
+        request->send(200, "application/json", buffer);
+    }
+
     void handleStations(AsyncWebServerRequest *request) {
         request->send(200, "application/json", MAP_Utils::getStationsJson());
     }
@@ -264,6 +298,7 @@ namespace WEB_Utils {
         Config.personalNote                 = getParamStringSafe("personalNote", Config.personalNote);
 
         Config.blacklist                    = getParamStringSafe("blacklist", Config.blacklist);
+        Config.rxtEnabled                   = request->hasParam("rxtEnabled", true);
         Config.rxtWhitelist                 = getParamStringSafe("rxtWhitelist", Config.rxtWhitelist);
 
         Config.digi.mode                    = getParamIntSafe("digi.mode", Config.digi.mode);
@@ -446,6 +481,7 @@ namespace WEB_Utils {
             server.on("/", HTTP_GET, handleHome);
             server.on("/status", HTTP_GET, handleStatus);
             server.on("/received-packets.json", HTTP_GET, handleReceivedPackets);
+            server.on("/rxt.json", HTTP_GET, handleRxtDashboard);
             server.on("/stations.json", HTTP_GET, handleStations);
             server.on("/configuration.json", HTTP_GET, handleReadConfiguration);
             server.on("/configuration.json", HTTP_POST, handleWriteConfiguration);

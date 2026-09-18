@@ -71,8 +71,8 @@ ___________________________________________________________________*/
 // External hook for RXT / TTH tracking from lora_utils.cpp
 extern unsigned long rxCompletedMillis;
 
-String              versionDate             = "2026-09-14";
-String              versionNumber           = "4.0.1RXT";
+String              versionDate             = "2026-09-18";
+String              versionNumber           = "4.0.2RXT";
 Configuration       Config;
 WiFiClient          aprsIsClient;
 WiFiClient          mqttClient;
@@ -97,6 +97,7 @@ bool                modemLoggedToAPRSIS     = false;
 #endif
 
 std::vector<ReceivedPacket> receivedPackets;
+std::vector<LoRa_Utils::RxtDashboardEntry> rxtDashboardEntries;
 
 String firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seventhLine;
 
@@ -197,6 +198,10 @@ void loop() {
         }
 
         if (packet != "") {
+            // Snapshot the measurements made by this receiver before any
+            // subsequent processing or RF transmission can change state.
+            const LoRa_Utils::RxtRxContext localRx = LoRa_Utils::captureRxtRxContext();
+
             if (Config.aprs_is.active) {    // If APRSIS enabled
                 APRS_IS_Utils::processLoRaPacket(packet); // Send received packet to APRSIS
             }
@@ -211,6 +216,23 @@ void loop() {
             // the result is simply unused.
             std::vector<LoRa_Utils::RxtHopMetric> hopMetrics = LoRa_Utils::getDecodedRxtMetrics(packet);
 
+            String rawRxtField = LoRa_Utils::getLastRxtField();
+            if (Config.digi.ecoMode == 0 && rawRxtField.length() > 0) {
+                if (rxtDashboardEntries.size() >= 10) {
+                    rxtDashboardEntries.erase(rxtDashboardEntries.begin());
+                }
+                LoRa_Utils::RxtDashboardEntry entry;
+                entry.rxTime           = NTP_Utils::getFormatedTime();
+                entry.receivedAtMillis = millis();
+                entry.packet          = LoRa_Utils::stripRxtTrailer(packet);
+                entry.rawTuples       = rawRxtField;
+                entry.localRssi       = localRx.rssi;
+                entry.localSnr        = localRx.snr;
+                entry.localFo         = localRx.fo;
+                entry.hops            = hopMetrics;
+                rxtDashboardEntries.push_back(entry);
+            }
+
             #ifdef RXT_RAW_DEBUG
             // Temporary diagnostic: shows exactly what was in the raw RXT
             // trailer field (if anything) at the moment it was decoded for
@@ -218,8 +240,7 @@ void loop() {
             // print from lora_utils.cpp, so the radio-interface layer still
             // never writes to a local client. Remove or leave #undef'd once
             // the field-population timing question is resolved.
-            String rawField = LoRa_Utils::getLastRxtField();
-            Serial.println("[RXT-RAW] len=" + String(rawField.length()) + " field=\"" + rawField + "\"");
+            Serial.println("[RXT-RAW] len=" + String(rawRxtField.length()) + " field=\"" + rawRxtField + "\"");
             #endif
 
             if (Config.tnc.enableServer) TNC_Utils::sendToClients(packet, true, hopMetrics);    // Send received packet to TNC KISS

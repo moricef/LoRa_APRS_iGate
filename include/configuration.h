@@ -181,6 +181,7 @@ public:
     int                     startupDelay;
     String                  personalNote;
     String                  blacklist;
+    bool                    rxtEnabled;      // append local RXT telemetry to eligible relayed RF packets
     String                  rxtWhitelist;    // exact space-delimited callsigns (including SSID when present) of RXT-capable digis
     std::vector<WiFi_AP>    wifiAPs;
     WiFi_Auto_AP            wifiAutoAP;

@@ -89,6 +89,7 @@ bool Configuration::writeFile() {
 
         data["blacklist"]                           = blacklist;
 
+        data["rxtEnabled"]                          = rxtEnabled;
         data["rxtWhitelist"]                        = rxtWhitelist;
 
         data["digi"]["mode"]                        = digi.mode;
@@ -290,6 +291,9 @@ bool Configuration::readFile() {
 
         if (data["blacklist"].isNull()) needsRewrite = true;
         blacklist                       = data["blacklist"] | "station callsign";
+
+        if (data["rxtEnabled"].isNull()) needsRewrite = true;
+        rxtEnabled                      = data["rxtEnabled"] | true;
 
         if (data["rxtWhitelist"].isNull()) needsRewrite = true;
         rxtWhitelist                    = data["rxtWhitelist"] | "";
@@ -506,6 +510,7 @@ void Configuration::setDefaultValues() {
 
     blacklist                       = "";
 
+    rxtEnabled                      = true;
     rxtWhitelist                    = "";
 
     digi.mode                       = 0;

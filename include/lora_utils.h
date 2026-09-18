@@ -45,6 +45,17 @@ namespace LoRa_Utils {
         unsigned long tth; // ms -- unsigned long (not int) so slow SF/BW configs
                             // (e.g. SF12, ~2000-3000 ms packet frames) can't overflow
     };
+
+    struct RxtDashboardEntry {
+        String rxTime;
+        uint32_t receivedAtMillis;
+        String packet;
+        String rawTuples;
+        int localRssi;
+        float localSnr;
+        int localFo;
+        std::vector<RxtHopMetric> hops;
+    };
     void    setup();
     void    loadRxtWhitelist();
     RxtRxContext captureRxtRxContext();

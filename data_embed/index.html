@@ -62,6 +62,13 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
 #received-packets .table{--bs-table-color:var(--msh-text);--bs-table-border-color:var(--msh-border);color:var(--msh-text);}
 #received-packets th{white-space:nowrap;}
 #received-packets td:nth-child(1),#received-packets td:nth-child(3),#received-packets td:nth-child(4){white-space:nowrap;}
+#rxt-table{--bs-table-color:var(--msh-text);--bs-table-border-color:var(--msh-border);color:var(--msh-text);font-size:.88rem;}
+#rxt-table th,#rxt-table .rxt-time,#rxt-table .rxt-call,#rxt-table .rxt-value,#rxt-table .rxt-na{white-space:nowrap;}
+#rxt-table .rxt-frame{min-width:280px;font-family:monospace;overflow-wrap:anywhere;word-break:break-word;}
+#rxt-table .rxt-local{white-space:nowrap;font-family:monospace;}
+#rxt-table .rxt-raw{font-family:monospace;white-space:pre;}
+#rxt-table .rxt-na{color:var(--msh-text-dim);}
+#rxt-empty{display:block;margin:18px 0;color:var(--msh-text-dim);}
 @media(max-width:768px){
   .app-sidebar{width:60px;padding:12px 6px;}
   .side-link .label,.nav-group-label{display:none;}
@@ -242,6 +249,7 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                         />
                                     </svg></span><span class="label">Hardware</span></button>
 <button class="side-link" type="button" data-target="sec-wxtelemetry"><span class="side-ico"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M6 2a.5.5 0 0 1 .47.33L10 12.036l1.53-4.208A.5.5 0 0 1 12 7.5h3.5a.5.5 0 0 1 0 1h-3.15l-1.88 5.17a.5.5 0 0 1-.94 0L6 3.964 4.47 8.171A.5.5 0 0 1 4 8.5H.5a.5.5 0 0 1 0-1h3.15l1.88-5.17A.5.5 0 0 1 6 2"/></svg></span><span class="label">WX Telemetry</span></button>
+<button class="side-link" type="button" data-target="sec-rxt"><span class="side-ico">R</span><span class="label">RXT Telemetry</span></button>
 <button class="side-link" type="button" data-target="sec-administration"><span class="side-ico"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg></span><span class="label">Administration</span></button>
 <button class="side-link" type="button" data-target="sec-about"><span class="side-ico"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2"/></svg></span><span class="label">About / Info</span></button>
     <div class="side-sep"></div>
@@ -275,6 +283,81 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                 <hr>
             </div>
     <div id="configuration">
+<section class="panel-section" id="sec-rxt">
+    <div class="row my-5 d-flex align-items-top">
+        <div class="col-lg-3 col-sm-12">
+            <h5>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M6 2a.5.5 0 0 1 .47.33L10 12.036l1.53-4.208A.5.5 0 0 1 12 7.5h3.5a.5.5 0 0 1 0 1h-3.15l-1.88 5.17a.5.5 0 0 1-.94 0L6 3.964 4.47 8.171A.5.5 0 0 1 4 8.5H.5a.5.5 0 0 1 0-1h3.15l1.88-5.17A.5.5 0 0 1 6 2"/>
+                </svg>
+                RXT Telemetry
+            </h5>
+            <small>Configure RXT relay telemetry.</small>
+        </div>
+        <div class="col-lg-9 col-sm-12">
+            <div class="row">
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            name="rxtEnabled"
+                            id="rxtEnabled"
+                        />
+                        <label class="form-check-label" for="rxtEnabled">
+                            Enable RXT relay telemetry
+                        </label>
+                    </div>
+                    <small>
+                        Append this digi's RXT tuple to eligible relayed RF packets.
+                        Receiving and decoding RXT, and removing it before APRS-IS, remain active.
+                    </small>
+                </div>
+                <div class="col-12 mt-3">
+                    <label for="rxtWhitelist" class="form-label">
+                        RXT Whitelist
+                        <small>(exact callsigns of RXT-capable digis, including SSID when present, space separated)</small>
+                    </label>
+                    <input
+                        type="text"
+                        name="rxtWhitelist"
+                        id="rxtWhitelist"
+                        class="form-control"
+                        placeholder="TSRXAX TSRXBX SOMTNX"
+                        oninput="this.value = this.value.toUpperCase();"
+                    />
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row my-5">
+        <div class="col-12">
+            <h3>Last 10 received RXT packets</h3>
+            <div class="table-responsive">
+                <table class="table mt-4" id="rxt-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Frame</th>
+                            <th>Local RX</th>
+                            <th>Raw</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>RSSI</th>
+                            <th>SNR</th>
+                            <th>FO</th>
+                            <th>TTH</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <span id="rxt-empty">No RXT telemetry received since boot.</span>
+            <small>List refreshes automatically every 5 seconds.</small>
+        </div>
+    </div>
+</section>
 <section class="panel-section" id="sec-maps">
                         <div class="row my-5">
                             <div class="col-12">
@@ -1219,21 +1302,6 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                             oninput="this.value = this.value.toUpperCase();"
                                         />
                                     </div>
-                                    <div class="col-12 mt-3">
-                                        <label
-                                            for="rxtWhitelist"
-                                            class="form-label"
-                                            >RXT Whitelist <small>(exact callsigns of RXT-capable digis, including SSID when present, space separated)</small></label
-                                        >
-                                        <input
-                                            type="text"
-                                            name="rxtWhitelist"
-                                            id="rxtWhitelist"
-                                            class="form-control"
-                                            placeholder="TSRXAX TSRXBX SOMTNX"
-                                            oninput="this.value = this.value.toUpperCase();"
-                                        />
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1970,6 +2038,9 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                                 style="font-style: italic;"
                                                 >(Send Voltage As Telemetry)</label
                                             >
+                                            <small class="form-text text-muted d-block">
+                                                RX, relay and drop activity is reported as packets/hour so stations with different beacon intervals remain comparable.
+                                            </small>
                                         </div>
                                         <div class="form-check form-switch">
                                             <input
@@ -2504,6 +2575,7 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
       b.classList.add("active");var el=document.getElementById(b.dataset.target);if(el)el.classList.add("active");
       showConfig();
       if(b.dataset.target==="sec-maps"&&window.showMap)window.showMap();
+      if(b.dataset.target==="sec-rxt"&&window.showRxt)window.showRxt();
     });
   });
   var rpBtn=document.getElementById("rpToggle");
