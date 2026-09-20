@@ -36,6 +36,10 @@ int main() {
     expectNodes("single last-used star",
                 RXT_Protocol::usedPathNodes("SRC>DST,F6DEV,F4MLV-10*,WIDE2-1:payload"),
                 {"F6DEV", "F4MLV-10"});
+    expectNodes("Jon three-hop mixed stars",
+                RXT_Protocol::usedPathNodes(
+                    "SUNSET>APLRG1,SOMTNX,TSRXBX*,TSRXAX*:payload"),
+                {"SOMTNX", "TSRXBX", "TSRXAX"});
     expectNodes("unused path", RXT_Protocol::usedPathNodes("SRC>DST,WIDE1-1,WIDE2-1:payload"), {});
     expectNodes("payload comma is not a path",
                 RXT_Protocol::usedPathNodes("SRC>DST:payload,with,commas"), {});
