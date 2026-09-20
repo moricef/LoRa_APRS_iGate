@@ -37,7 +37,10 @@ struct StreamState {
     uint32_t nextSequence = 1;
     std::vector<String> replay;
     size_t replayIndex = 0;
-    String gap;
+    String gapRequestedAfter;
+    String gapReason;
+    String gapOldestAvailable;
+    String gapLatestAvailable;
     size_t pendingOffset = 0;
     String pending;
     uint32_t lastEmissionMillis = 0;
@@ -333,7 +336,8 @@ uint32_t prepareStream(const String* after, StreamState& state) {
             }
         } else {
             uint32_t requestedSequence = 0;
-            if (parseCurrentBootCursor(*after, requestedSequence) && !eventQueue.empty() &&
+            if (parseCurrentBootCursor(*after, requestedSequence) && requestedSequence > 0 &&
+                !eventQueue.empty() &&
                 requestedSequence < eventQueue.front().sequence) {
                 gapReason = "history_expired";
             } else if (!after->startsWith(bootId + ":") && after->indexOf(':') > 0) {
@@ -350,7 +354,10 @@ uint32_t prepareStream(const String* after, StreamState& state) {
     xSemaphoreGive(eventMutex);
 
     if (after != nullptr && gapReason.length() > 0) {
-        state.gap = buildGap(*after, gapReason, oldestAvailable, latestAvailable);
+        state.gapRequestedAfter = *after;
+        state.gapReason = gapReason;
+        state.gapOldestAvailable = oldestAvailable;
+        state.gapLatestAvailable = latestAvailable;
     }
     return boundary;
 }
@@ -484,9 +491,12 @@ void handleStream(AsyncWebServerRequest *request) {
                 if (state->helloPending) {
                     state->pending = buildHello(boundary);
                     state->helloPending = false;
-                } else if (state->gap.length() > 0) {
-                    state->pending = state->gap;
-                    state->gap = "";
+                } else if (state->gapReason.length() > 0) {
+                    state->pending = buildGap(state->gapRequestedAfter,
+                                              state->gapReason,
+                                              state->gapOldestAvailable,
+                                              state->gapLatestAvailable);
+                    state->gapReason = "";
                 } else if (state->replayIndex < state->replay.size()) {
                     state->pending = state->replay[state->replayIndex++];
                 } else {
