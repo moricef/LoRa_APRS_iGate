@@ -195,8 +195,17 @@ void loop() {
         APRS_IS_Utils::checkStatus(); // Need that to update display, maybe split this and send APRSIS status to display func?
 
         String packet = "";
+        String jsonPacket = "";
         if (Config.loramodule.rxActive) {
-            packet = LoRa_Utils::receivePacket(); // We need to fetch LoRa packet above APRSIS and Digi
+            packet = LoRa_Utils::receivePacket(&jsonPacket); // We need to fetch LoRa packet above APRSIS and Digi
+        }
+
+        // A CRC-valid payload that fails the legacy TNC2 admission filter must
+        // still be transported by the JSON stream with parse_status=malformed.
+        // Keep all existing APRS consumers gated by the normal packet value.
+        if (Config.digi.ecoMode == 0 && packet == "" && jsonPacket != "") {
+            const LoRa_Utils::RxtRxContext localRx = LoRa_Utils::captureRxtRxContext();
+            APRS_JSON_Utils::recordRx(jsonPacket, localRx, "", {});
         }
 
         if (packet != "") {

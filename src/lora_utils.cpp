@@ -637,9 +637,10 @@ namespace LoRa_Utils {
 
     }
 
-    String receivePacket() {
+    String receivePacket(String* jsonPacket) {
         String packet = "";
         lastRxtField = ""; // State hygiene reset at packet boundary
+        if (jsonPacket != nullptr) *jsonPacket = "";
         
         if (operationDone) {
             operationDone = false;
@@ -654,14 +655,21 @@ namespace LoRa_Utils {
                         if (packet.startsWith("\x3c\xff\x01")) {
                             packet = packet.substring(3);
                         }
+
+                        // Preserve every non-empty CRC-valid RF payload for the JSON
+                        // producer before applying the legacy TNC2 admission filter.
+                        // The normal return value remains empty for malformed packets,
+                        // so APRS-IS, digi, TNC and MQTT behavior is unchanged.
+                        if (packet != "") {
+                            rssi        = radio.getRSSI();
+                            snr         = radio.getSNR();
+                            freqOffset  = radio.getFrequencyError();
+                            if (jsonPacket != nullptr) *jsonPacket = packet;
+                        }
                         int gtIndex = packet.indexOf(">");
                         if (gtIndex != -1) {
                             String sender = packet.substring(0, gtIndex);
                             if (!STATION_Utils::isBlacklisted(sender)) {
-                                rssi        = radio.getRSSI();
-                                snr         = radio.getSNR();
-                                freqOffset   = radio.getFrequencyError();
-                                
                                 // Capture the RXT trailer into lastRxtField, but do NOT overwrite
                                 // 'packet' with the stripped result -- 'packet' is what gets
                                 // returned to the caller and ultimately reaches
@@ -705,6 +713,7 @@ namespace LoRa_Utils {
                                 SD_Utils::setDecision("BLACK");
                                 SD_Utils::endEntry();
                                 TELEMETRY_Utils::incDrop();
+                                if (jsonPacket != nullptr) *jsonPacket = "";
                                 packet = "";
                             }
                         } else {

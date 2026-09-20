@@ -264,7 +264,12 @@ void recordRx(const String& rfPacket,
               const std::vector<LoRa_Utils::RxtHopMetric>& hopMetrics) {
     if (eventMutex == nullptr) return;
 
-    String cleanPacket = LoRa_Utils::stripRxtTrailer(rfPacket);
+    // Only remove a trailer that the RF receive path actually recognized.
+    // Arbitrary malformed payloads ending in RXT-looking bytes must otherwise
+    // remain byte-for-byte intact in raw_tnc2_base64.
+    String cleanPacket = rawRxtField.length() > 0
+        ? LoRa_Utils::stripRxtTrailer(rfPacket)
+        : rfPacket;
     uint32_t sequence;
     xSemaphoreTake(eventMutex, portMAX_DELAY);
     sequence = latestSequence + 1;
@@ -308,7 +313,6 @@ void recordRx(const String& rfPacket,
         JsonArray hops = rxt["hops"].to<JsonArray>();
         uint32_t ordinal = 1;
         for (auto it = hopMetrics.rbegin(); it != hopMetrics.rend(); ++it) {
-            if (!it->hasData) continue;
             JsonObject hop = hops.add<JsonObject>();
             hop["ordinal"] = ordinal++;
             bool resolved = it->fromNode.length() > 0 && it->toNode.length() > 0 &&
@@ -318,11 +322,13 @@ void recordRx(const String& rfPacket,
                 hop["tx"] = it->fromNode;
                 hop["rx"] = it->toNode;
             }
-            hop["has_data"] = true;
-            hop["rssi_dbm"] = it->rssi;
-            hop["snr_db"] = it->snr;
-            hop["frequency_error_hz"] = it->fo;
-            hop["tth_ms"] = it->tth;
+            hop["has_data"] = it->hasData;
+            if (it->hasData) {
+                hop["rssi_dbm"] = it->rssi;
+                hop["snr_db"] = it->snr;
+                hop["frequency_error_hz"] = it->fo;
+                hop["tth_ms"] = it->tth;
+            }
         }
     }
 

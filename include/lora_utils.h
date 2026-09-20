@@ -61,7 +61,7 @@ namespace LoRa_Utils {
     RxtRxContext captureRxtRxContext();
     void    sendNewPacket(const String& newPacket, const RxtRxContext* rxtContext = nullptr);
     String  receivePacketFromSleep();
-    String  receivePacket();
+    String  receivePacket(String* jsonPacket = nullptr);
     String  stripRxtTrailer(const String& packet, String* outTuple = nullptr);
     String  getLastRxtField();
     std::vector<RxtHopMetric> getDecodedRxtMetrics(const String& packet);
