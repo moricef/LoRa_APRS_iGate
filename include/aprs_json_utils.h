@@ -16,6 +16,7 @@ namespace APRS_JSON_Utils {
 
     void setup();
     void handleStream(AsyncWebServerRequest *request);
+    void handleEvents(AsyncWebServerRequest *request);
     void recordRx(const String& rfPacket,
                   const LoRa_Utils::RxtRxContext& localRx,
                   const String& rawRxtField,

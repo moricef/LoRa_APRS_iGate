@@ -370,6 +370,44 @@ uint32_t sequenceSnapshot() {
     return value;
 }
 
+bool parseSnapshotLimit(AsyncWebServerRequest *request, size_t& limit) {
+    limit = EVENT_QUEUE_SIZE;
+    if (!request->hasParam("limit")) return true;
+
+    const String value = request->getParam("limit")->value();
+    if (value.length() == 0) return false;
+
+    limit = 0;
+    bool positive = false;
+    for (size_t i = 0; i < value.length(); ++i) {
+        const char character = value[i];
+        if (!isDigit(static_cast<unsigned char>(character))) return false;
+        const size_t digit = static_cast<size_t>(character - '0');
+        if (digit != 0) positive = true;
+        if (limit < EVENT_QUEUE_SIZE) {
+            limit = std::min(EVENT_QUEUE_SIZE, limit * 10 + digit);
+        }
+    }
+    return positive;
+}
+
+String buildSnapshot(size_t limit) {
+    String output = "[";
+
+    xSemaphoreTake(eventMutex, portMAX_DELAY);
+    const size_t count = std::min(limit, eventQueue.size());
+    for (size_t i = 0; i < count; ++i) {
+        if (i != 0) output += ',';
+        const String& line = eventQueue[eventQueue.size() - 1 - i].jsonLine;
+        output += line;
+        if (output.endsWith("\n")) output.remove(output.length() - 1);
+    }
+    xSemaphoreGive(eventMutex);
+
+    output += ']';
+    return output;
+}
+
 } // namespace
 
 namespace APRS_JSON_Utils {
@@ -531,6 +569,20 @@ void handleStream(AsyncWebServerRequest *request) {
     response->addHeader("Cache-Control", "no-store");
     response->addHeader("Connection", "keep-alive");
     response->addHeader("X-Accel-Buffering", "no");
+    request->send(response);
+}
+
+void handleEvents(AsyncWebServerRequest *request) {
+    size_t limit = EVENT_QUEUE_SIZE;
+    if (!parseSnapshotLimit(request, limit)) {
+        request->send(400, "application/json",
+                      "{\"code\":\"invalid_request\",\"message\":\"limit must be a positive integer\"}");
+        return;
+    }
+
+    AsyncWebServerResponse *response =
+        request->beginResponse(200, "application/json", buildSnapshot(limit));
+    response->addHeader("Cache-Control", "no-store");
     request->send(response);
 }
 

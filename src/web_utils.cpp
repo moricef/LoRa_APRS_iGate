@@ -484,6 +484,7 @@ namespace WEB_Utils {
             server.on("/received-packets.json", HTTP_GET, handleReceivedPackets);
             server.on("/rxt.json", HTTP_GET, handleRxtDashboard);
             server.on("/api/v1/aprs/stream", HTTP_GET, APRS_JSON_Utils::handleStream);
+            server.on("/api/v1/aprs/events", HTTP_GET, APRS_JSON_Utils::handleEvents);
             server.on("/stations.json", HTTP_GET, handleStations);
             server.on("/configuration.json", HTTP_GET, handleReadConfiguration);
             server.on("/configuration.json", HTTP_POST, handleWriteConfiguration);

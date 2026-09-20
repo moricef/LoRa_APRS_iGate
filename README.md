@@ -30,7 +30,8 @@ This branch implements the receive-side pilot of the
 [LoRa APRS JSON Protocol](https://github.com/moricef/LoRa_APRS_JSON_Protocol).
 Applications can open `GET /api/v1/aprs/stream` with
 `Accept: application/x-ndjson` to receive an initial `hello` record followed
-by live `rx` records.
+by live `rx` records. `GET /api/v1/aprs/events?limit=10` returns the retained
+receive events newest-first as a JSON array for dashboard polling.
 
 The stream preserves the authoritative clean TNC2 bytes, the complete RF copy
 when an RXT trailer is present, local radio measurements, radio parameters and
@@ -39,11 +40,11 @@ validation is reported, including malformed packets and packets rejected by
 the station blacklist. Those packets remain rejected by APRS-IS, digi, TNC
 and MQTT processing.
 
-The pilot advertises only the capabilities it implements. In particular,
-history replay and `after=` resume are not currently advertised; requests
-using `after=` receive the structured `history_resume_unsupported` error.
-Graywolf's `feature/rxt-telemetry` branch is the independent reference
-consumer used for interoperability testing.
+The stream retains ten events and advertises history resume. A reconnecting
+client can pass its last `event_id` with `after=` to replay newer retained
+events before resuming the live stream. Graywolf's `feature/rxt-telemetry`
+branch is the independent reference consumer used for interoperability
+testing.
 
 ____________________________________________________
 
