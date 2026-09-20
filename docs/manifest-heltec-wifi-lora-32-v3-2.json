@@ -1,0 +1,28 @@
+{
+  "name": "LoRa APRS iGate - Heltec WiFi LoRa 32 V3.2 (RXT)",
+  "version": "4.0.2RXT (2026-09-20)",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "firmware/heltec_wifi_lora_32_V3_2/bootloader.bin",
+          "offset": 0
+        },
+        {
+          "path": "firmware/heltec_wifi_lora_32_V3_2/partitions.bin",
+          "offset": 32768
+        },
+        {
+          "path": "firmware/heltec_wifi_lora_32_V3_2/boot_app0.bin",
+          "offset": 57344
+        },
+        {
+          "path": "firmware/heltec_wifi_lora_32_V3_2/firmware.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}

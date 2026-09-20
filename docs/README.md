@@ -1,7 +1,10 @@
 # Web Flasher du fork
 
-Le flasher publie uniquement le variant `ttgo-lora32-v21_SD` de la branche
-`feature/rxt-integration`.
+Le flasher publie trois variants de la branche `feature/rxt-integration` :
+
+- `ttgo-lora32-v21_SD` (ESP32) ;
+- `heltec_wifi_lora_32_V3_2` (ESP32-S3) ;
+- `QRPLabs_LightGateway_Plus_1_0` (ESP32-S3).
 
 Comme le flasher du Tracker, son manifeste contient toujours le bootloader,
 la table de partitions, `boot_app0.bin` et `firmware.bin`, avec
@@ -20,7 +23,7 @@ laisserait la carte sans bootloader ni table de partitions.
 ## Mettre les binaires à jour
 
 ```sh
-pio run -e ttgo-lora32-v21_SD
+pio run -e ttgo-lora32-v21_SD -e heltec_wifi_lora_32_V3_2 -e QRPLabs_LightGateway_Plus_1_0
 
 cp .pio/build/ttgo-lora32-v21_SD/bootloader.bin docs/firmware/ttgo-lora32-v21_SD/
 cp .pio/build/ttgo-lora32-v21_SD/partitions.bin docs/firmware/ttgo-lora32-v21_SD/
@@ -28,13 +31,18 @@ cp .pio/build/ttgo-lora32-v21_SD/firmware.bin docs/firmware/ttgo-lora32-v21_SD/
 cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin docs/firmware/ttgo-lora32-v21_SD/
 ```
 
+Répéter les quatre copies dans le répertoire propre à chaque variant. Le
+bootloader ESP32 est flashé à `0x1000`, tandis que les bootloaders ESP32-S3
+sont flashés à `0x0000`. Les autres offsets restent identiques : table de
+partitions à `0x8000`, `boot_app0.bin` à `0xe000` et firmware à `0x10000`.
+
 Mettre également à jour la version et la date dans `index.html` et dans
-`manifest-ttgo-lora32-v21-sd.json`.
+chacun des trois manifestes.
 
 Régénérer ensuite `firmware/ttgo-lora32-v21_SD/SHA256SUMS` avec :
 
 ```sh
-cd docs/firmware/ttgo-lora32-v21_SD
+cd docs/firmware/<variant>
 sha256sum bootloader.bin partitions.bin boot_app0.bin firmware.bin > SHA256SUMS
 ```
 
