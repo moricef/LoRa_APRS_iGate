@@ -46,6 +46,7 @@ ___________________________________________________________________*/
 #include "configuration.h"
 #include "network_manager.h"
 #include "aprs_is_utils.h"
+#include "aprs_json_utils.h"
 #include "station_utils.h"
 #include "battery_utils.h"
 #include "board_pinout.h"
@@ -125,6 +126,7 @@ void setup() {
     NTP_Utils::setup();
     SYSLOG_Utils::setup();
     WX_Utils::setup();
+    APRS_JSON_Utils::setup();
     WEB_Utils::setup();
     TNC_Utils::setup();
     MQTT_Utils::setup();
@@ -217,6 +219,9 @@ void loop() {
             std::vector<LoRa_Utils::RxtHopMetric> hopMetrics = LoRa_Utils::getDecodedRxtMetrics(packet);
 
             String rawRxtField = LoRa_Utils::getLastRxtField();
+            if (Config.digi.ecoMode == 0) {
+                APRS_JSON_Utils::recordRx(packet, localRx, rawRxtField, hopMetrics);
+            }
             if (Config.digi.ecoMode == 0 && rawRxtField.length() > 0) {
                 if (rxtDashboardEntries.size() >= 10) {
                     rxtDashboardEntries.erase(rxtDashboardEntries.begin());

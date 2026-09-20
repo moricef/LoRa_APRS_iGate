@@ -18,6 +18,7 @@
 
 #include <ArduinoJson.h>
 #include "configuration.h"
+#include "aprs_json_utils.h"
 #include "ota_utils.h"
 #include "web_utils.h"
 #include "map_utils.h"
@@ -482,6 +483,7 @@ namespace WEB_Utils {
             server.on("/status", HTTP_GET, handleStatus);
             server.on("/received-packets.json", HTTP_GET, handleReceivedPackets);
             server.on("/rxt.json", HTTP_GET, handleRxtDashboard);
+            server.on("/api/v1/aprs/stream", HTTP_GET, APRS_JSON_Utils::handleStream);
             server.on("/stations.json", HTTP_GET, handleStations);
             server.on("/configuration.json", HTTP_GET, handleReadConfiguration);
             server.on("/configuration.json", HTTP_POST, handleWriteConfiguration);
