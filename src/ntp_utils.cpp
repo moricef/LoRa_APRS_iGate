@@ -32,6 +32,10 @@ NTPClient*  timeClient = nullptr;
 
 namespace NTP_Utils {
 
+    bool isSynchronized() {
+        return timeClient != nullptr && timeClient->isTimeSet();
+    }
+
     bool setup() {
         if (networkManager->isConnected() && Config.digi.ecoMode == 0 && Config.callsign != "NOCALL-10") {
             int gmt = Config.ntp.gmtCorrection * 3600;

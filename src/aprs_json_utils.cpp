@@ -15,6 +15,7 @@
 #include "aprs_json_utils.h"
 #include "configuration.h"
 #include "lora_utils.h"
+#include "ntp_utils.h"
 
 extern Configuration Config;
 extern String versionNumber;
@@ -23,23 +24,31 @@ namespace {
 
 constexpr size_t EVENT_QUEUE_SIZE = 10;
 constexpr size_t MAX_RECORD_BYTES = 4096;
+constexpr uint32_t HEARTBEAT_INTERVAL_MS = 15000;
 
 struct StoredEvent {
     uint32_t sequence;
+    String eventId;
     String jsonLine;
 };
 
 struct StreamState {
     bool helloPending = true;
     uint32_t nextSequence = 1;
+    std::vector<String> replay;
+    size_t replayIndex = 0;
+    String gap;
     size_t pendingOffset = 0;
     String pending;
+    uint32_t lastEmissionMillis = 0;
 };
 
 std::vector<StoredEvent> eventQueue;
 SemaphoreHandle_t eventMutex = nullptr;
 String bootId;
 uint32_t latestSequence = 0;
+
+uint32_t sequenceSnapshot();
 
 String base64Encode(const String& value) {
     size_t encodedLength = 0;
@@ -211,11 +220,15 @@ String buildHello(uint32_t sequenceAtOpen) {
 
     JsonArray events = document["capabilities"]["events"].to<JsonArray>();
     events.add("rx");
+    events.add("heartbeat");
+    events.add("gap");
     JsonArray features = document["capabilities"]["features"].to<JsonArray>();
     features.add("local_metrics");
     features.add("radio_parameters");
     features.add("rxt");
+    features.add("history_resume");
     document["capabilities"]["transports"].to<JsonArray>().add("ndjson-http");
+    document["capabilities"]["history_events"] = EVENT_QUEUE_SIZE;
     document["capabilities"]["max_record_bytes"] = MAX_RECORD_BYTES;
 
     String output;
@@ -224,10 +237,53 @@ String buildHello(uint32_t sequenceAtOpen) {
     return output;
 }
 
-bool copyQueuedEvent(uint32_t sequence, String& output, uint32_t& oldestSequence) {
+String buildHeartbeat() {
+    JsonDocument document;
+    document["protocol"] = "lora-aprs-json";
+    document["protocol_version"] = "1";
+    document["schema_version"] = "1.0";
+    document["event"] = "heartbeat";
+    document["boot_id"] = bootId;
+    document["uptime_ms"] = millis();
+    document["latest_sequence"] = sequenceSnapshot();
+    document["time_synchronized"] = NTP_Utils::isSynchronized();
+
+    String output;
+    serializeJson(document, output);
+    output += '\n';
+    return output;
+}
+
+String buildGap(const String& requestedAfter,
+                const String& reason,
+                const String& oldestAvailable,
+                const String& latestAvailable) {
+    JsonDocument document;
+    document["protocol"] = "lora-aprs-json";
+    document["protocol_version"] = "1";
+    document["schema_version"] = "1.0";
+    document["event"] = "gap";
+    document["boot_id"] = bootId;
+    document["uptime_ms"] = millis();
+    document["requested_after"] = requestedAfter;
+    if (oldestAvailable.length() > 0) document["oldest_available"] = oldestAvailable;
+    if (latestAvailable.length() > 0) document["latest_available"] = latestAvailable;
+    document["reason"] = reason;
+
+    String output;
+    serializeJson(document, output);
+    output += '\n';
+    return output;
+}
+
+bool copyQueuedEvent(uint32_t sequence,
+                     String& output,
+                     uint32_t& oldestSequence,
+                     uint32_t& newestSequence) {
     if (eventMutex == nullptr) return false;
     xSemaphoreTake(eventMutex, portMAX_DELAY);
     oldestSequence = eventQueue.empty() ? latestSequence + 1 : eventQueue.front().sequence;
+    newestSequence = latestSequence;
     for (const StoredEvent& stored : eventQueue) {
         if (stored.sequence == sequence) {
             output = stored.jsonLine;
@@ -237,6 +293,66 @@ bool copyQueuedEvent(uint32_t sequence, String& output, uint32_t& oldestSequence
     }
     xSemaphoreGive(eventMutex);
     return false;
+}
+
+bool parseCurrentBootCursor(const String& cursor, uint32_t& sequence) {
+    String prefix = bootId + ":";
+    if (!cursor.startsWith(prefix)) return false;
+    String suffix = cursor.substring(prefix.length());
+    if (suffix.length() == 0) return false;
+    uint64_t value = 0;
+    for (size_t i = 0; i < suffix.length(); ++i) {
+        if (!isDigit(static_cast<unsigned char>(suffix[i]))) return false;
+        value = value * 10 + static_cast<uint8_t>(suffix[i] - '0');
+        if (value > UINT32_MAX) return false;
+    }
+    sequence = static_cast<uint32_t>(value);
+    return true;
+}
+
+uint32_t prepareStream(const String* after, StreamState& state) {
+    uint32_t boundary = 0;
+    String gapReason;
+    String oldestAvailable;
+    String latestAvailable;
+
+    xSemaphoreTake(eventMutex, portMAX_DELAY);
+    boundary = latestSequence;
+    state.nextSequence = boundary + 1;
+    if (after != nullptr) {
+        size_t match = eventQueue.size();
+        for (size_t i = 0; i < eventQueue.size(); ++i) {
+            if (eventQueue[i].eventId == *after) {
+                match = i;
+                break;
+            }
+        }
+        if (match < eventQueue.size()) {
+            for (size_t i = match + 1; i < eventQueue.size(); ++i) {
+                if (eventQueue[i].sequence <= boundary) state.replay.push_back(eventQueue[i].jsonLine);
+            }
+        } else {
+            uint32_t requestedSequence = 0;
+            if (parseCurrentBootCursor(*after, requestedSequence) && !eventQueue.empty() &&
+                requestedSequence < eventQueue.front().sequence) {
+                gapReason = "history_expired";
+            } else if (!after->startsWith(bootId + ":") && after->indexOf(':') > 0) {
+                gapReason = "different_boot";
+            } else {
+                gapReason = "unknown_event";
+            }
+            if (!eventQueue.empty()) {
+                oldestAvailable = eventQueue.front().eventId;
+                latestAvailable = eventQueue.back().eventId;
+            }
+        }
+    }
+    xSemaphoreGive(eventMutex);
+
+    if (after != nullptr && gapReason.length() > 0) {
+        state.gap = buildGap(*after, gapReason, oldestAvailable, latestAvailable);
+    }
+    return boundary;
 }
 
 uint32_t sequenceSnapshot() {
@@ -340,20 +456,26 @@ void recordRx(const String& rfPacket,
     xSemaphoreTake(eventMutex, portMAX_DELAY);
     latestSequence = sequence;
     if (eventQueue.size() >= EVENT_QUEUE_SIZE) eventQueue.erase(eventQueue.begin());
-    eventQueue.push_back({sequence, line});
+    eventQueue.push_back({sequence, bootId + ":" + String(sequence), line});
     xSemaphoreGive(eventMutex);
 }
 
 void handleStream(AsyncWebServerRequest *request) {
+    String after;
+    const String* afterPtr = nullptr;
     if (request->hasParam("after")) {
-        request->send(400, "application/json",
-                      "{\"code\":\"history_resume_unsupported\",\"message\":\"This pilot producer does not support history resume\"}");
-        return;
+        after = request->getParam("after")->value();
+        if (after.length() == 0) {
+            request->send(400, "application/json",
+                          "{\"code\":\"invalid_request\",\"message\":\"after must not be empty\"}");
+            return;
+        }
+        afterPtr = &after;
     }
 
-    uint32_t boundary = sequenceSnapshot();
     std::shared_ptr<StreamState> state = std::make_shared<StreamState>();
-    state->nextSequence = boundary + 1;
+    uint32_t boundary = prepareStream(afterPtr, *state);
+    state->lastEmissionMillis = millis();
 
     AsyncWebServerResponse *response = request->beginChunkedResponse(
         "application/x-ndjson; charset=utf-8",
@@ -362,13 +484,25 @@ void handleStream(AsyncWebServerRequest *request) {
                 if (state->helloPending) {
                     state->pending = buildHello(boundary);
                     state->helloPending = false;
+                } else if (state->gap.length() > 0) {
+                    state->pending = state->gap;
+                    state->gap = "";
+                } else if (state->replayIndex < state->replay.size()) {
+                    state->pending = state->replay[state->replayIndex++];
                 } else {
                     uint32_t oldest = 0;
-                    if (!copyQueuedEvent(state->nextSequence, state->pending, oldest)) {
+                    uint32_t newest = 0;
+                    bool queued = copyQueuedEvent(state->nextSequence, state->pending, oldest, newest);
+                    if (!queued) {
                         if (state->nextSequence < oldest) return 0; // bounded queue: drop slow client
-                        return RESPONSE_TRY_AGAIN;
+                        if (state->nextSequence <= newest) return 0;
+                        if (millis() - state->lastEmissionMillis >= HEARTBEAT_INTERVAL_MS) {
+                            state->pending = buildHeartbeat();
+                        } else {
+                            return RESPONSE_TRY_AGAIN;
+                        }
                     }
-                    ++state->nextSequence;
+                    if (queued) ++state->nextSequence;
                 }
                 state->pendingOffset = 0;
             }
@@ -380,6 +514,7 @@ void handleStream(AsyncWebServerRequest *request) {
             if (state->pendingOffset == state->pending.length()) {
                 state->pending = "";
                 state->pendingOffset = 0;
+                state->lastEmissionMillis = millis();
             }
             return count;
         });

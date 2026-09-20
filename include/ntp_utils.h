@@ -25,6 +25,7 @@
 namespace NTP_Utils {
 
     bool    setup();
+    bool    isSynchronized();
     void    update();
     String  getFormatedTime();
 
