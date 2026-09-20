@@ -669,9 +669,13 @@ namespace LoRa_Utils {
                         int gtIndex = packet.indexOf(">");
                         if (gtIndex != -1) {
                             String sender = packet.substring(0, gtIndex);
+                            // Decode the RF trailer independently of application-level
+                            // admission so the JSON producer can describe blacklisted
+                            // receptions with the same clean/RF separation as any other
+                            // CRC-valid packet.
+                            String cleanPacket = stripRxtTrailer(packet, &lastRxtField);
                             if (!STATION_Utils::isBlacklisted(sender)) {
-                                // Capture the RXT trailer into lastRxtField, but do NOT overwrite
-                                // 'packet' with the stripped result -- 'packet' is what gets
+                                // Do NOT overwrite 'packet' with the stripped result -- it gets
                                 // returned to the caller and ultimately reaches
                                 // DIGI_Utils::generateDigipeatedPacket(). If a second RXT-capable
                                 // digi forwards this packet further, its own attachRxtTrailer()
@@ -680,7 +684,6 @@ namespace LoRa_Utils {
                                 // starting fresh -- stripping here would silently replace, not
                                 // extend, multi-hop RXT data. cleanPacket is used everywhere a
                                 // trailer-free string is actually required.
-                                String cleanPacket = stripRxtTrailer(packet, &lastRxtField);
                                 #ifdef RXT_RAW_DEBUG
                                 Serial.println("[RXT-STRIP] len=" + String(lastRxtField.length()) + " field=\"" + lastRxtField + "\"");
                                 #endif
@@ -713,7 +716,6 @@ namespace LoRa_Utils {
                                 SD_Utils::setDecision("BLACK");
                                 SD_Utils::endEntry();
                                 TELEMETRY_Utils::incDrop();
-                                if (jsonPacket != nullptr) *jsonPacket = "";
                                 packet = "";
                             }
                         } else {

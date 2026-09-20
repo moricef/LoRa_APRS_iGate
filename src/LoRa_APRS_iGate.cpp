@@ -200,12 +200,15 @@ void loop() {
             packet = LoRa_Utils::receivePacket(&jsonPacket); // We need to fetch LoRa packet above APRSIS and Digi
         }
 
-        // A CRC-valid payload that fails the legacy TNC2 admission filter must
-        // still be transported by the JSON stream with parse_status=malformed.
-        // Keep all existing APRS consumers gated by the normal packet value.
+        // A CRC-valid payload rejected by syntax or application policy must
+        // still be transported by the raw reception stream. Keep all existing
+        // APRS consumers gated by the normal packet value.
         if (Config.digi.ecoMode == 0 && packet == "" && jsonPacket != "") {
             const LoRa_Utils::RxtRxContext localRx = LoRa_Utils::captureRxtRxContext();
-            APRS_JSON_Utils::recordRx(jsonPacket, localRx, "", {});
+            const String rawRxtField = LoRa_Utils::getLastRxtField();
+            const std::vector<LoRa_Utils::RxtHopMetric> hopMetrics =
+                LoRa_Utils::getDecodedRxtMetrics(jsonPacket);
+            APRS_JSON_Utils::recordRx(jsonPacket, localRx, rawRxtField, hopMetrics);
         }
 
         if (packet != "") {
