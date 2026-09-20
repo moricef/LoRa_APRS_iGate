@@ -1,0 +1,28 @@
+{
+  "name": "LoRa APRS iGate - QRP Labs LightGateway Plus 1.0 (RXT)",
+  "version": "4.0.2RXT (2026-09-20)",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "firmware/QRPLabs_LightGateway_Plus_1_0/bootloader.bin",
+          "offset": 0
+        },
+        {
+          "path": "firmware/QRPLabs_LightGateway_Plus_1_0/partitions.bin",
+          "offset": 32768
+        },
+        {
+          "path": "firmware/QRPLabs_LightGateway_Plus_1_0/boot_app0.bin",
+          "offset": 57344
+        },
+        {
+          "path": "firmware/QRPLabs_LightGateway_Plus_1_0/firmware.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}

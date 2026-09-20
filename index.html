@@ -25,6 +25,13 @@
       margin: 20px 0;
       text-align: center;
     }
+    .board {
+      border-top: 1px solid #334;
+      margin-top: 20px;
+      padding-top: 15px;
+    }
+    .board:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+    .board h3 { color: #c8e6c9; margin-bottom: 8px; }
     .install-btn {
       --esp-tools-button-color: #4CAF50;
       --esp-tools-button-text-color: #fff;
@@ -63,15 +70,37 @@
 
   <div class="container">
     <h2>Installation du firmware</h2>
-    <p>Connectez votre <strong>TTGO LoRa32 v2.1 avec carte microSD</strong> par USB, puis cliquez sur Installer :</p>
-    <esp-web-install-button class="install-btn" manifest="manifest-ttgo-lora32-v21-sd.json">
-      <button slot="activate">Installer ou mettre à jour</button>
-      <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
-      <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
-    </esp-web-install-button>
+    <p>Connectez la carte par USB, puis choisissez exactement le modèle utilisé.</p>
+
+    <div class="board">
+      <h3>TTGO LoRa32 v2.1 avec microSD</h3>
+      <esp-web-install-button class="install-btn" manifest="manifest-ttgo-lora32-v21-sd.json">
+        <button slot="activate">Installer ou mettre à jour</button>
+        <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
+        <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
+      </esp-web-install-button>
+    </div>
+
+    <div class="board">
+      <h3>Heltec WiFi LoRa 32 V3.2</h3>
+      <esp-web-install-button class="install-btn" manifest="manifest-heltec-wifi-lora-32-v3-2.json">
+        <button slot="activate">Installer ou mettre à jour</button>
+        <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
+        <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
+      </esp-web-install-button>
+    </div>
+
+    <div class="board">
+      <h3>QRP Labs LightGateway Plus 1.0</h3>
+      <esp-web-install-button class="install-btn" manifest="manifest-qrplabs-lightgateway-plus-1-0.json">
+        <button slot="activate">Installer ou mettre à jour</button>
+        <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
+        <span slot="not-allowed">L'accès au port USB n'est pas autorisé.</span>
+      </esp-web-install-button>
+    </div>
   </div>
 
-  <p class="version">Firmware <strong>4.0.2RXT</strong> - 18 septembre 2026 - ESP32 / 433 MHz</p>
+  <p class="version">Firmware <strong>4.0.2RXT</strong> - 20 septembre 2026 - ESP32 / ESP32-S3 / 433 MHz</p>
 
   <div class="warning">
     <strong>Avant l'installation :</strong>
@@ -79,6 +108,7 @@
       <li>Sauvegardez la configuration JSON depuis la WebConfig.</li>
       <li>Utilisez Chrome, Edge ou Chromium.</li>
       <li>Fermez le moniteur série et tout logiciel utilisant le port USB.</li>
+      <li>Vérifiez soigneusement le modèle choisi avant de lancer l'installation.</li>
       <li>Laissez l'effacement désactivé pour conserver la configuration.</li>
       <li>Activez l'effacement uniquement pour une installation propre ou pour réparer une flash endommagée.</li>
     </ul>
