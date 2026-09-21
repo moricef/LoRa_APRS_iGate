@@ -2597,8 +2597,6 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
     var rp=document.getElementById("received-packets");if(rp)rp.classList.remove("d-none");
     if(window.fetchReceivedPackets)window.fetchReceivedPackets();
   });
-  var bi=document.getElementById("buildInfo");
-  if(bi){var h=bi.innerHTML; if(/Version date/i.test(h)){h=h.replace(/(<br\s*\/?>)[\s\S]*?(?=Version date)/i,"$1");bi.innerHTML="Board / Environment = "+h;}}
   if(window.loadReceivedPackets){var _o=window.loadReceivedPackets;window.loadReceivedPackets=function(p){if(p&&p.slice){p=p.slice().reverse();}return _o(p);};}
 })();
 </script>

@@ -35,16 +35,19 @@ files = [
 ]
 
 string_to_find_str = "String"
-string_to_find_ver = "versionDate"
+versionDate = "unknown"
+versionNumber = "unknown"
 
 with open('src/LoRa_APRS_iGate.cpp', encoding='utf-8') as cpp_file:
   for line in cpp_file:
-    if string_to_find_str in line and string_to_find_ver in line:
+    if string_to_find_str in line and ("versionDate" in line or "versionNumber" in line):
       start = line.find('"') + 1
       end = line.find('"', start)
       if start > 0 and end > start:
-        versionDate = line[start:end]
-        break
+        if "versionDate" in line:
+          versionDate = line[start:end]
+        elif "versionNumber" in line:
+          versionNumber = line[start:end]
 
 for src in files:
   out = src + ".gz"
@@ -54,9 +57,14 @@ for src in files:
     content = f.read()
 
   if src == 'data_embed/index.html':
-    env_vars = env["BOARD"] + "<br>" + ','.join(env["BUILD_FLAGS"]).replace('-Werror -Wall,', '').replace(',-DELEGANTOTA_USE_ASYNC_WEBSERVER=1', '') + "<br>" + "Version date: " + versionDate
+    env_vars = "Board / Environment: " + env["BOARD"]
     current_date = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + " UTC"
-    build_info = f'{env_vars}<br>Build date: {current_date}'.encode()
+    build_info = (
+      f'Firmware: {versionNumber}<br>'
+      f'Version date: {versionDate}<br>'
+      f'Build date: {current_date}<br>'
+      f'{env_vars}'
+    ).encode()
 
     content = content.replace(b'%BUILD_INFO%', build_info)
 
