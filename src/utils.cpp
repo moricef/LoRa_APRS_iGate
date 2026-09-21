@@ -444,8 +444,12 @@ namespace Utils {
             if (ssidLength == 0 || ssidLength > 2) return false;
             if (callsign.indexOf('-', ssidStart) != -1) return false;           // avoid another "-" in ssid
             if (ssidLength == 2 && callsign[ssidStart] == '0') return false;    // ssid can't start with "0"
+            // APRS-IS and LoRa textual identities allow a one- or two-character
+            // alphanumeric suffix (for example -16, -GS or -S). AX.25 binary
+            // representability is a separate concern and must not make the
+            // textual RF/APRS-IS ingress validator reject these stations.
             for (int i = ssidStart; i < totalCallsignLength; i++) {
-                if (!isDigit(callsign[i])) return false;
+                if (!isAlphaNumeric(callsign[i])) return false;
             }
         }
 
