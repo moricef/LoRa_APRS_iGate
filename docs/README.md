@@ -36,8 +36,9 @@ bootloader ESP32 est flashé à `0x1000`, tandis que les bootloaders ESP32-S3
 sont flashés à `0x0000`. Les autres offsets restent identiques : table de
 partitions à `0x8000`, `boot_app0.bin` à `0xe000` et firmware à `0x10000`.
 
-Mettre également à jour la version et la date dans `index.html` et dans
-chacun des trois manifestes.
+Mettre également à jour la version, la date et l'heure UTC exacte de chaque
+build dans `index.html` et dans chacun des trois manifestes. Ces valeurs doivent
+correspondre au champ `Build date` intégré dans la WebUI du binaire concerné.
 
 Régénérer ensuite `firmware/ttgo-lora32-v21_SD/SHA256SUMS` avec :
 

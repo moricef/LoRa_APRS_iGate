@@ -50,7 +50,9 @@ La procédure de publication est la suivante :
 
 1. compiler tous les variants concernés depuis la branche de développement ;
 2. mettre à jour dans le même commit les firmwares de `docs/firmware/`, leurs
-   `SHA256SUMS`, les manifestes et les informations visibles du flasher ;
+   `SHA256SUMS`, les manifestes et les informations visibles du flasher ; la
+   date et l'heure UTC exactes de chaque build doivent correspondre au champ
+   `Build date` intégré dans la WebUI du binaire concerné ;
 3. pousser ce commit sur le remote `fork` ;
 4. recopier le contenu publié de `docs/` dans le checkout durable de
    `gh-pages` ; pour ce dépôt, GitHub Pages sert ce contenu à la racine de la
