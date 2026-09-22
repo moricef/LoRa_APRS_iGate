@@ -673,31 +673,43 @@ function loadRxtDashboard(entries) {
     entries.slice().reverse().forEach((entry) => {
         const hops = Array.isArray(entry.rxt_hops) && entry.rxt_hops.length > 0
             ? entry.rxt_hops
-            : [{ from: "UNKNOWN", to: "RXT_NODE", has_data: false }];
+            : [];
+        const packet = entry.packet || "";
+        const sourceEnd = packet.indexOf(">");
+        const packetSource = sourceEnd > 0 ? packet.slice(0, sourceEnd) : "UNKNOWN";
+        const localFrom = hops.length > 0
+            ? (hops[0].to || "UNKNOWN")
+            : packetSource;
+        const rows = [
+            {
+                from: localFrom,
+                to: "LOCAL",
+                has_data: true,
+                rssi_dbm: entry.local && entry.local.rssi_dbm,
+                snr_db: entry.local && entry.local.snr_db,
+                fo_hz: entry.local && entry.local.fo_hz,
+                local: true
+            },
+            ...hops
+        ];
 
-        hops.forEach((hop, hopIndex) => {
+        rows.forEach((hop, hopIndex) => {
             const row = document.createElement("tr");
 
             if (hopIndex === 0) {
-                const local = entry.local || {};
-                const localRx = Number.isFinite(Number(local.rssi_dbm))
-                    ? `${local.rssi_dbm} dBm / ${Number(local.snr_db) >= 0 ? "+" : ""}${Number(local.snr_db).toFixed(2)} dB / ${Number(local.fo_hz) >= 0 ? "+" : ""}${local.fo_hz} Hz`
-                    : "NA";
-
-                appendRxtCell(row, entry.rx_time || "", "rxt-time", hops.length);
-                appendRxtCell(row, entry.packet || "", "rxt-frame", hops.length);
-                appendRxtCell(row, localRx, "rxt-local", hops.length);
-                appendRxtCell(row, entry.rxt_raw ? `{${entry.rxt_raw}}` : "", "rxt-raw", hops.length);
+                appendRxtCell(row, entry.rx_time || "", "rxt-time", rows.length);
+                appendRxtCell(row, packet, "rxt-frame", rows.length);
+                appendRxtCell(row, entry.rxt_raw ? `{${entry.rxt_raw}}` : "", "rxt-raw", rows.length);
             }
 
             appendRxtCell(row, hop.from || "UNKNOWN", "rxt-call", 1);
             appendRxtCell(row, hop.to || "UNKNOWN", "rxt-call", 1);
 
-            if (hop.has_data) {
+            if (hop.has_data && Number.isFinite(Number(hop.rssi_dbm))) {
                 appendRxtCell(row, `${hop.rssi_dbm} dBm`, "rxt-value", 1);
                 appendRxtCell(row, `${Number(hop.snr_db) >= 0 ? "+" : ""}${Number(hop.snr_db).toFixed(2)} dB`, "rxt-value", 1);
                 appendRxtCell(row, `${Number(hop.fo_hz) >= 0 ? "+" : ""}${hop.fo_hz} Hz`, "rxt-value", 1);
-                appendRxtCell(row, `${hop.tth_ms} ms`, "rxt-value", 1);
+                appendRxtCell(row, hop.local ? "N/A" : `${hop.tth_ms} ms`, hop.local ? "rxt-na" : "rxt-value", 1);
             } else {
                 appendRxtCell(row, "NA", "rxt-na", 1);
                 appendRxtCell(row, "—", "rxt-na", 1);
