@@ -32,7 +32,11 @@ void expectBool(const std::string& name, bool actual, bool expected) {
 int main() {
     const std::string packet = "SRC>DST,F6DEV*,WIDE2-2*,F4MLV-10*,WIDE2-1:payload";
     expectNodes("multiple stars", RXT_Protocol::usedPathNodes(packet),
-                {"F6DEV", "WIDE2-2", "F4MLV-10"});
+                {"F6DEV", "F4MLV-10"});
+    expectNodes("starred aliases are not physical hops",
+                RXT_Protocol::usedPathNodes(
+                    "F6ZZX-1>APLRG1,F6DEV*,WIDE2-2*,F4MLV-10*:payload"),
+                {"F6DEV", "F4MLV-10"});
     expectNodes("single last-used star",
                 RXT_Protocol::usedPathNodes("SRC>DST,F6DEV,F4MLV-10*,WIDE2-1:payload"),
                 {"F6DEV", "F4MLV-10"});
@@ -76,6 +80,6 @@ int main() {
     expectBool("malformed packet", RXT_Protocol::isAprsMessage("not a packet"), false);
 
     if (failures != 0) return 1;
-    std::cout << "RXT host tests: 19 passed, 0 failed\n";
+    std::cout << "RXT host tests: 20 passed, 0 failed\n";
     return 0;
 }

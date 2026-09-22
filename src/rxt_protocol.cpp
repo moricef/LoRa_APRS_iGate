@@ -1,6 +1,7 @@
 #include "rxt_protocol.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace {
 
@@ -17,6 +18,26 @@ size_t trailerStart(const std::string& packet) {
     size_t lowerBound = packet.size() > 20 ? packet.size() - 20 : 0;
     size_t start = packet.rfind('{', packet.size() - 2);
     return start != std::string::npos && start > lowerBound ? start : std::string::npos;
+}
+
+bool isRoutingAlias(const std::string& node) {
+    std::string upper = node;
+    std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) {
+        return static_cast<char>(std::toupper(c));
+    });
+
+    if (upper == "RELAY") return true;
+
+    size_t prefixLength = 0;
+    if (upper.compare(0, 4, "WIDE") == 0) prefixLength = 4;
+    else if (upper.compare(0, 5, "TRACE") == 0) prefixLength = 5;
+    else return false;
+
+    if (upper.size() == prefixLength) return true;
+    for (size_t i = prefixLength; i < upper.size(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(upper[i])) && upper[i] != '-') return false;
+    }
+    return true;
 }
 
 }
@@ -49,7 +70,7 @@ std::string stripTrailer(const std::string& packet, std::string* outTuples) {
 }
 
 std::vector<std::string> usedPathNodes(const std::string& packet) {
-    std::vector<std::string> pathNodes;
+    std::vector<std::string> pathElements;
     size_t gt = packet.find('>');
     size_t colon = packet.find(':', gt == std::string::npos ? 0 : gt + 1);
     size_t comma = packet.find(',', gt == std::string::npos ? 0 : gt + 1);
@@ -65,15 +86,23 @@ std::vector<std::string> usedPathNodes(const std::string& packet) {
         bool starred = node.find('*') != std::string::npos;
         node.erase(std::remove(node.begin(), node.end(), '*'), node.end());
         if (!node.empty()) {
-            pathNodes.push_back(node);
-            if (starred) lastStarredIndex = static_cast<int>(pathNodes.size()) - 1;
+            pathElements.push_back(node);
+            if (starred) lastStarredIndex = static_cast<int>(pathElements.size()) - 1;
         }
         if (end == std::string::npos) break;
         start = end + 1;
     }
 
     if (lastStarredIndex < 0) return {};
-    pathNodes.resize(static_cast<size_t>(lastStarredIndex) + 1);
+    pathElements.resize(static_cast<size_t>(lastStarredIndex) + 1);
+
+    // WIDEn-N/TRACE aliases describe routing work, not physical transmitters.
+    // Some LoRa digis leave a consumed alias starred alongside their own
+    // callsign; retaining it would invent links such as WIDE2-2 -> F4MLV-10.
+    std::vector<std::string> pathNodes;
+    for (const std::string& node : pathElements) {
+        if (!isRoutingAlias(node)) pathNodes.push_back(node);
+    }
     return pathNodes;
 }
 
