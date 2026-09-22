@@ -375,6 +375,10 @@ namespace LoRa_Utils {
                 hop.snr  = decodeSNR(cSnr);
                 hop.fo   = decodeFO(cFo);
                 hop.tth  = decodeTTH(cTth, tthScale);
+                for (int tupleByte = 0; tupleByte < 4; tupleByte++) {
+                    hop.rawTuple[tupleByte] = hopTuple.charAt(tupleByte);
+                }
+                hop.rawTuple[4] = '\0';
 
                 if ((size_t)i < hops.size()) {
                     hop.toNode   = hops[i].toNode;

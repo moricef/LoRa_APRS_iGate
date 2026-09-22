@@ -44,6 +44,8 @@ namespace LoRa_Utils {
         int fo;
         unsigned long tth; // ms -- unsigned long (not int) so slow SF/BW configs
                             // (e.g. SF12, ~2000-3000 ms packet frames) can't overflow
+        char rawTuple[5] = {0}; // Exact four-byte RXT tuple, NUL-terminated;
+                                // empty for an uninstrumented hop.
     };
 
     struct RxtDashboardEntry {

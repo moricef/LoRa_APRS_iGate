@@ -688,6 +688,7 @@ function loadRxtDashboard(entries) {
                 rssi_dbm: entry.local && entry.local.rssi_dbm,
                 snr_db: entry.local && entry.local.snr_db,
                 fo_hz: entry.local && entry.local.fo_hz,
+                raw: "",
                 local: true
             },
             ...hops
@@ -699,9 +700,9 @@ function loadRxtDashboard(entries) {
             if (hopIndex === 0) {
                 appendRxtCell(row, entry.rx_time || "", "rxt-time", rows.length);
                 appendRxtCell(row, packet, "rxt-frame", rows.length);
-                appendRxtCell(row, entry.rxt_raw ? `{${entry.rxt_raw}}` : "", "rxt-raw", rows.length);
             }
 
+            appendRxtCell(row, hop.raw ? `{${hop.raw}}` : "—", hop.raw ? "rxt-raw" : "rxt-na", 1);
             appendRxtCell(row, hop.from || "UNKNOWN", "rxt-call", 1);
             appendRxtCell(row, hop.to || "UNKNOWN", hop.local ? "rxt-call rxt-local-node" : "rxt-call", 1);
 

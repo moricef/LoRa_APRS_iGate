@@ -193,6 +193,7 @@ namespace WEB_Utils {
                 data[i]["rxt_hops"][j]["to"]       = hop.toNode;
                 data[i]["rxt_hops"][j]["has_data"] = hop.hasData;
                 if (hop.hasData) {
+                    data[i]["rxt_hops"][j]["raw"]      = hop.rawTuple;
                     data[i]["rxt_hops"][j]["rssi_dbm"] = hop.rssi;
                     data[i]["rxt_hops"][j]["snr_db"]   = hop.snr;
                     data[i]["rxt_hops"][j]["fo_hz"]    = hop.fo;
