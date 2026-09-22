@@ -1,6 +1,6 @@
 {
   "name": "LoRa APRS iGate - Heltec WiFi LoRa 32 V3.2 (RXT)",
-  "version": "4.0.2RXT (2026-09-22 15:02:00 UTC, JSON)",
+  "version": "4.0.2RXT (2026-09-22 18:28:51 UTC, JSON)",
   "new_install_prompt_erase": true,
   "builds": [
     {

@@ -702,7 +702,7 @@ function loadRxtDashboard(entries) {
                 appendRxtCell(row, packet, "rxt-frame", rows.length);
             }
 
-            appendRxtCell(row, hop.raw ? `{${hop.raw}}` : "—", hop.raw ? "rxt-raw" : "rxt-na", 1);
+            appendRxtCell(row, hop.raw || "—", hop.raw ? "rxt-raw" : "rxt-na", 1);
             appendRxtCell(row, hop.from || "UNKNOWN", "rxt-call", 1);
             appendRxtCell(row, hop.to || "UNKNOWN", hop.local ? "rxt-call rxt-local-node" : "rxt-call", 1);
 
