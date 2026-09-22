@@ -703,7 +703,7 @@ function loadRxtDashboard(entries) {
             }
 
             appendRxtCell(row, hop.from || "UNKNOWN", "rxt-call", 1);
-            appendRxtCell(row, hop.to || "UNKNOWN", "rxt-call", 1);
+            appendRxtCell(row, hop.to || "UNKNOWN", hop.local ? "rxt-call rxt-local-node" : "rxt-call", 1);
 
             if (hop.has_data && Number.isFinite(Number(hop.rssi_dbm))) {
                 appendRxtCell(row, `${hop.rssi_dbm} dBm`, "rxt-value", 1);
