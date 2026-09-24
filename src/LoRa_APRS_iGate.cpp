@@ -47,6 +47,8 @@ ___________________________________________________________________*/
 #include "network_manager.h"
 #include "aprs_is_utils.h"
 #include "aprs_json_utils.h"
+#include "aprs_telemetry_rx.h"
+#include "aprs_telemetry_persistence.h"
 #include "station_utils.h"
 #include "battery_utils.h"
 #include "board_pinout.h"
@@ -72,7 +74,7 @@ ___________________________________________________________________*/
 // External hook for RXT / TTH tracking from lora_utils.cpp
 extern unsigned long rxCompletedMillis;
 
-String              versionDate             = "2026-09-21";
+String              versionDate             = "2026-09-23";
 String              versionNumber           = "4.0.2RXT";
 Configuration       Config;
 WiFiClient          aprsIsClient;
@@ -99,6 +101,7 @@ bool                modemLoggedToAPRSIS     = false;
 
 std::vector<ReceivedPacket> receivedPackets;
 std::vector<LoRa_Utils::RxtDashboardEntry> rxtDashboardEntries;
+APRS_Telemetry_RX::Store aprsTelemetryStore;
 
 String firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seventhLine;
 
@@ -106,6 +109,7 @@ String firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seven
 void setup() {
     Serial.begin(115200);
     Config.setup();
+    APRS_Telemetry_Persistence::load(aprsTelemetryStore);
     networkManager = new NetworkManager();
     networkManager->setup();
     if (Config.wifiAutoAP.enabled) {
@@ -215,6 +219,11 @@ void loop() {
             // Snapshot the measurements made by this receiver before any
             // subsequent processing or RF transmission can change state.
             const LoRa_Utils::RxtRxContext localRx = LoRa_Utils::captureRxtRxContext();
+
+            if (Config.digi.ecoMode == 0) {
+                aprsTelemetryStore.ingest(packet.c_str(), NTP_Utils::getFormatedTime().c_str(), millis());
+                APRS_Telemetry_Persistence::remember(packet);
+            }
 
             if (Config.aprs_is.active) {    // If APRSIS enabled
                 APRS_IS_Utils::processLoRaPacket(packet); // Send received packet to APRSIS

@@ -5,7 +5,7 @@ CXXFLAGS ?= -std=c++17 -Wall -Wextra -Werror -I../../include
 
 all: rxt_host_test
 
-rxt_host_test: rxt_host_test.cpp ../../src/rxt_protocol.cpp
+rxt_host_test: rxt_host_test.cpp ../../src/rxt_protocol.cpp ../../src/aprs_telemetry_rx.cpp
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 test: rxt_host_test

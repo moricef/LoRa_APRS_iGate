@@ -29,6 +29,8 @@
 #include "digi_utils.h"
 #include "tnc_utils.h"
 #include "lora_utils.h"
+#include "aprs_telemetry_rx.h"
+#include "aprs_telemetry_persistence.h"
 #include "display.h"
 #include "utils.h"
 
@@ -47,6 +49,7 @@ extern String               seventhLine;
 extern bool                 modemLoggedToAPRSIS;
 extern bool                 backupDigiMode;
 extern String               versionNumber;
+extern APRS_Telemetry_RX::Store aprsTelemetryStore;
 
 bool        passcodeValid   = false;
 uint32_t    lastServerCheck = 0;
@@ -323,6 +326,12 @@ namespace APRS_IS_Utils {
             if (packet.startsWith("#")) {
                 if (Config.digi.backupDigiMode) lastServerCheck = currentTime;
             } else {
+                std::string telemetryStation;
+                std::string telemetryKind;
+                if (APRS_Telemetry_RX::metadataDescriptor(packet.c_str(), telemetryStation, telemetryKind)) {
+                    aprsTelemetryStore.ingest(packet.c_str(), "", currentTime);
+                    APRS_Telemetry_Persistence::remember(packet);
+                }
                 int doubleColonIndex = packet.indexOf("::");
                 if (Config.aprs_is.messagesToRF && doubleColonIndex > 0) {
                     String Sender = packet.substring(0, packet.indexOf(">"));
@@ -365,7 +374,7 @@ namespace APRS_IS_Utils {
                         displayShow(firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seventhLine, 0);
                     } else {
                         Utils::print("Rx Message (APRS-IS): " + packet);
-                        if (STATION_Utils::wasHeard(Addressee) && packet.indexOf("EQNS.") == -1 && packet.indexOf("UNIT.") == -1 && packet.indexOf("PARM.") == -1) {
+                        if (STATION_Utils::wasHeard(Addressee) && packet.indexOf("EQNS.") == -1 && packet.indexOf("UNIT.") == -1 && packet.indexOf("PARM.") == -1 && packet.indexOf("BITS.") == -1) {
                             STATION_Utils::addToOutputPacketBuffer(buildPacketToTx(packet, 1));
                             displayToggle(true);
                             lastScreenOn = currentTime;

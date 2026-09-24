@@ -748,6 +748,127 @@ window.showRxt = function () {
 };
 
 
+/* ---------- Standard APRS telemetry ---------- */
+
+let aprsTelemetryTimer = null;
+
+function telemetryAge(milliseconds) {
+    const seconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+function telemetryNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function loadAprsTelemetry(stations) {
+    const list = document.getElementById("aprs-telemetry-list");
+    const empty = document.getElementById("aprs-telemetry-empty");
+    if (!list || !empty) return;
+    list.replaceChildren();
+
+    if (!Array.isArray(stations) || stations.length === 0) {
+        empty.classList.remove("d-none");
+        return;
+    }
+    empty.classList.add("d-none");
+
+    stations.slice().sort((left, right) => Number(left.age_ms) - Number(right.age_ms)).forEach((station) => {
+        const card = document.createElement("article");
+        card.className = "aprs-telemetry-card";
+
+        const head = document.createElement("div");
+        head.className = "aprs-telemetry-head";
+        const title = document.createElement("h4");
+        title.textContent = station.station || "UNKNOWN";
+        const meta = document.createElement("span");
+        meta.className = "aprs-telemetry-meta";
+        meta.textContent = [
+            station.project || "",
+            station.rx_time || "",
+            telemetryAge(station.age_ms),
+            `seq ${station.sequence ?? "—"}`,
+            station.format || ""
+        ].filter(Boolean).join(" · ");
+        head.append(title, meta);
+        card.appendChild(head);
+
+        const analog = Array.isArray(station.analog) ? station.analog : [];
+        if (analog.length > 0) {
+            const responsive = document.createElement("div");
+            responsive.className = "table-responsive";
+            const table = document.createElement("table");
+            table.className = "table table-sm";
+            const tableHead = document.createElement("thead");
+            const headerRow = document.createElement("tr");
+            ["Channel", "Value", "Unit", "Raw"].forEach((label) => {
+                const th = document.createElement("th");
+                th.textContent = label;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+            const body = document.createElement("tbody");
+            analog.forEach((channel) => {
+                const row = document.createElement("tr");
+                [
+                    channel.name || `A${channel.index}`,
+                    telemetryNumber(channel.value),
+                    channel.unit || "—",
+                    telemetryNumber(channel.raw)
+                ].forEach((value) => {
+                    const cell = document.createElement("td");
+                    cell.textContent = value;
+                    row.appendChild(cell);
+                });
+                body.appendChild(row);
+            });
+            table.append(tableHead, body);
+            responsive.appendChild(table);
+            card.appendChild(responsive);
+        }
+
+        const digital = Array.isArray(station.digital) ? station.digital : [];
+        if (digital.length > 0) {
+            const states = document.createElement("div");
+            states.className = "aprs-digital";
+            digital.forEach((channel) => {
+                const state = document.createElement("span");
+                state.className = "aprs-digital-state" + (channel.active ? " active" : "");
+                const label = channel.label ? ` · ${channel.label}` : "";
+                state.textContent = `${channel.name || `B${channel.index}`}: ${channel.state ? 1 : 0}${label}`;
+                states.appendChild(state);
+            });
+            card.appendChild(states);
+        }
+        list.appendChild(card);
+    });
+}
+
+function fetchAprsTelemetry() {
+    fetch("/aprs-telemetry.json?_t=" + Date.now())
+        .then((response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        })
+        .then(loadAprsTelemetry)
+        .catch((err) => console.error("Failed to load APRS telemetry", err));
+}
+
+window.showAprsTelemetry = function () {
+    fetchAprsTelemetry();
+    if (aprsTelemetryTimer) clearInterval(aprsTelemetryTimer);
+    aprsTelemetryTimer = setInterval(function () {
+        const section = document.getElementById("sec-aprs-telemetry");
+        if (section && section.classList.contains("active")) fetchAprsTelemetry();
+    }, 5000);
+};
+
+
 /* ---------- Stations Map (Leaflet, CDN) ---------- */
 
 let mapInstance    = null;

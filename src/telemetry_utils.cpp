@@ -18,8 +18,11 @@
 
 #include <APRSPacketLib.h>
 #include <Arduino.h>
+#include <Preferences.h>
 #include <vector>
 #include "telemetry_utils.h"
+#include "aprs_telemetry_persistence.h"
+#include "aprs_telemetry_rx.h"
 #include "aprs_is_utils.h"
 #include "configuration.h"
 #include "station_utils.h"
@@ -30,8 +33,9 @@
 
 
 extern      Configuration       Config;
+extern      APRS_Telemetry_RX::Store aprsTelemetryStore;
 
-int         telemetryCounter    = random(1,999);
+uint16_t    telemetryCounter    = 0;
 uint32_t    telemetryEUPTime    = 0;
 bool        sendEUP             = false;    // Equations Units Parameters
 
@@ -39,6 +43,35 @@ static uint32_t rxCount             = 0;    // frames heard (valid LoRa APRS) si
 static uint32_t relayCount          = 0;    // frames digipeated since last telemetry
 static uint32_t dropCount           = 0;    // frames rejected by the digi (DUP, PATH, BLACK, self, NOGATE, etc.) since last telemetry
 static uint32_t telemetryWindowStart = 0;   // millis() at the previous encoded telemetry report
+static constexpr uint32_t telemetryMetadataInterval = 6UL * 60UL * 60UL * 1000UL;
+static constexpr uint16_t telemetrySequenceModulus = 8281;
+static constexpr uint16_t telemetrySequenceReservation = 64;
+static uint16_t telemetrySequencesRemaining = 0;
+
+static void reserveTelemetrySequences() {
+    const uint16_t fallback = static_cast<uint16_t>(random(telemetrySequenceModulus));
+    uint16_t first = fallback;
+
+    Preferences preferences;
+    if (preferences.begin("aprs-tlm", false)) {
+        first = preferences.getUShort("seq-next", fallback) % telemetrySequenceModulus;
+        const uint16_t next = static_cast<uint16_t>(
+            (first + telemetrySequenceReservation) % telemetrySequenceModulus);
+        preferences.putUShort("seq-next", next);
+        preferences.end();
+    }
+
+    telemetryCounter = first;
+    telemetrySequencesRemaining = telemetrySequenceReservation;
+}
+
+static uint16_t nextTelemetrySequence() {
+    if (telemetrySequencesRemaining == 0) reserveTelemetrySequences();
+    const uint16_t sequence = telemetryCounter;
+    telemetryCounter = static_cast<uint16_t>((telemetryCounter + 1) % telemetrySequenceModulus);
+    --telemetrySequencesRemaining;
+    return sequence;
+}
 
 
 namespace TELEMETRY_Utils {
@@ -87,6 +120,8 @@ namespace TELEMETRY_Utils {
         String currentCallsign  = (Config.tacticalCallsign != "") ? Config.tacticalCallsign : Config.callsign;
         if (Config.beacon.sendViaAPRSIS) {
             String baseAPRSISTelemetryPacket = APRSPacketLib::generateMessagePacket(currentCallsign, "APLRG1", "TCPIP,qAC", currentCallsign, packet);
+            aprsTelemetryStore.ingest(baseAPRSISTelemetryPacket.c_str(), "", millis());
+            APRS_Telemetry_Persistence::remember(baseAPRSISTelemetryPacket);
             #ifdef HAS_A7670
                 A7670_Utils::uploadToAPRSIS(baseAPRSISTelemetryPacket);
             #else
@@ -95,6 +130,8 @@ namespace TELEMETRY_Utils {
             delay(300);
         } else if (Config.beacon.sendViaRF) {
             String baseRFTelemetryPacket = APRSPacketLib::generateMessagePacket(currentCallsign, "APLRG1", Config.beacon.path, currentCallsign, packet);
+            aprsTelemetryStore.ingest(baseRFTelemetryPacket.c_str(), "", millis());
+            APRS_Telemetry_Persistence::remember(baseRFTelemetryPacket);
             // Self-originated content has no receive context, so no RXT tuple
             // is attached by sendNewPacket().
             LoRa_Utils::sendNewPacket(baseRFTelemetryPacket);
@@ -147,9 +184,7 @@ namespace TELEMETRY_Utils {
         const uint16_t dropRate  = counterRatePerHour(dropCount, elapsedMs);
 
         String telemetry = "|";
-        telemetry += generateEncodedTelemetryBytes(telemetryCounter, true, 0);
-        telemetryCounter++;
-        if (telemetryCounter == 1000) telemetryCounter = 0;
+        telemetry += generateEncodedTelemetryBytes(nextTelemetrySequence(), true, 0);
         if (Config.battery.sendInternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkInternalVoltage(), false, 0);
         if (Config.battery.sendExternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkExternalVoltage(), false, Config.battery.useExternalI2CSensor ? 0 : 1);
         telemetry += generateEncodedTelemetryBytes(rxRate,    true, 0);
@@ -166,7 +201,7 @@ namespace TELEMETRY_Utils {
     void incDrop()  { if (dropCount  < UINT32_MAX) dropCount++; }
 
     void checkEUPInterval() {
-        if (telemetryEUPTime == 0 || millis() - telemetryEUPTime > 24UL * 60UL * 60UL * 1000UL) {
+        if (telemetryEUPTime == 0 || millis() - telemetryEUPTime >= telemetryMetadataInterval) {
             sendEUP = true;
             telemetryEUPTime = millis();
         }

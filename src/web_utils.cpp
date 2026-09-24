@@ -25,12 +25,14 @@
 #include "display.h"
 #include "utils.h"
 #include "lora_utils.h"
+#include "aprs_telemetry_rx.h"
 
 
 extern Configuration               Config;
 extern uint32_t                    lastBeaconTx;
 extern std::vector<ReceivedPacket> receivedPackets;
 extern std::vector<LoRa_Utils::RxtDashboardEntry> rxtDashboardEntries;
+extern APRS_Telemetry_RX::Store aprsTelemetryStore;
 
 extern const char web_index_html[] asm("_binary_data_embed_index_html_gz_start");
 extern const char web_index_html_end[] asm("_binary_data_embed_index_html_gz_end");
@@ -198,6 +200,53 @@ namespace WEB_Utils {
                     data[i]["rxt_hops"][j]["snr_db"]   = hop.snr;
                     data[i]["rxt_hops"][j]["fo_hz"]    = hop.fo;
                     data[i]["rxt_hops"][j]["tth_ms"]   = hop.tth;
+                }
+            }
+        }
+
+        String buffer;
+        serializeJson(data, buffer);
+        request->send(200, "application/json", buffer);
+    }
+
+    void handleAprsTelemetry(AsyncWebServerRequest *request) {
+        JsonDocument data;
+        size_t outputIndex = 0;
+
+        for (const APRS_Telemetry_RX::Station& station : aprsTelemetryStore.stations()) {
+            if (!station.hasData) continue;
+            JsonObject item = data[outputIndex++].to<JsonObject>();
+            item["station"] = station.callsign;
+            item["rx_time"] = station.rxTime;
+            item["age_ms"] = static_cast<uint32_t>(millis() - station.receivedAtMillis);
+            item["sequence"] = station.sequence;
+            item["format"] = station.format;
+            if (station.project[0] != '\0') item["project"] = station.project.data();
+
+            for (size_t i = 0; i < station.analogCount; ++i) {
+                JsonObject channel = item["analog"][i].to<JsonObject>();
+                channel["index"] = i + 1;
+                channel["name"] = station.names[i][0] == '\0' ? "A" + String(i + 1) : station.names[i].data();
+                channel["raw"] = station.analog[i];
+                channel["value"] = APRS_Telemetry_RX::calibratedValue(station, i);
+                if (station.units[i][0] != '\0') channel["unit"] = station.units[i].data();
+                channel["calibrated"] = station.equations[i].defined;
+            }
+
+            if (station.hasDigital) {
+                for (size_t i = 0; i < APRS_Telemetry_RX::kDigitalChannels; ++i) {
+                    JsonObject channel = item["digital"][i].to<JsonObject>();
+                    channel["index"] = i + 1;
+                    const size_t metadataIndex = APRS_Telemetry_RX::kAnalogChannels + i;
+                    channel["name"] = station.names[metadataIndex][0] == '\0'
+                        ? "B" + String(i + 1) : station.names[metadataIndex].data();
+                    const bool state = (station.digital & (1U << i)) != 0;
+                    channel["state"] = state;
+                    if (station.units[metadataIndex][0] != '\0') channel["label"] = station.units[metadataIndex].data();
+                    if (station.hasBitSense) {
+                        channel["sense"] = station.bitSense[i];
+                        channel["active"] = state == station.bitSense[i];
+                    }
                 }
             }
         }
@@ -484,6 +533,7 @@ namespace WEB_Utils {
             server.on("/status", HTTP_GET, handleStatus);
             server.on("/received-packets.json", HTTP_GET, handleReceivedPackets);
             server.on("/rxt.json", HTTP_GET, handleRxtDashboard);
+            server.on("/aprs-telemetry.json", HTTP_GET, handleAprsTelemetry);
             server.on("/api/v1/aprs/stream", HTTP_GET, APRS_JSON_Utils::handleStream);
             server.on("/api/v1/aprs/events", HTTP_GET, APRS_JSON_Utils::handleEvents);
             server.on("/stations.json", HTTP_GET, handleStations);
