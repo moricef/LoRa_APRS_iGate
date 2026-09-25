@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "aprs_json_utils.h"
+#include "aprs_json_text.h"
 #include "configuration.h"
 #include "lora_utils.h"
 #include "ntp_utils.h"
@@ -69,39 +70,9 @@ String base64Encode(const String& value) {
     return String(reinterpret_cast<const char*>(encoded.get()), written);
 }
 
-bool isValidUtf8(const String& value) {
-    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(value.c_str());
-    size_t i = 0;
-    while (i < value.length()) {
-        uint8_t c = bytes[i++];
-        if (c <= 0x7f) continue;
-
-        size_t remaining = 0;
-        uint32_t codepoint = 0;
-        if ((c & 0xe0) == 0xc0) {
-            remaining = 1;
-            codepoint = c & 0x1f;
-            if (codepoint < 2) return false;
-        } else if ((c & 0xf0) == 0xe0) {
-            remaining = 2;
-            codepoint = c & 0x0f;
-        } else if ((c & 0xf8) == 0xf0) {
-            remaining = 3;
-            codepoint = c & 0x07;
-        } else {
-            return false;
-        }
-        if (i + remaining > value.length()) return false;
-        while (remaining--) {
-            uint8_t continuation = bytes[i++];
-            if ((continuation & 0xc0) != 0x80) return false;
-            codepoint = (codepoint << 6) | (continuation & 0x3f);
-        }
-        if ((codepoint >= 0xd800 && codepoint <= 0xdfff) || codepoint > 0x10ffff) return false;
-        if ((codepoint <= 0x7ff && (c & 0xf0) == 0xe0) ||
-            (codepoint <= 0xffff && (c & 0xf8) == 0xf0)) return false;
-    }
-    return true;
+bool isSafeUtf8(const String& value) {
+    return APRS_JSON_Text::isSafeUtf8(
+        reinterpret_cast<const uint8_t*>(value.c_str()), value.length());
 }
 
 String hardwareName() {
@@ -193,13 +164,13 @@ bool addParsedPacket(JsonObject packetObject, const String& cleanPacket) {
     String information = cleanPacket.substring(colon + 1);
     JsonObject info = packetObject["information"].to<JsonObject>();
     info["raw_base64"] = base64Encode(information);
-    if (isValidUtf8(information)) info["text"] = information;
+    if (isSafeUtf8(information)) info["text"] = information;
     if (information.length() > 0) {
         uint8_t dti = static_cast<uint8_t>(information[0]);
         char hex[3];
         snprintf(hex, sizeof(hex), "%02x", dti);
         info["dti_hex"] = hex;
-        if (dti == 0x1c || dti == 0x1d || (dti >= 0x20 && dti <= 0x7e)) {
+        if (dti >= 0x20 && dti <= 0x7e) {
             char dtiText[2] = {static_cast<char>(dti), '\0'};
             info["dti"] = dtiText;
         }
@@ -451,7 +422,7 @@ void recordRx(const String& rfPacket,
     JsonObject packetObject = document["packet"].to<JsonObject>();
     packetObject["raw_tnc2_base64"] = base64Encode(cleanPacket);
     if (rawRxtField.length() > 0) packetObject["rf_tnc2_base64"] = base64Encode(rfPacket);
-    if (isValidUtf8(cleanPacket)) packetObject["tnc2"] = cleanPacket;
+    if (isSafeUtf8(cleanPacket)) packetObject["tnc2"] = cleanPacket;
     bool parsed = addParsedPacket(packetObject, cleanPacket);
     packetObject["parse_status"] = parsed ? "parsed" : "malformed";
 

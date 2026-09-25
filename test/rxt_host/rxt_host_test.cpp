@@ -1,5 +1,6 @@
 #include "rxt_protocol.h"
 #include "aprs_telemetry_rx.h"
+#include "aprs_json_text.h"
 
 #include <iostream>
 #include <string>
@@ -37,6 +38,27 @@ void expectNear(const std::string& name, float actual, float expected) {
 }
 
 int main() {
+    const uint8_t ordinaryText[] = {'A', 'P', 'R', 'S', ' ', '"', '\\'};
+    expectBool("safe ASCII JSON text",
+               APRS_JSON_Text::isSafeUtf8(ordinaryText, sizeof(ordinaryText)), true);
+    const uint8_t utf8Text[] = {0x46, 0x34, 0x4d, 0x4c, 0x56, 0x20, 0xc3, 0xa9};
+    expectBool("safe UTF-8 JSON text",
+               APRS_JSON_Text::isSafeUtf8(utf8Text, sizeof(utf8Text)), true);
+    const uint8_t micEDti[] = {0x1c, 'w', '2', '5'};
+    expectBool("Mic-E control DTI omitted from text",
+               APRS_JSON_Text::isSafeUtf8(micEDti, sizeof(micEDti)), false);
+    const uint8_t oldMicEDti[] = {0x1d, 'w', '2', '5'};
+    expectBool("old Mic-E control DTI omitted from text",
+               APRS_JSON_Text::isSafeUtf8(oldMicEDti, sizeof(oldMicEDti)), false);
+    const uint8_t newline[] = {'A', '\n', 'B'};
+    expectBool("newline omitted from text",
+               APRS_JSON_Text::isSafeUtf8(newline, sizeof(newline)), false);
+    const uint8_t del[] = {'A', 0x7f, 'B'};
+    expectBool("DEL omitted from text", APRS_JSON_Text::isSafeUtf8(del, sizeof(del)), false);
+    const uint8_t malformedUtf8[] = {0xc3, 0x28};
+    expectBool("malformed UTF-8 omitted from text",
+               APRS_JSON_Text::isSafeUtf8(malformedUtf8, sizeof(malformedUtf8)), false);
+
     const std::string packet = "SRC>DST,F6DEV*,WIDE2-2*,F4MLV-10*,WIDE2-1:payload";
     expectNodes("multiple stars", RXT_Protocol::usedPathNodes(packet),
                 {"F6DEV", "F4MLV-10"});
