@@ -58,17 +58,22 @@ namespace DIGI_Utils {
     }
 
     String cleanPath(String path) {
-        String terms[] = {"WIDE1*,", "WIDE2*,", "*"};
+        String terms[] = {"WIDE1*,", "WIDE2*,"};
         for (String term : terms) {
             int index = path.indexOf(term);
             if (index != -1) path.remove(index, term.length());    // less memory than: tempPath.replace("*", "");
         }
+        // TNC2 marks the last used path element with one asterisk. Earlier
+        // elements are implicitly used, so never carry their markers into a
+        // newly generated hop.
+        path.replace("*", "");
         return path;
     }
 
     String processMode3Path(const String& path, const String& stationCallsign) {
         int start = 0;
-        bool prevTokensAllStar = true;
+        int tokenIndex = 0;
+        int lastStarredIndex = -1;
         int ownTokenEnd = -1;
 
         while (start < path.length()) {
@@ -81,12 +86,17 @@ namespace DIGI_Utils {
 
             if (tokenIsOwn) {
                 if (tokenStar) return "";                   // already digipeated
-                if (!prevTokensAllStar) return "";          // earlier tokens must be marked
+                // In canonical TNC2 only the last used element carries '*'.
+                // Therefore the element immediately before our explicit
+                // callsign must be the last marked one. The older convention
+                // with every used element starred remains accepted too.
+                if (tokenIndex > 0 && lastStarredIndex != tokenIndex - 1) return "";
                 ownTokenEnd = delim;
                 break;
             }
 
-            if (!tokenStar) prevTokensAllStar = false;
+            if (tokenStar) lastStarredIndex = tokenIndex;
+            tokenIndex++;
             start = delim + 1;
         }
 
@@ -114,10 +124,14 @@ namespace DIGI_Utils {
             } else if (tempPath.indexOf("WIDE2-") != -1 && digiMode == 2) {                 // WIDE2-n Digipeater
                 int idx = pathTokenIndex(tempPath, "WIDE2-1");
                 if (idx != -1) {
+                    tempPath.replace("*", "");
+                    idx = pathTokenIndex(tempPath, "WIDE2-1");
                     tempPath = tempPath.substring(0, idx) + stationCallsign + "*" + tempPath.substring(idx + 7);
                 } else {
                     idx = pathTokenIndex(tempPath, "WIDE2-2");
                     if (idx == -1) return "";
+                    tempPath.replace("*", "");
+                    idx = pathTokenIndex(tempPath, "WIDE2-2");
                     tempPath = tempPath.substring(0, idx) + stationCallsign + "*,WIDE2-1" + tempPath.substring(idx + 7);
                 }
             } else if (digiMode == 3) {                                                 // Repeat if station callsign is in path (free to repeat).

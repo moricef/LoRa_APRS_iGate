@@ -47,7 +47,15 @@ namespace QUERY_Utils {
             if (queryFromAPRSIS && Config.remoteManagement.rfOnly) return "";
             const REMOTE_AUTH::Result authentication = REMOTE_AUTH::verifyAndConsume(
                 query, station, Config.remoteManagement.authController, Config.callsign);
-            if (authentication.status != REMOTE_AUTH::Status::Accepted) {
+            if (authentication.status == REMOTE_AUTH::Status::Replay) {
+                // The same APRS message can arrive through several RF paths or
+                // be retried until its APRS ACK is received. It has already
+                // been authenticated and executed, so do not turn that normal
+                // duplicate into a misleading authentication failure.
+                Serial.printf("Authenticated remote command duplicate ignored at counter %llu\n",
+                              static_cast<unsigned long long>(authentication.counter));
+                return "";
+            } else if (authentication.status != REMOTE_AUTH::Status::Accepted) {
                 if (station == Config.remoteManagement.authController) {
                     Serial.printf("Remote command authentication rejected: %s\n",
                                   REMOTE_AUTH::statusText(authentication.status));

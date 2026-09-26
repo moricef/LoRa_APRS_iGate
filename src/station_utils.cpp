@@ -228,6 +228,9 @@ namespace STATION_Utils {
     }
 
     void addToOutputPacketBuffer(const String& packet, bool flag, bool eligibleForRxt) {
+        // Callers use an empty string to mean "no response/no packet". Never
+        // let that sentinel reach the LoRa transmitter.
+        if (packet.length() == 0) return;
         outputPacketBuffer.emplace_back(OutputPacketBuffer{packet, flag, eligibleForRxt});
     }
 

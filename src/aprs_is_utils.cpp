@@ -163,28 +163,39 @@ namespace APRS_IS_Utils {
         int leftCurlyBraceIndex = packet.indexOf("{");
         int colonIndex          = packet.indexOf(":");
         if (leftCurlyBraceIndex > 0) {     // ack?
-            String ackMessage = "ack";
-            ackMessage.concat(packet.substring(leftCurlyBraceIndex + 1));
-            ackMessage.trim();
+            String messageNumber = packet.substring(leftCurlyBraceIndex + 1);
+            messageNumber.trim();
 
-            String addToBuffer = Config.callsign;
-            addToBuffer += ">APLRG1";
-            if (!thirdParty) addToBuffer += ",RFONLY";
-            if (Config.beacon.path != "") {
-                addToBuffer += ",";
-                addToBuffer += Config.beacon.path;
+            // APRS message addressees are exactly nine characters wide and a
+            // message number contains one to five alphanumeric characters.
+            // Refuse to manufacture an invalid ACK from malformed input.
+            bool validMessageNumber = messageNumber.length() >= 1 && messageNumber.length() <= 5;
+            for (size_t i = 0; i < messageNumber.length() && validMessageNumber; i++) {
+                const char c = messageNumber[i];
+                validMessageNumber = (c >= '0' && c <= '9') ||
+                                     (c >= 'A' && c <= 'Z') ||
+                                     (c >= 'a' && c <= 'z');
             }
-            addToBuffer += "::";
 
-            String processedSender = sender;
-            for (int i = sender.length(); i < 9; i++) {
-                processedSender += ' ';
+            if (sender.length() >= 1 && sender.length() <= 9 && validMessageNumber) {
+                String addToBuffer = Config.callsign;
+                addToBuffer += ">APLRG1";
+                if (!thirdParty) addToBuffer += ",RFONLY";
+                if (Config.beacon.path != "") {
+                    addToBuffer += ",";
+                    addToBuffer += Config.beacon.path;
+                }
+                addToBuffer += "::";
+
+                String processedSender = sender;
+                while (processedSender.length() < 9) processedSender += ' ';
+                addToBuffer += processedSender;
+                addToBuffer += ":ack";
+                addToBuffer += messageNumber;
+                STATION_Utils::addToOutputPacketBuffer(addToBuffer);
+            } else {
+                Serial.println("APRS message ACK suppressed: invalid sender or message number");
             }
-            addToBuffer += processedSender;
-
-            addToBuffer += ":";
-            addToBuffer += ackMessage;
-            STATION_Utils::addToOutputPacketBuffer(addToBuffer);
             receivedMessage = packet.substring(colonIndex + 1, leftCurlyBraceIndex);
         } else {
             receivedMessage = packet.substring(colonIndex + 1);

@@ -74,7 +74,7 @@ ___________________________________________________________________*/
 // External hook for RXT / TTH tracking from lora_utils.cpp
 extern unsigned long rxCompletedMillis;
 
-String              versionDate             = "2026-09-23";
+String              versionDate             = "2026-09-27";
 String              versionNumber           = "4.0.2RXT";
 Configuration       Config;
 WiFiClient          aprsIsClient;
