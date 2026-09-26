@@ -162,6 +162,15 @@ namespace WEB_Utils {
             request->send(500, "application/json", "{\"error\":\"invalid configuration\"}");
             return;
         }
+
+        // Some settings can be changed at runtime by authenticated APRS
+        // commands before COMMIT persists them.  Report the live values so a
+        // refreshed WebUI reflects the state that is actually in effect,
+        // while the remaining fields continue to come from the saved file.
+        data["lora"]["txActive"]       = Config.loramodule.txActive;
+        data["digi"]["ecoMode"]        = Config.digi.ecoMode;
+        data["display"]["alwaysOn"]    = Config.display.alwaysOn;
+        data["display"]["timeout"]     = Config.display.timeout;
         data["remoteManagement"]["authKeyConfigured"] = REMOTE_AUTH::configured();
         String responseBody;
         serializeJson(data, responseBody);

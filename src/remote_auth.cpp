@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "remote_auth.h"
+#include "remote_replay_window.h"
 
 namespace {
 
@@ -23,9 +24,37 @@ constexpr char kDomain[] = "LORA-APRS-RC";
 constexpr char kNamespace[] = "remote-auth";
 constexpr char kSecretKey[] = "secret";
 constexpr char kCounterKey[] = "rx-counter";
+constexpr char kReplayWindowKey[] = "rx-window";
 constexpr size_t kSecretLength = 32;
 constexpr size_t kTagLength = 12;
 std::mutex authMutex;
+
+REMOTE_REPLAY::State loadReplayState() {
+    Preferences preferences;
+    if (!preferences.begin(kNamespace, true)) return {};
+    REMOTE_REPLAY::State state;
+    const uint64_t legacyCounter = preferences.getULong64(kCounterKey, 0);
+    if (preferences.getBytesLength(kReplayWindowKey) == sizeof(state) &&
+        preferences.getBytes(kReplayWindowKey, &state, sizeof(state)) == sizeof(state)) {
+        // The legacy high-water value is also advanced on every new maximum
+        // so downgrading firmware cannot reopen counters already consumed by
+        // the window implementation. It also recovers a power loss between
+        // the two NVS writes below by failing closed.
+        if (legacyCounter > state.highest) {
+            state.highest = legacyCounter;
+            state.seen = UINT64_MAX;
+        }
+        preferences.end();
+        return state;
+    }
+
+    // Migrate safely from the original single high-water counter. Every
+    // earlier value remains blocked until it ages out of the new window.
+    state.highest = legacyCounter;
+    state.seen = state.highest == 0 ? 0 : UINT64_MAX;
+    preferences.end();
+    return state;
+}
 
 void secureZero(void* memory, size_t length) {
     volatile uint8_t* bytes = static_cast<volatile uint8_t*>(memory);
@@ -172,11 +201,7 @@ bool configured() {
 }
 
 uint64_t acceptedCounter() {
-    Preferences preferences;
-    if (!preferences.begin(kNamespace, true)) return 0;
-    const uint64_t counter = preferences.getULong64(kCounterKey, 0);
-    preferences.end();
-    return counter;
+    return loadReplayState().highest;
 }
 
 bool setSecret(const String& base64UrlSecret) {
@@ -193,8 +218,11 @@ bool setSecret(const String& base64UrlSecret) {
         return false;
     }
     const bool written = preferences.putBytes(kSecretKey, decoded.data(), decoded.size()) == decoded.size();
+    const REMOTE_REPLAY::State emptyState;
     const bool reset = unchanged ||
-                       (written && preferences.putULong64(kCounterKey, 0) == sizeof(uint64_t));
+                       (written &&
+                        preferences.putBytes(kReplayWindowKey, &emptyState, sizeof(emptyState)) == sizeof(emptyState) &&
+                        preferences.putULong64(kCounterKey, 0) == sizeof(uint64_t));
     preferences.end();
     secureZero(decoded.data(), decoded.size());
     return written && reset;
@@ -206,8 +234,10 @@ bool clearSecret() {
     if (!preferences.begin(kNamespace, false)) return false;
     const bool secretRemoved = preferences.remove(kSecretKey) || preferences.getBytesLength(kSecretKey) == 0;
     const bool counterRemoved = preferences.remove(kCounterKey) || preferences.getULong64(kCounterKey, 0) == 0;
+    const bool windowRemoved = preferences.remove(kReplayWindowKey) ||
+                               preferences.getBytesLength(kReplayWindowKey) == 0;
     preferences.end();
-    return secretRemoved && counterRemoved;
+    return secretRemoved && counterRemoved && windowRemoved;
 }
 
 Result verifyAndConsume(const String& envelope, const String& controller,
@@ -241,11 +271,6 @@ Result verifyAndConsume(const String& envelope, const String& controller,
         result.status = Status::Malformed;
         return result;
     }
-    if (result.counter <= acceptedCounter()) {
-        result.status = Status::Replay;
-        return result;
-    }
-
     uint8_t secret[kSecretLength];
     if (!loadSecret(secret)) {
         result.status = Status::Disabled;
@@ -258,9 +283,23 @@ Result verifyAndConsume(const String& envelope, const String& controller,
         return result;
     }
 
+    REMOTE_REPLAY::State replayState = loadReplayState();
+    if (!REMOTE_REPLAY::consume(replayState, result.counter)) {
+        result.status = Status::Replay;
+        return result;
+    }
+
     Preferences preferences;
-    if (!preferences.begin(kNamespace, false) ||
-        preferences.putULong64(kCounterKey, result.counter) != sizeof(uint64_t)) {
+    if (!preferences.begin(kNamespace, false)) {
+        result.status = Status::StorageError;
+        return result;
+    }
+    const uint64_t legacyCounter = preferences.getULong64(kCounterKey, 0);
+    const bool highWaterStored = replayState.highest <= legacyCounter ||
+                                 preferences.putULong64(kCounterKey, replayState.highest) == sizeof(uint64_t);
+    const bool windowStored = highWaterStored &&
+                              preferences.putBytes(kReplayWindowKey, &replayState, sizeof(replayState)) == sizeof(replayState);
+    if (!windowStored) {
         preferences.end();
         result.status = Status::StorageError;
         return result;

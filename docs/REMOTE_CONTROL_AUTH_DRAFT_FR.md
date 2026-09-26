@@ -41,9 +41,10 @@ de test, la persistance et la récupération.
    APRS-IS peuvent changer en transit : ils ne sont pas signés.
 3. Une trame enregistrée ne peut pas réexécuter sa commande, même après un
    redémarrage ou si plusieurs chemins RF en apportent des copies.
-4. Une signature incorrecte, une clé inconnue, un ancien compteur, un message
-   mal formé ou une action non autorisée ne changent rien. L'authentification
-   précède l'appel aux traitements de commandes existants.
+4. Une signature incorrecte, une clé inconnue, un compteur déjà consommé ou
+   trop ancien, un message mal formé ou une action non autorisée ne changent
+   rien. L'authentification précède l'appel aux traitements de commandes
+   existants.
 5. L'état anti-rejeu est enregistré **avant** l'exécution. Une coupure peut
    consommer un compteur sans exécuter la commande, mais ne doit jamais
    permettre de l'exécuter deux fois. Le contrôleur peut interroger l'état
@@ -54,9 +55,11 @@ de test, la persistance et la récupération.
 ## Mécanisme proposé
 
 Utiliser une clé secrète propre à l'iGate et à son unique contrôleur Graywolf,
-ainsi qu'un compteur strictement croissant. Calculer un code d'authentification sur une
-enveloppe versionnée, définie octet par octet et contenant les champs du
-point 2. HMAC-SHA-256 est le premier candidat ; la longueur de la signature
+ainsi qu'un compteur alloué dans l'ordre croissant par l'émetteur. La RF peut
+livrer plusieurs commandes dans le désordre : le récepteur conserve donc une
+fenêtre anti-rejeu bornée au lieu d'imposer leur arrivée dans l'ordre strict.
+Calculer un code d'authentification sur une enveloppe versionnée, définie octet
+par octet et contenant les champs du point 2. HMAC-SHA-256 est le premier candidat ; la longueur de la signature
 transmise et son encodage restent à fixer après examen de la sécurité et du
 temps d'occupation radio. Il ne s'agit **pas** d'ajouter un simple code HOTP
 à six chiffres : celui-ci ne serait pas lié à l'action demandée. Le compteur
@@ -101,12 +104,16 @@ Vecteur v1 : clé Base64URL
 !RC1:A:1Z:TX=OFF:OLkaJxyKIXBM9SrF
 ```
 
-Conserver sur chaque équipement la clé et le plus grand compteur accepté.
+Conserver sur chaque équipement la clé, le plus grand compteur accepté et un
+bitmap anti-rejeu de 64 bits. Le bit zéro représente le plus grand compteur et
+les autres bits les 63 valeurs précédentes. Un compteur correctement
+authentifié, encore jamais vu et situé dans cette fenêtre est accepté une seule
+fois, même si un compteur supérieur est arrivé avant lui. Une valeur hors de
+la fenêtre ou dont le bit est déjà positionné est refusée comme rejeu.
 Les compteurs ne doivent ni boucler ni repartir à zéro
 après redémarrage. L'émetteur enregistre son prochain compteur avant l'envoi ;
-le récepteur enregistre le compteur accepté avant d'agir. Éviter une large
-fenêtre d'anticipation et ne pas partager la clé avec une autre application
-d'opérateur.
+le récepteur enregistre l'état anti-rejeu complet avant d'agir. Ne pas partager
+la clé avec une autre application d'opérateur.
 
 Une copie peut recevoir la réponse « déjà acceptée », mais ne doit jamais
 réexécuter la commande. Le résultat applicatif devrait identifier la demande

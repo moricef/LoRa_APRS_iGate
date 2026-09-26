@@ -39,9 +39,9 @@ vectors, persistence behavior and recovery have been agreed.
    TNC2 path, digipeater markers and APRS-IS q constructs are not signed.
 3. A recorded packet cannot execute a command again, including after a reboot
    or when identical copies arrive through multiple RF paths.
-4. An incorrect tag, unknown key, old counter, malformed message or unsupported
-   action cannot change configuration. Authentication occurs before dispatch
-   to existing query handlers.
+4. An incorrect tag, unknown key, already-consumed or stale counter, malformed
+   message or unsupported action cannot change configuration. Authentication
+   occurs before dispatch to existing query handlers.
 5. The receiver's persistent anti-replay state is updated *before* the action.
    A power loss may consume a counter without performing the action; it must
    never enable the same counter to execute the action twice. The controller
@@ -53,7 +53,9 @@ vectors, persistence behavior and recovery have been agreed.
 ## Proposed mechanism
 
 Use a secret specific to the iGate and its single Graywolf controller, plus a
-monotonically increasing counter.
+counter that the sender allocates monotonically. RF delivery may reorder
+different commands, so the receiver maintains a bounded replay window rather
+than requiring strictly ordered arrival.
 Compute a message authentication code over a byte-exact, versioned envelope
 containing the fields in rule 2. HMAC-SHA-256 is the initial candidate; the
 tag length and its printable on-air encoding must be fixed after an airtime and
@@ -99,12 +101,15 @@ v1 test vector: Base64URL key
 !RC1:A:1Z:TX=OFF:OLkaJxyKIXBM9SrF
 ```
 
-Keep one secret and one high-water counter on each asset.
+Keep one secret, one high-water counter and a 64-bit replay bitmap on each
+asset. Bit zero records the high-water value and the remaining bits record the
+preceding 63 values. A correctly authenticated, previously unseen counter in
+that window is accepted once even if a later counter arrived first. A value
+outside the window or whose bit is already set is rejected as replay.
 Counters are unsigned and must never wrap or reset with a reboot. The sender
 must reserve/persist a counter before emitting a command, so a crash cannot
-reuse it. The receiver must durably advance its high-water counter before
-dispatch. Do not allow a wide look-ahead window or share the key with another
-operator application.
+reuse it. The receiver must durably update the complete replay state before
+dispatch. Do not share the key with another operator application.
 
 The device may answer a duplicate with an explicit "already accepted" result,
 but it must never re-execute it. An application result should identify the
