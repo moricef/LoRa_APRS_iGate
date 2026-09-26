@@ -111,6 +111,17 @@ the decoded chain is returned as `rxt_hops` with `rssi_dbm`, `snr_db`,
 `fo_hz` and `tth_ms`. The `packet` field is the clean TNC2 frame without its
 RF-only RXT trailer; `rxt_raw` preserves the tuple characters separately.
 
+## Binary packets in the APRS JSON stream
+
+The versioned APRS JSON stream always preserves the authoritative clean packet
+in `packet.raw_tnc2_base64` and the information field in
+`packet.information.raw_base64`. The optional `packet.tnc2` and
+`packet.information.text` projections are emitted only for valid UTF-8 without
+ASCII control characters. A binary Mic-E DTI (`0x1c` or `0x1d`) is therefore
+reported through `information.dti_hex` and the Base64 fields, without a
+control byte in a JSON string. Printable DTIs also retain the optional
+one-character `information.dti` projection.
+
 ## SD logging
 
 The SD variant records RXT in `/aprs_rx.csv` using this schema:
@@ -190,5 +201,9 @@ pio run -e ttgo-lora32-v21 -e ttgo-lora32-v21_SD
 
 Host tests cover trailer append/strip behavior, the three-tuple cap,
 multi-star paths, single-star paths, unused paths, commas in APRS payloads,
-and message detection through nested third-party frames. Hardware validation
-is still required for RF multi-hop RXT and both TNC transport modes.
+message detection through nested third-party frames, and safe text projection
+for binary Mic-E packets. On 2026-09-25, F4MLV-15 received a controlled Mic-E
+`0x1c` frame over RF and emitted valid JSON with byte-exact Base64 and
+`dti_hex: "1c"`; Graywolf consumed the event and advanced its persisted
+cursor. Hardware validation is still required for RF multi-hop RXT and both
+TNC transport modes.
