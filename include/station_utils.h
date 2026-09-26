@@ -21,6 +21,7 @@
 
 
 #include <Arduino.h>
+#include <cstdint>
 #include <vector>
 
 
@@ -31,6 +32,9 @@ struct LastHeardStation {
 
 namespace STATION_Utils {
 
+    constexpr uint8_t DEDUP_DIGI = 1U << 0;
+    constexpr uint8_t DEDUP_APRSIS = 1U << 1;
+
     std::vector<String> loadCallsignList(const String& list);
     void loadBlacklistAndManagers();
     bool isBlacklisted(const String& callsign);
@@ -39,7 +43,8 @@ namespace STATION_Utils {
     void deleteNotHeard();
     void updateLastHeard(const String& station);
     bool wasHeard(const String& station);
-    bool isIn25SegHashBuffer(const String& station, const String& textMessage);
+    bool claimPacketDestination(const String& station, const String& information,
+                                uint8_t destination);
     void processOutputPacketBufferUltraEcoMode();
     void processOutputPacketBuffer();
     // eligibleForRxt defaults to false: RXT must only ever be attached to a

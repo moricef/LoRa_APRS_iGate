@@ -223,6 +223,13 @@ namespace APRS_IS_Utils {
                         if (queryMessage) return;
 
                         const String& aprsPacket = buildPacketToUpload(packet);
+                        if (!STATION_Utils::claimPacketDestination(
+                                Sender,
+                                packet.substring(firstColonIndex + 1),
+                                STATION_Utils::DEDUP_APRSIS)) {
+                            Utils::println("[DE-DUPE] APRS-IS upload skipped for: " + Sender);
+                            return;
+                        }
                         if (!Config.display.alwaysOn && Config.display.timeout != 0) {
                             displayToggle(true);
                         }

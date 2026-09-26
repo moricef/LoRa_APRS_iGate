@@ -22,6 +22,7 @@
 #include "configuration.h"
 #include "lora_utils.h"
 #include "display.h"
+#include "packet_dedup.h"
 #include "utils.h"
 #include <vector>
 
@@ -45,11 +46,11 @@ struct OutputPacketBuffer {
 };
 std::vector<OutputPacketBuffer> outputPacketBuffer;
 
-struct Packet25SegBuffer {
-    uint32_t    receivedTime;
-    uint32_t    hash;
-};
-std::vector<Packet25SegBuffer>  packet25SegBuffer;
+PACKET_DEDUP::Cache packetDedupCache;
+static_assert(STATION_Utils::DEDUP_DIGI == PACKET_DEDUP::DIGI,
+              "digipeater de-duplication destination mismatch");
+static_assert(STATION_Utils::DEDUP_APRSIS == PACKET_DEDUP::APRSIS,
+              "APRS-IS de-duplication destination mismatch");
 
 bool saveNewDigiEcoModeConfig   = false;
 bool packetIsBeacon             = false;
@@ -163,54 +164,18 @@ namespace STATION_Utils {
         return false;
     }
 
-    void clean25SegHashBuffer() {
-        uint32_t currentTime = millis();
-        for (int i = packet25SegBuffer.size() - 1; i >= 0; i--) {
-            if ((currentTime - packet25SegBuffer[i].receivedTime) > 25 * 1000) {
-                packet25SegBuffer.erase(packet25SegBuffer.begin() + i);
-            }
-        }
-    }
-
-    uint32_t makeHash(const String& station, const String& payload) {   // DJB2 Hash
-        uint32_t h = 5381;
-        for (size_t i = 0; i < station.length(); i++)
-            h = ((h << 5) + h) + station[i];
-        for (size_t i = 0; i < payload.length(); i++)
-            h = ((h << 5) + h) + payload[i];
-        return h;
-    }
-
-    bool isIn25SegHashBuffer(const String& station, const String& textMessage) {
-        clean25SegHashBuffer();
-        Utils::println("[DEBUG-HASH-CHECK] Checking packet from: " + station);
-        // 1. Isolate the base source callsign
+    bool claimPacketDestination(const String& station, const String& information,
+                                uint8_t destination) {
         String baseStation = station;
         int gtIdx = baseStation.indexOf('>');
         if (gtIdx != -1) {
             baseStation = baseStation.substring(0, gtIdx);
         }
         baseStation.trim();
-
-        // 2. Strip any incoming RXT telemetry trailer so the hash remains invariant 
-        // across hops and as telemetry accumulates.
-        String corePayload = LoRa_Utils::stripRxtTrailer(textMessage);
-        corePayload.trim();
-
-        // 3. Generate invariant hash based solely on originator + clean payload
-        uint32_t newHash        = makeHash(baseStation, corePayload);
-        uint32_t currentTime    = millis();
-
-        // --- Debug Print ---
-        Utils::println("[DE-DUPE] Station: " + baseStation + " | Hash: " + String(newHash, HEX));
-
-        for (size_t i = 0; i < packet25SegBuffer.size(); i++) {
-            if (packet25SegBuffer[i].hash == newHash) return true;
-        }
-        
-        packet25SegBuffer.push_back({currentTime, newHash});
-        return false;
-    }    
+        const std::string source(baseStation.c_str(), baseStation.length());
+        const std::string payload(information.c_str(), information.length());
+        return packetDedupCache.claim(source, payload, destination, millis());
+    }
 
     void processOutputPacketBufferUltraEcoMode() {
         size_t currentIndex = 0;

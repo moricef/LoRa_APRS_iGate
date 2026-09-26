@@ -213,13 +213,6 @@ namespace DIGI_Utils {
         if (Sender == stationCallsign) { TELEMETRY_Utils::incDrop(); return; }          // Avoid listening to self packets
         if (!thirdPartyPacket && Config.tacticalCallsign == "" && !Utils::callsignIsValid(Sender)) { TELEMETRY_Utils::incDrop(); return; }  // No thirdParty + no tactical + invalid callsign
 
-        // Now the hash check will receive the correct Sender and clean payload
-        if (STATION_Utils::isIn25SegHashBuffer(Sender, temp.substring(temp.indexOf(":") + 1))) {
-            SD_Utils::setDecision("DUP");
-            TELEMETRY_Utils::incDrop();
-            return;
-        }
-
         STATION_Utils::updateLastHeard(Sender);
         Utils::typeOfPacket(temp, 2);              // Digi
         bool queryMessage                   = false;
@@ -236,6 +229,17 @@ namespace DIGI_Utils {
 
         String loraPacket = generateDigipeatedPacket(packet, thirdPartyPacket);
         if (loraPacket != "") {
+            const int informationIndex = temp.indexOf(":");
+            if (informationIndex < 0 ||
+                !STATION_Utils::claimPacketDestination(
+                    Sender,
+                    temp.substring(informationIndex + 1),
+                    STATION_Utils::DEDUP_DIGI)) {
+                SD_Utils::setDecision("DUP");
+                TELEMETRY_Utils::incDrop();
+                Utils::println("[DE-DUPE] Digipeat skipped for: " + Sender);
+                return;
+            }
             SD_Utils::setDecision("RELAY");
             TELEMETRY_Utils::incRelay();
             // This is the ONE genuine case where RXT is legitimate: a frame
