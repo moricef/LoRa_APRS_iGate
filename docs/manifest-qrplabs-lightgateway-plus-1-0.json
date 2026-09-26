@@ -1,6 +1,6 @@
 {
   "name": "LoRa APRS iGate - QRP Labs LightGateway Plus 1.0 (RXT)",
-  "version": "4.0.2RXT (2026-09-26 12:31:16 UTC, JSON, HMAC, dedup)",
+  "version": "4.0.2RXT (2026-09-26 14:00:18 UTC, JSON, HMAC, dedup)",
   "new_install_prompt_erase": true,
   "builds": [
     {

@@ -1291,7 +1291,7 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                 </div>
                                 <div class="col-12 mt-3">
                                     <label for="remoteManagement.authController" class="form-label"
-                                        >Authenticated controller (exact callsign)</label>
+                                        >Authorized Graywolf controller (Callsign-SSID)</label>
                                     <div class="input-group">
                                         <input
                                             type="text"
@@ -1299,9 +1299,13 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                             id="remoteManagement.authController"
                                             class="form-control"
                                             maxlength="9"
+                                            placeholder="Example: F4MLV-2"
                                             oninput="this.value = this.value.toUpperCase();"
                                         />
                                     </div>
+                                    <small
+                                        >Enter the exact APRS source identity used by Graywolf to send signed commands, including its SSID. Do not enter this iGate's Callsign-SSID.</small
+                                    >
                                 </div>
                                 <div class="col-12 mt-3">
                                     <label for="remoteManagement.authSecret" class="form-label"
