@@ -273,12 +273,32 @@ function loadSettings(settings) {
     // Management over APRS
     document.getElementById("remoteManagement.managers").value          = settings.remoteManagement.managers;
     document.getElementById("remoteManagement.rfOnly").checked          = settings.remoteManagement.rfOnly;
+    document.getElementById("remoteManagement.authController").value    = settings.remoteManagement.authController ?? "";
+    document.getElementById("remoteManagement.authSecret").value        = "";
+    document.getElementById("remoteManagement.authClear").checked       = false;
+    document.getElementById("remoteManagement.authStatus").textContent  =
+        settings.remoteManagement.authKeyConfigured
+            ? "Authentication key installed"
+            : "No authentication key installed";
 
     // NTP
     document.getElementById("ntp.server").value                         = settings.ntp.server;
     document.getElementById("ntp.gmtCorrection").value                  = settings.ntp.gmtCorrection;
 
     updateImage();
+}
+
+function generateRemoteAuthSecret() {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    let binary = "";
+    bytes.forEach((value) => binary += String.fromCharCode(value));
+    const secret = btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+    const input = document.getElementById("remoteManagement.authSecret");
+    input.type = "text";
+    input.value = secret;
+    input.focus();
+    input.select();
 }
 
 function showToast(message) {

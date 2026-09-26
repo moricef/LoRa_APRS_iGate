@@ -189,7 +189,7 @@ namespace APRS_IS_Utils {
         } else {
             receivedMessage = packet.substring(colonIndex + 1);
         }
-        if (receivedMessage.indexOf("?") == 0) {
+        if (receivedMessage.indexOf("?") == 0 || receivedMessage.startsWith("!RC1:")) {
             if (!Config.display.alwaysOn && Config.display.timeout != 0) {
                 displayToggle(true);
             }
@@ -348,7 +348,7 @@ namespace APRS_IS_Utils {
                         } else {
                             receivedMessage = AddresseeAndMessage.substring(colonIndex + 1);
                         }
-                        if (receivedMessage.indexOf("?") == 0) {
+                        if (receivedMessage.indexOf("?") == 0 || receivedMessage.startsWith("!RC1:")) {
                             Utils::println("Rx Query (APRS-IS)  : " + packet);
                             String queryAnswer = QUERY_Utils::process(receivedMessage, Sender, true, false);
                             if (!Config.display.alwaysOn && Config.display.timeout != 0) {

@@ -179,6 +179,7 @@ bool Configuration::writeFile() {
 
         data["remoteManagement"]["managers"]        = remoteManagement.managers;
         data["remoteManagement"]["rfOnly"]          = remoteManagement.rfOnly;
+        data["remoteManagement"]["authController"]  = remoteManagement.authController;
 
         data["ntp"]["server"]                       = ntp.server;
         data["ntp"]["gmtCorrection"]                = ntp.gmtCorrection;
@@ -423,9 +424,13 @@ bool Configuration::readFile() {
         webadmin.password               = data["webadmin"]["password"] | "";
 
         if (data["remoteManagement"]["managers"].isNull() ||
-            data["remoteManagement"]["rfOnly"].isNull()) needsRewrite = true;
+            data["remoteManagement"]["rfOnly"].isNull() ||
+            data["remoteManagement"]["authController"].isNull()) needsRewrite = true;
         remoteManagement.managers       = data["remoteManagement"]["managers"] | "";
         remoteManagement.rfOnly         = data["remoteManagement"]["rfOnly"] | true;
+        remoteManagement.authController = data["remoteManagement"]["authController"] | "";
+        remoteManagement.authController.trim();
+        remoteManagement.authController.toUpperCase();
 
         if (data["ntp"]["server"].isNull() ||
             data["ntp"]["gmtCorrection"].isNull()) needsRewrite = true;
@@ -580,6 +585,7 @@ void Configuration::setDefaultValues() {
 
     remoteManagement.managers       = "";
     remoteManagement.rfOnly         = true;
+    remoteManagement.authController = "";
 
     ntp.server                      = "pool.ntp.org";
     ntp.gmtCorrection               = 0.0;

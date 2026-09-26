@@ -21,6 +21,7 @@
 #include "station_utils.h"
 #include "query_utils.h"
 #include "lora_utils.h"
+#include "remote_auth.h"
 
 
 extern Configuration                    Config;
@@ -38,9 +39,38 @@ namespace QUERY_Utils {
 
     String process(const String& query, const String& station, bool queryFromAPRSIS, bool thirdParty) {
         String answer;
-        String queryQuestion = query;
+        String effectiveQuery = query;
+        bool authenticatedCommand = false;
+        const bool authenticationEnabled = REMOTE_AUTH::configured();
+
+        if (query.startsWith("!RC1:")) {
+            if (queryFromAPRSIS && Config.remoteManagement.rfOnly) return "";
+            const REMOTE_AUTH::Result authentication = REMOTE_AUTH::verifyAndConsume(
+                query, station, Config.remoteManagement.authController, Config.callsign);
+            if (authentication.status != REMOTE_AUTH::Status::Accepted) {
+                if (station == Config.remoteManagement.authController) {
+                    Serial.printf("Remote command authentication rejected: %s\n",
+                                  REMOTE_AUTH::statusText(authentication.status));
+                    answer = "AUTH FAILED";
+                }
+            } else {
+                effectiveQuery = "?" + authentication.command;
+                authenticatedCommand = true;
+                Serial.printf("Authenticated remote command accepted at counter %llu\n",
+                              static_cast<unsigned long long>(authentication.counter));
+            }
+        }
+
+        String queryQuestion = effectiveQuery;
         queryQuestion.toUpperCase();
-        if (queryQuestion == "?APRS?" || queryQuestion == "H" || queryQuestion == "HELP" || queryQuestion=="?") {
+        const bool stateChangingCommand = queryQuestion.startsWith("?EM=OFF") ||
+                                          queryQuestion.startsWith("?EM=ON") ||
+                                          queryQuestion.startsWith("?TX=ON") ||
+                                          queryQuestion.startsWith("?TX=OFF") ||
+                                          queryQuestion.startsWith("?COMMIT");
+        if (answer != "") {
+            // Authentication failure response already selected above.
+        } else if (queryQuestion == "?APRS?" || queryQuestion == "H" || queryQuestion == "HELP" || queryQuestion=="?") {
             answer.concat("?APRSV ?APRSP ?APRSL ?APRSSR ?EM=? ?TX=? "); // ?APRSH ?WHERE callsign
         } else if (queryQuestion == "?APRSV") {
             answer.concat("CA2RXU_LoRa_iGate v");
@@ -76,12 +106,16 @@ namespace QUERY_Utils {
             Serial.println("estaciones escuchadas directo (ultimos 30 min)");
             answer.concat("?WHERE on development 73!");
         } */
-        else if (STATION_Utils::isManager(station) && (!queryFromAPRSIS || !Config.remoteManagement.rfOnly)) {
+        else if (authenticationEnabled && stateChangingCommand && !authenticatedCommand) {
+            if (STATION_Utils::isManager(station)) answer = "AUTH REQUIRED";
+        }
+        else if ((authenticatedCommand || STATION_Utils::isManager(station)) &&
+                 (!queryFromAPRSIS || !Config.remoteManagement.rfOnly)) {
             int digiMode            = Config.digi.mode;
             int digiEcoMode         = Config.digi.ecoMode;
             int radioTxActive       = Config.loramodule.txActive;
             bool onlyRadioActive    = radioTxActive && Config.loramodule.rxActive && !Config.aprs_is.active;
-            if (queryQuestion.startsWith("?EM=OFF")) {
+            if (queryQuestion == "?EM=OFF") {
                 if ((digiMode == 1 || digiMode == 2 || digiMode == 3) && onlyRadioActive) {
                     if (digiEcoMode == 1 || digiEcoMode == 2) { // Exit Digipeater EcoMode or Digipeater without WiFiAP
                         answer = (digiEcoMode == 1) ? "DigiEcoMode:OFF" : "Digipeater + WiFiAP enabled";
@@ -96,7 +130,7 @@ namespace QUERY_Utils {
                 } else {
                     answer = "Digipeater Mode control not possible";
                 }
-            } else if (queryQuestion.startsWith("?EM=ON")) {
+            } else if (queryQuestion == "?EM=ON") {
                 if ((digiMode == 1 || digiMode == 2 || digiMode == 3) && onlyRadioActive) {
                     if (digiEcoMode == 0) {     // Start Digipeater EcoMode
                         answer = "DigiEcoMode:ON";
@@ -109,29 +143,29 @@ namespace QUERY_Utils {
                 } else {
                     answer = "Digipeater Mode control not possible";
                 }
-            } else if (queryQuestion.startsWith("?EM=?")) {    // Digipeater EcoMode Status
+            } else if (queryQuestion == "?EM=?") {    // Digipeater EcoMode Status
                 switch (digiEcoMode) {
                     case 0:  answer = "DigiEcoMode:OFF"; break;
                     case 1:  answer = "DigiEcoMode:ON"; break;
                     default: answer = "DigiEcoMode:OFF/Only Serial Output";
                 }
-            } else  if (queryQuestion.startsWith("?TX=ON")) {
+            } else  if (queryQuestion == "?TX=ON") {
                 if (radioTxActive) {
                     answer = "TX was ON";
                 } else {
                     Config.loramodule.txActive = true;
                     answer = "TX=ON";
                 }
-            } else if (queryQuestion.startsWith("?TX=OFF")) {
+            } else if (queryQuestion == "?TX=OFF") {
                 if (!radioTxActive) {
                     answer = "TX was OFF";
                 } else {
                     Config.loramodule.txActive = false;
                     answer = "TX=OFF";
                 }
-            } else if (queryQuestion.startsWith("?TX=?")) {
+            } else if (queryQuestion == "?TX=?") {
                 answer = (radioTxActive) ? "TX=ON" : "TX=OFF";
-            } else if (queryQuestion.startsWith("?COMMIT")) {     // saving for next reboot
+            } else if (queryQuestion == "?COMMIT") {     // saving for next reboot
                 answer = "New Config Saved";
                 Config.writeFile();
             }

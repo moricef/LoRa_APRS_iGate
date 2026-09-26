@@ -18,6 +18,7 @@
 
 #include <ArduinoJson.h>
 #include "configuration.h"
+#include "remote_auth.h"
 #include "aprs_json_utils.h"
 #include "ota_utils.h"
 #include "web_utils.h"
@@ -156,7 +157,15 @@ namespace WEB_Utils {
             fileContent += String((char)file.read());
         }
 
-        request->send(200, "application/json", fileContent);
+        JsonDocument data;
+        if (deserializeJson(data, fileContent)) {
+            request->send(500, "application/json", "{\"error\":\"invalid configuration\"}");
+            return;
+        }
+        data["remoteManagement"]["authKeyConfigured"] = REMOTE_AUTH::configured();
+        String responseBody;
+        serializeJson(data, responseBody);
+        request->send(200, "application/json", responseBody);
     }
 
     void handleReceivedPackets(AsyncWebServerRequest *request) {
@@ -443,6 +452,35 @@ namespace WEB_Utils {
 
         Config.remoteManagement.managers    = getParamStringSafe("remoteManagement.managers", Config.remoteManagement.managers);
         Config.remoteManagement.rfOnly      = request->hasParam("remoteManagement.rfOnly", true);
+        Config.remoteManagement.authController = getParamStringSafe(
+            "remoteManagement.authController", Config.remoteManagement.authController);
+        Config.remoteManagement.authController.trim();
+        Config.remoteManagement.authController.toUpperCase();
+        const bool clearAuth = request->hasParam("remoteManagement.authClear", true);
+        if (!clearAuth && REMOTE_AUTH::configured() &&
+            Config.remoteManagement.authController.length() == 0) {
+            request->send(400, "text/plain", "Authenticated controller is required while a key is installed");
+            return;
+        }
+        if (clearAuth) {
+            if (!REMOTE_AUTH::clearSecret()) {
+                request->send(500, "text/plain", "Could not clear remote authentication key");
+                return;
+            }
+        } else if (request->hasParam("remoteManagement.authSecret", true)) {
+            String secret = request->getParam("remoteManagement.authSecret", true)->value();
+            secret.trim();
+            if (secret.length() > 0) {
+                if (Config.remoteManagement.authController.length() == 0) {
+                    request->send(400, "text/plain", "Authenticated controller is required");
+                    return;
+                }
+                if (!REMOTE_AUTH::setSecret(secret)) {
+                    request->send(400, "text/plain", "Secret must be 32 bytes encoded as 43 Base64URL characters without padding");
+                    return;
+                }
+            }
+        }
 
         Config.ntp.server                   = getParamStringSafe("ntp.server", Config.ntp.server);
         Config.ntp.gmtCorrection            = getParamFloatSafe("ntp.gmtCorrection", Config.ntp.gmtCorrection);

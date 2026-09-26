@@ -158,6 +158,7 @@ class REMOTE_MANAGEMENT {
 public:
     String  managers;
     bool    rfOnly;
+    String  authController;
 };
 
 class MQTT {

@@ -1285,8 +1285,52 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                         <label
                                             for="remoteManagement.rfOnly"
                                             class="form-label"
-                                            >Managers commands only via RF (not APRS-IS)</label
+                                        >Managers commands only via RF (not APRS-IS)</label
                                         >
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-3">
+                                    <label for="remoteManagement.authController" class="form-label"
+                                        >Authenticated controller (exact callsign)</label>
+                                    <div class="input-group">
+                                        <input
+                                            type="text"
+                                            name="remoteManagement.authController"
+                                            id="remoteManagement.authController"
+                                            class="form-control"
+                                            maxlength="9"
+                                            oninput="this.value = this.value.toUpperCase();"
+                                        />
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-3">
+                                    <label for="remoteManagement.authSecret" class="form-label"
+                                        >Remote command secret</label>
+                                    <div class="input-group">
+                                        <input
+                                            type="password"
+                                            name="remoteManagement.authSecret"
+                                            id="remoteManagement.authSecret"
+                                            class="form-control"
+                                            maxlength="43"
+                                            autocomplete="new-password"
+                                            placeholder="Leave blank to keep the installed key"
+                                        />
+                                        <button class="btn btn-outline-secondary" type="button" onclick="generateRemoteAuthSecret()"
+                                            >Generate</button>
+                                    </div>
+                                    <small id="remoteManagement.authStatus">No authentication key installed</small>
+                                </div>
+                                <div class="col-12 mt-3">
+                                    <div class="form-check">
+                                        <input
+                                            type="checkbox"
+                                            name="remoteManagement.authClear"
+                                            id="remoteManagement.authClear"
+                                            class="form-check-input"
+                                        />
+                                        <label for="remoteManagement.authClear" class="form-check-label"
+                                            >Remove the installed authentication key</label>
                                     </div>
                                 </div>
                             </div>
