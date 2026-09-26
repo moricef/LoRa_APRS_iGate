@@ -1,6 +1,6 @@
 {
   "name": "LoRa APRS iGate - TTGO LoRa32 v2.1 SD (RXT)",
-  "version": "4.0.2RXT (2026-09-26 13:55:57 UTC, JSON, HMAC, dedup)",
+  "version": "4.0.2RXT (2026-09-26 22:38:09 UTC, JSON, HMAC, dedup, canonical path)",
   "new_install_prompt_erase": true,
   "builds": [
     {
