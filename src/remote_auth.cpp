@@ -33,24 +33,15 @@ REMOTE_REPLAY::State loadReplayState() {
     Preferences preferences;
     if (!preferences.begin(kNamespace, true)) return {};
     REMOTE_REPLAY::State state;
-    const uint64_t legacyCounter = preferences.getULong64(kCounterKey, 0);
     if (preferences.getBytesLength(kReplayWindowKey) == sizeof(state) &&
         preferences.getBytes(kReplayWindowKey, &state, sizeof(state)) == sizeof(state)) {
-        // The legacy high-water value is also advanced on every new maximum
-        // so downgrading firmware cannot reopen counters already consumed by
-        // the window implementation. It also recovers a power loss between
-        // the two NVS writes below by failing closed.
-        if (legacyCounter > state.highest) {
-            state.highest = legacyCounter;
-            state.seen = UINT64_MAX;
-        }
         preferences.end();
         return state;
     }
 
     // Migrate safely from the original single high-water counter. Every
     // earlier value remains blocked until it ages out of the new window.
-    state.highest = legacyCounter;
+    state.highest = preferences.getULong64(kCounterKey, 0);
     state.seen = state.highest == 0 ? 0 : UINT64_MAX;
     preferences.end();
     return state;
@@ -294,11 +285,8 @@ Result verifyAndConsume(const String& envelope, const String& controller,
         result.status = Status::StorageError;
         return result;
     }
-    const uint64_t legacyCounter = preferences.getULong64(kCounterKey, 0);
-    const bool highWaterStored = replayState.highest <= legacyCounter ||
-                                 preferences.putULong64(kCounterKey, replayState.highest) == sizeof(uint64_t);
-    const bool windowStored = highWaterStored &&
-                              preferences.putBytes(kReplayWindowKey, &replayState, sizeof(replayState)) == sizeof(replayState);
+    const bool windowStored = preferences.putBytes(
+        kReplayWindowKey, &replayState, sizeof(replayState)) == sizeof(replayState);
     if (!windowStored) {
         preferences.end();
         result.status = Status::StorageError;
