@@ -9,7 +9,7 @@
 namespace PACKET_DEDUP {
 
 constexpr uint8_t DIGI = 1U << 0;
-constexpr uint8_t APRSIS = 1U << 1;
+constexpr uint8_t RETURN_ROUTE = 1U << 1;
 constexpr uint32_t DEFAULT_WINDOW_MS = 25000;
 constexpr size_t DEFAULT_MAX_ENTRIES = 256;
 

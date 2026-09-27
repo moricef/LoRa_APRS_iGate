@@ -101,6 +101,14 @@ int main() {
           "F4MLV-7>APLRT1,WIDE2-1:=/8gk=NmQF[LWQ", NONE);
     check("no path at all", 1,
           "F4MLV-7>APLRT1:=/8gk=NmQF[LWQ", NONE);
+    check("explicit own callsign", 1,
+          "F4MLV-7>APLRT1,F4MLV-10:=/8gk=NmQF[LWQ",
+          "F4MLV-7>APLRT1,F4MLV-10*:=/8gk=NmQF[LWQ");
+    check("explicit own callsign after previous hop", 1,
+          "F4MLV-7>APLRT1,SOMTNP*,F4MLV-10:=/8gk=NmQF[LWQ",
+          "F4MLV-7>APLRT1,SOMTNP,F4MLV-10*:=/8gk=NmQF[LWQ");
+    check("explicit own callsign already consumed", 1,
+          "F4MLV-7>APLRT1,F4MLV-10*:=/8gk=NmQF[LWQ", NONE);
 
     std::printf("\n-- mode 2 : WIDE1-1 + WIDE2-n --\n");
     check("WIDE1-1 first", 2,
@@ -118,6 +126,12 @@ int main() {
           "F4MLV-7>APLRT1,F6DEV-10*:=/8gk=NmQF[LWQ", NONE);
     check("WIDE1 substring is not an alias", 2,
           "F4MLV-7>APLRT1,XWIDE1-1:=/8gk=NmQF[LWQ", NONE);
+    check("explicit own callsign in regional mode", 2,
+          "F4MLV-7>APLRT1,F4MLV-10,N7UV-6:=/8gk=NmQF[LWQ",
+          "F4MLV-7>APLRT1,F4MLV-10*,N7UV-6:=/8gk=NmQF[LWQ");
+    check("explicit own callsign after previous regional digi", 2,
+          "F4MLV-7>APLRT1,SOMTNP*,F4MLV-10:=/8gk=NmQF[LWQ",
+          "F4MLV-7>APLRT1,SOMTNP,F4MLV-10*:=/8gk=NmQF[LWQ");
 
     std::printf("\n-- mode 2 : configurable regional aliases --\n");
     Options ariege;

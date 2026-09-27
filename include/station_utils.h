@@ -28,12 +28,19 @@
 struct LastHeardStation {
     uint32_t    lastHeardTime;
     String      station;
+    String      returnPath;
+    bool        returnPathKnown;
+
+    LastHeardStation(uint32_t heardTime, const String& stationCallsign,
+                     const String& learnedPath = "", bool pathKnown = false)
+        : lastHeardTime(heardTime), station(stationCallsign),
+          returnPath(learnedPath), returnPathKnown(pathKnown) {}
 };
 
 namespace STATION_Utils {
 
     constexpr uint8_t DEDUP_DIGI = 1U << 0;
-    constexpr uint8_t DEDUP_APRSIS = 1U << 1;
+    constexpr uint8_t DEDUP_RETURN_ROUTE = 1U << 1;
 
     std::vector<String> loadCallsignList(const String& list);
     void loadBlacklistAndManagers();
@@ -43,6 +50,8 @@ namespace STATION_Utils {
     void deleteNotHeard();
     void updateLastHeard(const String& station);
     bool wasHeard(const String& station);
+    void learnReturnPath(const String& station, const String& packet);
+    bool getReturnPath(const String& station, String& path);
     bool claimPacketDestination(const String& station, const String& information,
                                 uint8_t destination);
     void processOutputPacketBufferUltraEcoMode();

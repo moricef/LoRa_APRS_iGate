@@ -29,6 +29,7 @@
 #include "digi_utils.h"
 #include "tnc_utils.h"
 #include "lora_utils.h"
+#include "aprs_return_route.h"
 #include "aprs_telemetry_rx.h"
 #include "aprs_telemetry_persistence.h"
 #include "display.h"
@@ -222,6 +223,15 @@ namespace APRS_IS_Utils {
                     const String& Sender = packet.substring(0, packet.indexOf(">"));
                     if (Sender != Config.callsign && Utils::callsignIsValid(Sender)) {
                         STATION_Utils::updateLastHeard(Sender);
+                        const String& information = packet.substring(firstColonIndex + 1);
+                        // The route destination bit makes this a first-copy-
+                        // wins decision independent of APRS-IS upload and digi
+                        // processing. Later RF copies may refresh last-heard
+                        // time but cannot replace the selected return path.
+                        if (STATION_Utils::claimPacketDestination(
+                                Sender, information, STATION_Utils::DEDUP_RETURN_ROUTE)) {
+                            STATION_Utils::learnReturnPath(Sender, packet);
+                        }
                         Utils::typeOfPacket(packet, 0);  // LoRa-APRS
                         int doubleColonIndex = packet.indexOf("::");
                         const String& AddresseeAndMessage = packet.substring(doubleColonIndex + 2);
@@ -234,13 +244,6 @@ namespace APRS_IS_Utils {
                         if (queryMessage) return;
 
                         const String& aprsPacket = buildPacketToUpload(packet);
-                        if (!STATION_Utils::claimPacketDestination(
-                                Sender,
-                                packet.substring(firstColonIndex + 1),
-                                STATION_Utils::DEDUP_APRSIS)) {
-                            Utils::println("[DE-DUPE] APRS-IS upload skipped for: " + Sender);
-                            return;
-                        }
                         if (!Config.display.alwaysOn && Config.display.timeout != 0) {
                             displayToggle(true);
                         }
@@ -302,6 +305,18 @@ namespace APRS_IS_Utils {
                 break;
         }
         return outputPacket;
+    }
+
+    String buildPacketToTx(const String& aprsisPacket, uint8_t packetType,
+                           const String& path) {
+        if (packetType != 1) return "";
+        String packet = aprsisPacket;
+        packet.trim();
+        const std::string output = APRS_RETURN_ROUTE::buildThirdPartyMessage(
+            std::string(Config.callsign.c_str(), Config.callsign.length()),
+            std::string(path.c_str(), path.length()),
+            std::string(packet.c_str(), packet.length()));
+        return String(output.c_str());
     }
 
     void processAckMessage(const String& sender, const String& message) {
@@ -392,12 +407,24 @@ namespace APRS_IS_Utils {
                         displayShow(firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seventhLine, 0);
                     } else {
                         Utils::print("Rx Message (APRS-IS): " + packet);
-                        if (STATION_Utils::wasHeard(Addressee) && packet.indexOf("EQNS.") == -1 && packet.indexOf("UNIT.") == -1 && packet.indexOf("PARM.") == -1 && packet.indexOf("BITS.") == -1) {
-                            STATION_Utils::addToOutputPacketBuffer(buildPacketToTx(packet, 1));
-                            displayToggle(true);
-                            lastScreenOn = currentTime;
-                            Utils::typeOfPacket(packet, 1); // APRS-LoRa
-                            displayShow(firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seventhLine, 0);
+                        const bool isTelemetryMetadata = packet.indexOf("EQNS.") != -1 ||
+                                                         packet.indexOf("UNIT.") != -1 ||
+                                                         packet.indexOf("PARM.") != -1 ||
+                                                         packet.indexOf("BITS.") != -1;
+                        String returnPath;
+                        if (!isTelemetryMetadata && STATION_Utils::getReturnPath(Addressee, returnPath)) {
+                            Utils::println("[RETURN-PATH] Message to " + Addressee + " via " +
+                                           (returnPath == "" ? String("DIRECT") : returnPath));
+                            const String rfPacket = buildPacketToTx(packet, 1, returnPath);
+                            if (rfPacket != "") {
+                                STATION_Utils::addToOutputPacketBuffer(rfPacket);
+                                displayToggle(true);
+                                lastScreenOn = currentTime;
+                                Utils::typeOfPacket(packet, 1); // APRS-LoRa
+                                displayShow(firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seventhLine, 0);
+                            }
+                        } else if (!isTelemetryMetadata) {
+                            Utils::println("[RETURN-PATH] No learned route for " + Addressee + ": No Tx");
                         }
                     }
                 } else if (Config.aprs_is.objectsToRF && packet.indexOf(":;") > 0) {

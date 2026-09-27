@@ -35,6 +35,8 @@ namespace APRS_IS_Utils {
     void    processLoRaPacket(const String& packet);
 
     String  buildPacketToTx(const String& aprsisPacket, uint8_t packetType);
+    String  buildPacketToTx(const String& aprsisPacket, uint8_t packetType,
+                            const String& path);
     void    processAPRSISPacket(const String& packet);
     void    listenAPRSIS();
 

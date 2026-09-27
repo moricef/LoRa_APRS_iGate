@@ -26,30 +26,30 @@ void expectDifferent(const std::string& name, uint64_t left, uint64_t right) {
 int main() {
     PACKET_DEDUP::Cache cache;
 
-    expect("first APRS-IS claim",
-           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::APRSIS, 1000), true);
-    expect("same packet still available to digi",
-           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::DIGI, 1001), true);
-    expect("duplicate APRS-IS claim",
-           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::APRSIS, 1002), false);
+    expect("first digi claim",
+           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::DIGI, 1000), true);
+    expect("same packet available for first return-route observation",
+           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::RETURN_ROUTE, 1001), true);
     expect("duplicate digi claim",
-           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::DIGI, 1003), false);
+           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::DIGI, 1002), false);
+    expect("duplicate cannot replace learned return route",
+           cache.claim("F4MLV-2", "payload", PACKET_DEDUP::RETURN_ROUTE, 1003), false);
     expect("different source",
-           cache.claim("F4MLV-10", "payload", PACKET_DEDUP::APRSIS, 1004), true);
+           cache.claim("F4MLV-10", "payload", PACKET_DEDUP::DIGI, 1004), true);
 
     PACKET_DEDUP::Cache spaces;
-    expect("plain information", spaces.claim("SRC", "payload", PACKET_DEDUP::APRSIS, 0), true);
+    expect("plain information", spaces.claim("SRC", "payload", PACKET_DEDUP::DIGI, 0), true);
     expect("trailing space is significant",
-           spaces.claim("SRC", "payload ", PACKET_DEDUP::APRSIS, 1), true);
+           spaces.claim("SRC", "payload ", PACKET_DEDUP::DIGI, 1), true);
     expect("leading space is significant",
-           spaces.claim("SRC", " payload", PACKET_DEDUP::APRSIS, 2), true);
+           spaces.claim("SRC", " payload", PACKET_DEDUP::DIGI, 2), true);
     const std::string binaryOne("\x1d\0ABC", 5);
     const std::string binaryTwo("\x1d\0ABD", 5);
-    expect("binary information", spaces.claim("SRC", binaryOne, PACKET_DEDUP::APRSIS, 3), true);
+    expect("binary information", spaces.claim("SRC", binaryOne, PACKET_DEDUP::DIGI, 3), true);
     expect("binary information duplicate",
-           spaces.claim("SRC", binaryOne, PACKET_DEDUP::APRSIS, 4), false);
+           spaces.claim("SRC", binaryOne, PACKET_DEDUP::DIGI, 4), false);
     expect("binary information remains exact",
-           spaces.claim("SRC", binaryTwo, PACKET_DEDUP::APRSIS, 5), true);
+           spaces.claim("SRC", binaryTwo, PACKET_DEDUP::DIGI, 5), true);
 
     PACKET_DEDUP::Cache rxt;
     expect("first RXT form",
@@ -62,12 +62,12 @@ int main() {
            rxt.claim("SRC", "payload{hello}", PACKET_DEDUP::DIGI, 3), true);
 
     PACKET_DEDUP::Cache expiry;
-    expect("initial expiry claim", expiry.claim("SRC", "p", PACKET_DEDUP::APRSIS, 10), true);
+    expect("initial expiry claim", expiry.claim("SRC", "p", PACKET_DEDUP::RETURN_ROUTE, 10), true);
     expect("exact window remains duplicate",
-           expiry.claim("SRC", "p", PACKET_DEDUP::APRSIS,
+           expiry.claim("SRC", "p", PACKET_DEDUP::RETURN_ROUTE,
                         10 + PACKET_DEDUP::DEFAULT_WINDOW_MS), false);
     expect("after window can be claimed again",
-           expiry.claim("SRC", "p", PACKET_DEDUP::APRSIS,
+           expiry.claim("SRC", "p", PACKET_DEDUP::RETURN_ROUTE,
                         11 + PACKET_DEDUP::DEFAULT_WINDOW_MS), true);
 
     PACKET_DEDUP::Cache wrap;

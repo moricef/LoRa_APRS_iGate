@@ -23,7 +23,9 @@
 #include "lora_utils.h"
 #include "display.h"
 #include "packet_dedup.h"
+#include "aprs_return_route.h"
 #include "utils.h"
+#include <string>
 #include <vector>
 
 
@@ -49,8 +51,8 @@ std::vector<OutputPacketBuffer> outputPacketBuffer;
 PACKET_DEDUP::Cache packetDedupCache;
 static_assert(STATION_Utils::DEDUP_DIGI == PACKET_DEDUP::DIGI,
               "digipeater de-duplication destination mismatch");
-static_assert(STATION_Utils::DEDUP_APRSIS == PACKET_DEDUP::APRSIS,
-              "APRS-IS de-duplication destination mismatch");
+static_assert(STATION_Utils::DEDUP_RETURN_ROUTE == PACKET_DEDUP::RETURN_ROUTE,
+              "return-route de-duplication destination mismatch");
 
 bool saveNewDigiEcoModeConfig   = false;
 bool packetIsBeacon             = false;
@@ -123,7 +125,7 @@ namespace STATION_Utils {
         for (int i = 0; i < lastHeardObjects.size(); i++) {                 // Check if i should Tx object
             if (lastHeardObjects[i].station == object) return false;
         }
-        lastHeardObjects.emplace_back(LastHeardStation{millis(), object});  // Add new object and Tx
+        lastHeardObjects.emplace_back(LastHeardStation{millis(), object, "", false});  // Add new object and Tx
         return true;
     }
 
@@ -148,7 +150,7 @@ namespace STATION_Utils {
                 return;
             }
         }
-        lastHeardStations.emplace_back(LastHeardStation{currentTime, station});
+        lastHeardStations.emplace_back(LastHeardStation{currentTime, station, "", false});
         Utils::showActiveStations();
     }
 
@@ -161,6 +163,63 @@ namespace STATION_Utils {
             }
         }
         Utils::println(" ---> Station not Heard in " + String(Config.rememberStationTime) + " min: No Tx");
+        return false;
+    }
+
+    void learnReturnPath(const String& station, const String& packet) {
+        std::vector<std::string> aliases;
+        aliases.emplace_back("WIDE");
+        unsigned int start = 0;
+        while (start < Config.digi.regionalAliases.length()) {
+            while (start < Config.digi.regionalAliases.length() &&
+                   (Config.digi.regionalAliases[start] == ' ' ||
+                    Config.digi.regionalAliases[start] == ',')) start++;
+            if (start >= Config.digi.regionalAliases.length()) break;
+            int end = start;
+            while (end < static_cast<int>(Config.digi.regionalAliases.length()) &&
+                   Config.digi.regionalAliases[end] != ' ' &&
+                   Config.digi.regionalAliases[end] != ',') end++;
+            const String alias = Config.digi.regionalAliases.substring(start, end);
+            if (!alias.equalsIgnoreCase("WIDE")) aliases.emplace_back(alias.c_str());
+            start = end + 1;
+        }
+
+        const APRS_RETURN_ROUTE::Result result = APRS_RETURN_ROUTE::derive(
+            std::string(packet.c_str(), packet.length()),
+            std::string(Config.callsign.c_str(), Config.callsign.length()),
+            std::string(Config.tacticalCallsign.c_str(), Config.tacticalCallsign.length()), aliases);
+        if (!result.valid) {
+            Utils::println("[RETURN-PATH] Invalid RF path for " + station);
+            return;
+        }
+
+        deleteNotHeard();
+        const uint32_t currentTime = millis();
+        for (LastHeardStation& entry : lastHeardStations) {
+            if (entry.station != station) continue;
+            entry.lastHeardTime = currentTime;
+            entry.returnPath = result.path.c_str();
+            entry.returnPathKnown = true;
+            Utils::println("[RETURN-PATH] Learned " + station + " via " +
+                           (entry.returnPath == "" ? String("DIRECT") : entry.returnPath));
+            return;
+        }
+
+        const String path(result.path.c_str());
+        lastHeardStations.emplace_back(LastHeardStation{currentTime, station, path, true});
+        Utils::println("[RETURN-PATH] Learned " + station + " via " +
+                       (path == "" ? String("DIRECT") : path));
+        Utils::showActiveStations();
+    }
+
+    bool getReturnPath(const String& station, String& path) {
+        deleteNotHeard();
+        for (const LastHeardStation& entry : lastHeardStations) {
+            if (entry.station != station || !entry.returnPathKnown) continue;
+            path = entry.returnPath;
+            return true;
+        }
+        path = "";
         return false;
     }
 

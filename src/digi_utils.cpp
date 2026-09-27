@@ -191,6 +191,7 @@ namespace DIGI_Utils {
         unsigned int start = 0;
         int tokenIndex = 0;
         int lastStarredIndex = -1;
+        int ownTokenIndex = -1;
         int ownTokenEnd = -1;
 
         while (start < path.length()) {
@@ -203,13 +204,9 @@ namespace DIGI_Utils {
 
             if (tokenIsOwn) {
                 if (tokenStar) return "";                   // already digipeated
-                // In canonical TNC2 only the last used element carries '*'.
-                // Therefore the element immediately before our explicit
-                // callsign must be the last marked one. The older convention
-                // with every used element starred remains accepted too.
-                if (tokenIndex > 0 && lastStarredIndex != tokenIndex - 1) return "";
+                if (ownTokenIndex != -1) return "";          // repeated own identity
+                ownTokenIndex = tokenIndex;
                 ownTokenEnd = delim;
-                break;
             }
 
             if (tokenStar) lastStarredIndex = tokenIndex;
@@ -218,6 +215,11 @@ namespace DIGI_Utils {
         }
 
         if (ownTokenEnd == -1) return "";
+        // In canonical TNC2 only the last used element carries '*'. Our
+        // identity must be the first unused path element. The older form with
+        // every used element starred remains accepted as well.
+        if (lastStarredIndex >= ownTokenIndex) return "";
+        if (ownTokenIndex > 0 && lastStarredIndex != ownTokenIndex - 1) return "";
         String tempPacket = cleanPath(path.substring(0, ownTokenEnd));
         return tempPacket + "*" + path.substring(ownTokenEnd);
     }
@@ -235,23 +237,28 @@ namespace DIGI_Utils {
             int digiMode        = Config.digi.mode;
             String tempPath     = path;
 
-            // A digi must never consume another alias after its own identity
-            // has already appeared in the used path. The time-based duplicate
-            // cache is not an anti-loop mechanism: the same frame may return
-            // after its window has expired or after a restart.
+            // Explicit source routes are valid in every normal digi mode.
+            // This is required for an iGate to reverse the path on which it
+            // last heard a station. processMode3Path() also rejects a route
+            // already consumed by this digi or one whose preceding hop is not
+            // the last used path element.
             if ((digiMode == 1 || digiMode == 2) &&
-                pathContainsCallsign(tempPath, stationCallsign)) return "";
-
-            int wide1Index = pathTokenIndex(tempPath, "WIDE1-1");
-            if (wide1Index != -1 && (digiMode == 1 || digiMode == 2)) {                     // WIDE1-1
+                pathContainsCallsign(tempPath, stationCallsign)) {
+                tempPath = processMode3Path(tempPath, stationCallsign);
+                if (tempPath == "") return "";
+            } else {
+                int wide1Index = pathTokenIndex(tempPath, "WIDE1-1");
+                if (wide1Index != -1 && (digiMode == 1 || digiMode == 2)) {                 // WIDE1-1
                 if (tempPath.indexOf("*") != -1 ) return "";                                // "*" shouldn't be in WIDE1-1 (only) type of packet
                 tempPath = tempPath.substring(0, wide1Index) + stationCallsign + "*" +
                            tempPath.substring(wide1Index + 7);
-            } else if (digiMode == 2) {                                                     // Configured regional alias
-                tempPath = cleanPath(path);
-                tempPath = consumeRegionalHop(tempPath, stationCallsign);
-                if (tempPath == "") return "";
-            } else if (digiMode == 3) {                                                     // Repeat if station callsign is in path (free to repeat).
+                } else if (digiMode == 2) {                                                 // Configured regional alias
+                    tempPath = cleanPath(path);
+                    tempPath = consumeRegionalHop(tempPath, stationCallsign);
+                    if (tempPath == "") return "";
+                }
+            }
+            if (digiMode == 3) {                                                            // Repeat if station callsign is in path (free to repeat).
                 tempPath = processMode3Path(tempPath, stationCallsign);
                 if (tempPath == "") return "";
             }
@@ -284,16 +291,21 @@ namespace DIGI_Utils {
             const String& path  = temp.substring(commaIndex + 1);
             if (digiMode == 1 || backupDigiMode) {
                 bool hasWide = pathTokenIndex(path, "WIDE1-1") != -1;
-                if (hasWide || crossFreq) {
-                    return buildPacket(path, packet, thirdParty, !hasWide);
+                bool hasOwnCall = pathContainsCallsign(path,
+                    Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign);
+                if (hasOwnCall || hasWide || crossFreq) {
+                    return buildPacket(path, packet, thirdParty, hasOwnCall ? false : !hasWide);
                 }
                 return "";
             }
             if (digiMode == 2) {
                 int wide1Index = pathTokenIndex(path, "WIDE1-1");
                 bool hasWide1 = wide1Index != -1;
+                bool hasOwnCall = pathContainsCallsign(path,
+                    Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign);
                 RegionalHop regionalHop = findRegionalHop(path);
 
+                if (hasOwnCall) return buildPacket(path, packet, thirdParty, false);
                 if (hasWide1 && regionalHop.found && regionalHop.tokenStart < wide1Index) return ""; // fill-in must come first
 
                 if (hasWide1 || regionalHop.found) return buildPacket(path, packet, thirdParty, false);
