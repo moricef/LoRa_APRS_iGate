@@ -271,6 +271,26 @@ namespace TNC_Utils {
         Serial.flush();
     }
 
+    void sendCrcError(const LoRa_Utils::RxtRxContext& context) {
+        // Operational text must never contaminate a binary KISS stream.
+        if (usesKissProtocol()) return;
+
+        const String line = LoRa_Utils::formatCrcError(context);
+        if (Config.tnc.enableServer) {
+            for (int i = 0; i < MAX_CLIENTS; i++) {
+                auto client = clients[i];
+                if (client != nullptr && client->connected()) {
+                    client->print(line + "\r\n");
+                    client->flush();
+                }
+            }
+        }
+        if (Config.tnc.enableSerial) {
+            Serial.println(line);
+            Serial.flush();
+        }
+    }
+
     void loop() {
         if (Config.digi.ecoMode == 0) {
             if (Config.tnc.enableServer) {

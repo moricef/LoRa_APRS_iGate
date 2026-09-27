@@ -61,6 +61,8 @@ namespace LoRa_Utils {
     void    setup();
     void    loadRxtWhitelist();
     RxtRxContext captureRxtRxContext();
+    bool    takeCrcError(RxtRxContext& context);
+    String  formatCrcError(const RxtRxContext& context);
     void    sendNewPacket(const String& newPacket, const RxtRxContext* rxtContext = nullptr);
     String  receivePacketFromSleep();
     String  receivePacket(String* jsonPacket = nullptr);

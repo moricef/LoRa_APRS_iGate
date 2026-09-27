@@ -83,6 +83,8 @@ const float TTH_SCALE_FACTOR = 10.0f; // tthScale = symbolTimeMs * TTH_SCALE_FAC
 bool operationDone      = true;
 bool transmitFlag       = true;
 String lastRxtField     = "";
+bool crcErrorPending    = false;
+LoRa_Utils::RxtRxContext lastCrcError = {false, 0, 0.0F, 0, 0};
 
 #define DIFS_SLOTS      2       // Number of secuential CAD slots to consider a free channel to Tx
 int  backoffMax         = 4;    // Max Backoff value (number of CAD slots to wait before Tx)
@@ -557,6 +559,19 @@ namespace LoRa_Utils {
         return {rxCompletedMillis > 0, rssi, snr, freqOffset, rxCompletedMillis};
     }
 
+    bool takeCrcError(RxtRxContext& context) {
+        if (!crcErrorPending) return false;
+        context = lastCrcError;
+        crcErrorPending = false;
+        return true;
+    }
+
+    String formatCrcError(const RxtRxContext& context) {
+        return "CRC ERROR RSSI:" + String(context.rssi) +
+               " SNR:" + (context.snr >= 0 ? "+" : "") + String(context.snr, 2) +
+               " FO:" + (context.fo >= 0 ? "+" : "") + String(context.fo);
+    }
+
     void sendNewPacket(const String& rawPacket, const RxtRxContext* rxtContext) {
         if (!Config.loramodule.txActive) return;
 
@@ -731,7 +746,9 @@ namespace LoRa_Utils {
                     rssi        = radio.getRSSI();
                     snr         = radio.getSNR();
                     freqOffset   = radio.getFrequencyError();
-                    Utils::println(F("CRC error!"));
+                    lastCrcError = {true, rssi, snr, freqOffset, millis()};
+                    crcErrorPending = true;
+                    Utils::println(formatCrcError(lastCrcError));
                     if (Config.syslog.active && networkManager->isConnected()) {
                         SYSLOG_Utils::log(0, "", rssi, snr, freqOffset); 
                     }

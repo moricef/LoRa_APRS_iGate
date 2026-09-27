@@ -31,6 +31,7 @@ namespace TNC_Utils {
 
     void sendToClients(const String& packet, bool stripBytes, const std::vector<LoRa_Utils::RxtHopMetric>& hopMetrics);
     void sendToSerial(const String& packet, bool stripBytes, const std::vector<LoRa_Utils::RxtHopMetric>& hopMetrics);
+    void sendCrcError(const LoRa_Utils::RxtRxContext& context);
 
 }
 

@@ -204,6 +204,12 @@ void loop() {
             packet = LoRa_Utils::receivePacket(&jsonPacket); // We need to fetch LoRa packet above APRSIS and Digi
         }
 
+        LoRa_Utils::RxtRxContext crcError;
+        const bool hasCrcError = LoRa_Utils::takeCrcError(crcError);
+        if (Config.digi.ecoMode == 0 && hasCrcError) {
+            TNC_Utils::sendCrcError(crcError);
+        }
+
         // A CRC-valid payload rejected by syntax or application policy must
         // still be transported by the raw reception stream. Keep all existing
         // APRS consumers gated by the normal packet value.
