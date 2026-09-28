@@ -9,6 +9,19 @@ installer/firmware
 installer/*.bin
 **/__pycache__/
 
+# Host-test build outputs
+/test/digi-host/run
+/test/packet_dedup_host/packet_dedup_test
+/test/return_route_host/return_route_test
+
+# Local captures, logs and device configuration backups
+/logs/
+/images/Copie d'écran_*.png
+/images/VirtualBox_*.png
+/images/photo_*.jpg
+/images/iGateConfigurationBackup_*.json
+/integrations/yaac-rxt/
+
 # Local RXT analysis notes
 /docs/RXT_APRSIS_BOUNDARY.md
 /docs/RXT_APRSIS_BOUNDARY_fr.md

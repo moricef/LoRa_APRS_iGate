@@ -88,51 +88,12 @@ This validates RF learning, APRS-IS reception, transmission on the learned
 explicit path, and RF repetition by the requested digipeater. F4MLV-MC was a
 simulated source, not a physical receiver. At this stage, delivery and ACK at
 an actual end station and multiple-hop return routes on real hardware had not
-yet been tested; the follow-up tests below cover both cases.
-
-Graywolf message #104 (`065`) also proved APRS-IS reception and iGate
-transmission, but its sender was F4MLV-2. That same digipeater rejects its own
-source callsign in the inner third-party packet, so it could not validate the
-second hop. A TNC injection subsequently proved third-party repetition alone;
-only the F4MLV-14 APRS-IS test above exercised both stages in one test.
+yet been tested. The following tests separately cover physical endpoint
+delivery with an ACK and execution of a two-relay route.
 
 Use distinct numeric SSIDs in the range 0–15 for the APRS-IS test sender and
 connection. Do not reuse the active iGate login for a second connection.
 The APRS-IS sender must also differ from each relay on the learned route.
-
-### Physical receiver and ACK: F4MLV-7
-
-After acquiring its GNSS fix, F4MLV-7 transmitted a manual beacon. F4MLV-15
-received the direct copy first and logged:
-
-```text
-[RETURN-PATH] Learned F4MLV-7 via DIRECT
-F4MLV-7>TRUWV3,WIDE1-1,WIDE2-1:`w25l#X[/"=@}
-```
-
-The later copy through F4MLV-2 did not replace the direct route. The APRS-IS
-test connection sent a numbered message and the iGate selected `DIRECT`:
-
-```text
-F4MLV-14>APLRG1,TCPIP*::F4MLV-7  :Test retour avec ACK{R001
-[RETURN-PATH] Message to F4MLV-7 via DIRECT
----> LoRa Packet Tx : F4MLV-15>APLRG1:}F4MLV-14>APLRG1,TCPIP,F4MLV-15*::F4MLV-7  :Test retour avec ACK{R001
-```
-
-The operator confirmed receipt on the physical tracker from F4MLV-14 and its
-ACK. F4MLV-15 received the ACK directly over RF (`RSSI:-72 SNR:+11.25`) and
-uploaded it. The separate APRS-IS connection received:
-
-```text
-F4MLV-7>APLRT1,WIDE1-1,WIDE2-1,qAR,F4MLV-15::F4MLV-14 :ackR001
-```
-
-This proves reception and ACK at an actual station, with the ACK reaching
-APRS-IS through F4MLV-15. A concurrent copy of the downlink from F4JQT-10 via
-F4MLV-10 was also captured, so this test does not uniquely identify which RF
-downlink the tracker acknowledged. Its learned route was direct; physical
-receiver/ACK validation specifically through a learned relay required an
-isolated test.
 
 ### Isolated physical delivery through one relay
 
@@ -166,7 +127,7 @@ A second isolated test exercised consumption of a two-element explicit path.
 F4MLV-15 again transmitted on the EU profile and received on the Poland
 profile; F4MLV-2 received on EU and transmitted on Poland. F4MLV-7 was
 temporarily configured as a Poland-profile digipeater accepting its own
-callsign as an explicit alias.
+callsign as the next explicit path element.
 
 A synthetic RF source packet for F4MLV-MC carried the used path
 `F4MLV-7,F4MLV-2*`. F4MLV-15 consequently learned the reverse route
@@ -186,23 +147,14 @@ ACK had already been established separately by `P201`.
 
 ### Remaining network-level limitation
 
-The tests also showed that APRS-IS does not elect one exclusive RF gateway for
-a message. Multiple eligible iGates can receive the same downlink from APRS-IS
-and independently transmit it on RF. APRS-IS duplicate handling must therefore
-not be treated as coordination between transmitting iGates.
+In the tested setup, APRS-IS delivered the same downlink to multiple eligible
+iGates, which independently transmitted it on RF. No exclusive gateway
+selection was observed. APRS-IS duplicate handling must therefore not be
+treated as coordination between transmitting iGates.
 
-The learned reverse path solves the RF-path asymmetry for an individual iGate:
-direct, one-relay and two-relay cases are now demonstrated. It does not solve
-gateway coordination when several iGates cover the same destination. That is a
-separate network-level problem and remains to be characterized or mitigated.
-
-### Restoration after testing
-
-All three devices were returned to their normal EU configuration after the
-isolated tests. The following beacon confirmed F4MLV-7 transmitting on
-433.775 MHz at 293 bit/s, repetition by F4MLV-2, and injection into APRS-IS by
-F4MLV-15:
-
-```text
-F4MLV-7>TRUWV3,F4MLV-2*,WIDE2-1,qAR,F4MLV-15:`w25l"x[/"=C}LoRa APRS Tracker Batt=3.99V ( 79%) 433.775MHz 293bps
-```
+The learned reverse path addresses RF-path asymmetry for an individual iGate
+in the one-relay and two-relay RF cases exercised here. Direct-path derivation
+and third-party frame construction are covered by the host tests. The mechanism
+does not provide gateway coordination when several iGates cover the same
+destination. That separate network-level problem remains to be characterized
+or mitigated.

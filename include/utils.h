@@ -25,6 +25,7 @@
 class ReceivedPacket {
 public:
     String  rxTime;
+    uint32_t receivedAtMillis = 0;
     String  packet;
     int     RSSI;
     float   SNR;

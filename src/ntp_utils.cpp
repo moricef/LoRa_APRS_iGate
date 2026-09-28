@@ -61,10 +61,10 @@ namespace NTP_Utils {
     }
 
     String getFormatedTime() {
-        if (networkManager->isConnected() && Config.digi.ecoMode == 0 && timeClient != nullptr) {
+        if (isSynchronized()) {
             return timeClient->getFormattedTime();
         }
-        return "DigiEcoMode Active";
+        return "";
     }
 
 }

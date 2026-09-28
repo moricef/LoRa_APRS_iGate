@@ -182,6 +182,7 @@ namespace WEB_Utils {
 
         for (int i = 0; i < receivedPackets.size(); i++) {
             data[i]["rxTime"]   = receivedPackets[i].rxTime;
+            data[i]["age_ms"]   = static_cast<uint32_t>(millis() - receivedPackets[i].receivedAtMillis);
             data[i]["packet"]   = receivedPackets[i].packet;
             data[i]["RSSI"]     = receivedPackets[i].RSSI;
             data[i]["SNR"]      = receivedPackets[i].SNR;

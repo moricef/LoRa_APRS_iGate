@@ -19,6 +19,38 @@ supposé propre. Si l'accès au réseau est disponible et qu'une comparaison ave
 le dépôt distant est nécessaire, il peut actualiser les références distantes
 avant de conclure sur l'état de synchronisation.
 
+Pour toute analyse de doublons APRS-IS, de paquets rouges sur aprs.fi ou de
+coordination entre iGates, l'agent doit d'abord relire
+`docs/APRS_IS_DUPLICATE_HANDLING_fr.md`. Cette note contient les règles de base
+déjà établies et leurs sources ; elles ne doivent pas être redécouvertes à
+chaque reprise de contexte.
+
+Pour toute question ou opération concernant un équipement, un site, une
+adresse réseau, un rôle radio ou un firmware déployé, l'agent doit d'abord lire
+`docs/DEPLOYMENTS_fr.md`. Il doit distinguer les adresses de gestion, les
+endpoints locaux d'intégration et les identités APRS. Il ne doit jamais
+compléter un champ inconnu par analogie avec un autre équipement. Après un
+flash ou une modification réseau confirmée, il doit mettre cet inventaire à
+jour.
+
+## Respect du périmètre demandé
+
+Quand l'utilisateur fournit un texte à lire ou à analyser, l'agent doit se
+limiter à cette lecture ou à cette analyse. Il ne doit pas rédiger spontanément
+une réponse, un message, un commentaire, une issue ou une publication, ni
+proposer un texte prêt à envoyer, sauf demande explicite de l'utilisateur.
+
+L'analyse, la rédaction d'une réponse et sa publication sont trois tâches
+distinctes. L'autorisation donnée pour l'une ne vaut pas autorisation pour les
+autres. L'agent ne doit pas ajouter une étape simplement pour donner une
+impression d'achèvement ou d'exhaustivité.
+
+Dans un rapport de test, chaque élément conservé doit contribuer directement à
+l'objectif du test ou borner explicitement la conclusion. Les opérations de
+remise en état, les essais exploratoires remplacés par des essais concluants et
+les observations sans valeur probante doivent être exclus. Toute conclusion
+doit rester strictement limitée à ce que les observations démontrent.
+
 ## Fichiers TODO et de reprise
 
 Quand l'utilisateur demande de créer un TODO, un plan de reprise ou un document

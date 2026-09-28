@@ -622,17 +622,19 @@ function loadReceivedPackets(packets) {
 
         container.innerHTML = '';
 
-        const date = new Date();
-
         packets.forEach((packet) => {
             const element = document.createElement("tr");
+            const displayedTime = formatPacketTime(packet);
 
             element.innerHTML = `
-                        <td>${packet.rxTime}</td>
+                        <td>${displayedTime.text}</td>
                         <td>${packet.packet}</td>
                         <td>${packet.RSSI}</td>
                         <td>${packet.SNR}</td>
                     `;
+            if (displayedTime.estimated) {
+                element.cells[0].title = "Estimated from this browser clock; the digipeater has no synchronized time";
+            }
 
             container.appendChild(element);
         })
@@ -676,6 +678,27 @@ function appendRxtCell(row, value, className, rowSpan) {
     if (className) cell.className = className;
     if (rowSpan > 1) cell.rowSpan = rowSpan;
     row.appendChild(cell);
+    return cell;
+}
+
+function formatPacketTime(entry) {
+    const rawTime = typeof entry.rx_time === "string" ? entry.rx_time : entry.rxTime;
+    const synchronizedTime = typeof rawTime === "string" ? rawTime.trim() : "";
+    if (/^\d{2}:\d{2}:\d{2}$/.test(synchronizedTime)) {
+        return { text: synchronizedTime, estimated: false };
+    }
+
+    const ageMs = Number(entry.age_ms);
+    if (!Number.isFinite(ageMs) || ageMs < 0) {
+        return { text: "—", estimated: false };
+    }
+
+    const receivedAt = new Date(Date.now() - ageMs);
+    const pad = (value) => String(value).padStart(2, "0");
+    return {
+        text: `${pad(receivedAt.getHours())}:${pad(receivedAt.getMinutes())}:${pad(receivedAt.getSeconds())}`,
+        estimated: true
+    };
 }
 
 function loadRxtDashboard(entries) {
@@ -720,7 +743,11 @@ function loadRxtDashboard(entries) {
             const row = document.createElement("tr");
 
             if (hopIndex === 0) {
-                appendRxtCell(row, entry.rx_time || "", "rxt-time", rows.length);
+                const displayedTime = formatPacketTime(entry);
+                const timeCell = appendRxtCell(row, displayedTime.text, "rxt-time", rows.length);
+                if (displayedTime.estimated) {
+                    timeCell.title = "Estimated from this browser clock; the digipeater has no synchronized time";
+                }
                 appendRxtCell(row, packet, "rxt-frame", rows.length);
             }
 
@@ -801,6 +828,7 @@ function loadAprsTelemetry(stations) {
     empty.classList.add("d-none");
 
     stations.slice().sort((left, right) => Number(left.age_ms) - Number(right.age_ms)).forEach((station) => {
+        const displayedTime = formatPacketTime(station);
         const card = document.createElement("article");
         card.className = "aprs-telemetry-card";
 
@@ -812,11 +840,14 @@ function loadAprsTelemetry(stations) {
         meta.className = "aprs-telemetry-meta";
         meta.textContent = [
             station.project || "",
-            station.rx_time || "",
+            displayedTime.text,
             telemetryAge(station.age_ms),
             `seq ${station.sequence ?? "—"}`,
             station.format || ""
         ].filter(Boolean).join(" · ");
+        if (displayedTime.estimated) {
+            meta.title = "Time estimated from this browser clock; the digipeater has no synchronized time";
+        }
         head.append(title, meta);
         card.appendChild(head);
 

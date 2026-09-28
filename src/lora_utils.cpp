@@ -714,6 +714,7 @@ namespace LoRa_Utils {
                                     }
                                     ReceivedPacket receivedPacket;
                                     receivedPacket.rxTime   = NTP_Utils::getFormatedTime();
+                                    receivedPacket.receivedAtMillis = millis();
                                     receivedPacket.packet   = sanitizeForWeb(cleanPacket);
                                     receivedPacket.RSSI     = rssi;
                                     receivedPacket.SNR      = snr;
