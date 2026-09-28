@@ -2,7 +2,7 @@
 title: "APRS-IS Consolidated Technical Reference"
 subtitle: "Architecture, client access, server processing, filtering, and IGate operation"
 author: "Independent documentation compilation"
-date: "2026-09-28 — complete-source draft 0.2"
+date: "2026-09-28 — editorial review draft 0.3"
 lang: en
 papersize: a4
 geometry: margin=22mm
@@ -73,12 +73,16 @@ low-level IP connections to servers and exchange APRS packets as delimited
 TNC2 monitor-format lines. Servers distribute accepted, non-duplicate packets
 to other interested clients and servers. [S1][S5]
 
-The network began in the 1990s as Steve Dimse's mechanism for presenting RF
-APRS activity to browser users. The official overview describes an ad-hoc
-network organized around a central server core and records historical growth
-to more than 500 servers and 20,000 users. It also describes three or four
-core servers sharing the United States connection load. Those quantities are
-historical descriptive text, not fixed protocol requirements. [S1]
+The network began in the 1990s when Steve Dimse, K4HG, created a mechanism for
+presenting RF APRS activity to browser users. The official overview describes
+an ad-hoc network organized around a central server core and records
+historical growth to more than 500 servers and 20,000 users. It also describes
+three or four core servers sharing the United States connection load. This is
+a dated, US-centered description of the network's development, not a current
+topology or a protocol requirement. The APRS-IS front page describes the
+operational service more broadly: it interconnects APRS radio networks
+throughout the world and space and is operated by volunteer amateur-radio
+operators for worldwide use. [S1][S11]
 
 The network connects several different roles:
 
@@ -148,9 +152,11 @@ TCP streams use CR/LF line termination. A complete line, including CR/LF, may
 not exceed 512 bytes. Lines beginning with `#` are server comments or control
 responses rather than APRS packets. [S2]
 
-The older AEA monitor representation can be accepted by a server, but should
-be converted to TNC2 before redistribution. Non-standard or mangled headers
-must be repaired or rejected. [S5]
+The older AEA monitor representation is retained only as legacy input
+compatibility. A server that accepts it converts it to TNC2 before
+redistribution. New clients should originate TNC2. The compatibility details
+are collected in Appendix A. Non-standard or mangled headers must otherwise be
+repaired or rejected. [S1][S5][S12]
 
 ## Callsigns and SSIDs on APRS-IS
 
@@ -160,12 +166,17 @@ alphanumeric SSID. The full callsign and SSID may not exceed nine characters.
 An explicit `-0` is not used because an omitted SSID already represents zero.
 [S2][S5]
 
-These Internet representation rules are wider than the AX.25 radio field. A
-station that will be addressed or transmitted on RF should therefore use an
-uppercase callsign and an AX.25-compatible numeric SSID from 0 through 15.
-Some radios will not respond to non-AX.25 SSIDs even when the packet is carried
-inside a third-party frame; the official page specifically identifies some
-Yaesu radios. [S2]
+These Internet representation rules are wider than an AX.25 address field,
+which cannot encode the full range of legal international amateur callsigns,
+including some longer or special-event callsigns. That is a limitation of the
+AX.25 representation, not of the legal station identity. A station that will
+be addressed through an AX.25 RF system should therefore use an uppercase
+callsign and an AX.25-compatible numeric SSID from 0 through 15. Other RF
+transports can define different address representations, but interoperability
+still depends on the formats understood by the gateways and recipient
+equipment. Some radios will not respond to non-AX.25 SSIDs even when the
+packet is carried inside a third-party frame; the official page specifically
+identifies some Yaesu radios. [S2]
 
 Case is not safely interchangeable:
 
@@ -238,15 +249,6 @@ An asterisk marks a used digipeater only before the q or legacy `I` portion of
 the path. If a malformed input places a used marker at or after that boundary,
 the implementation relocates the effective last-used-digipeater boundary to
 the last RF path component. [S12]
-
-### AEA conversion
-
-An AEA line uses `>` separators differently from TNC2. The parser detects AEA
-form when the path contains `>`, separates its elements on `>` and comma, moves
-the destination into the TNC2 destination position, and retains the remaining
-elements as the path. It contains compatibility repairs for historical IGate
-strings in which a q or legacy `I` suffix was appended after the AEA
-destination. The redistributed result is TNC2, not AEA. [S1][S5][S12]
 
 ### Third-party header validation
 
@@ -829,9 +831,10 @@ filter r/33/-97/200 t/n
 filter m/200 -p/CW
 ```
 
-The first adds traffic within 200 km of Dallas and NWS traffic. The second
-adds traffic within 200 km of the logged-in station while excluding source
-prefix `CW`. [S8]
+The first is the source's historical US example: it adds traffic within 200 km
+of the Dallas, Texas, area and packets in the NWS category, meaning US National
+Weather Service-format messages and objects. The second adds traffic within
+200 km of the logged-in station while excluding source prefix `CW`. [S8]
 
 ## Filter forms
 
@@ -963,9 +966,15 @@ capacity than a shared RF channel. [S3]
 
 ## RF to APRS-IS
 
-For AX.25 RF, the source rules require a valid CRC, UI control field `0x03`,
-and no-layer-3 PID `0xF0`. A TNC in `PASSALL` mode cannot provide the required
-validity assurance. [S3][S4]
+The official IGate pages describe conventional packet-radio APRS and express
+their RF validity rules in AX.25 terms. For RF conveyed as AX.25, they require
+a valid CRC, UI control field `0x03`, and no-layer-3 PID `0xF0`. A TNC in
+`PASSALL` mode cannot provide the required validity assurance. These checks
+are specific to that link layer; an APRS system using another RF transport
+must apply the validity rules of that transport while still enforcing the
+APRS-IS formatting, gating, and loop-prevention requirements described below.
+AX.25 is therefore an important legacy and current APRS bearer, but not a
+universal definition of APRS over RF. [S3][S4]
 
 An IGate uploads eligible RF packets except for the following categories:
 
@@ -1212,3 +1221,24 @@ login-state admission behavior.
 |---|---|---|
 | 2026-09-28 | 0.1 draft | Initial English consolidation of the published APRS-IS specification pages. |
 | 2026-09-28 | 0.2 complete-source draft | Added every rule and algorithm branch from the official specification subtree, front-page policy, linked header parser, and complete server port taxonomy. |
+| 2026-09-28 | 0.3 editorial review draft | Identified the historical US-centered network description, clarified worldwide scope and transport-specific AX.25 limits, contextualized the Dallas/NWS example, attributed K4HG, and moved AEA details to a legacy appendix. |
+
+```{=latex}
+\appendix
+```
+
+# Legacy AEA monitor-format compatibility
+
+AEA monitor format is documented for historical interoperability, not as a
+recommended format for new clients. The official specification says it was
+supported because of its prevalence when APRS-IS was established and notes
+that it has caused software issues. New clients should originate TNC2, while
+servers that retain AEA input support normalize accepted lines before
+redistribution. [S1][S5]
+
+An AEA line uses `>` separators differently from TNC2. The published parser
+detects AEA form when the path contains `>`, separates its elements on `>` and
+comma, moves the destination into the TNC2 destination position, and retains
+the remaining elements as the path. It contains compatibility repairs for
+historical IGate strings in which a q or legacy `I` suffix was appended after
+the AEA destination. The redistributed result is TNC2, not AEA. [S1][S5][S12]
