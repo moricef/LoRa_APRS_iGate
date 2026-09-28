@@ -106,8 +106,9 @@ Les résultats et leurs limites sont consignés dans
 - **Accessibilité depuis l'environnement de travail :** non joignable ; cet
   environnement n'est pas connecté au réseau local/AP de F4MLV-10
 - **Site physique :** inconnu dans les informations conservées
-- **Firmware établi :** firmware local comportant les corrections RXT ; il ne
-  contient pas le routage retour testé le 27 septembre
+- **Firmware établi :** même firmware que F4MLV-15 et F4MLV-2, avec
+  apprentissage du routage retour (information communiquée par l'utilisateur
+  le 28 septembre 2026)
 - **Build ou commit exact actuellement installé :** inconnu
 
 ## Réseau public de Jon — N7UV
