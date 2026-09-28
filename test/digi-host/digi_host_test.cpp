@@ -31,7 +31,11 @@ void addToOutputPacketBuffer(const String&, bool, bool) {}
 
 namespace APRS_IS_Utils {
 String checkForStartingBytes(const String& packet) { return packet; }
-bool processReceivedLoRaMessage(const String&, const String&, bool) { return false; }
+String lastResponder;
+bool processReceivedLoRaMessage(const String&, const String&, bool, const String& responder) {
+    lastResponder = responder;
+    return true;
+}
 }
 
 namespace Utils {
@@ -94,7 +98,26 @@ void check(const char* label, int mode, const char* packet,
 }
 }
 
+void checkResponder(const char* label, const char* tactical, const char* packet,
+                    const char* expected) {
+    Config.callsign = "F4MLV-15";
+    Config.tacticalCallsign = tactical;
+    Config.digi.mode = 2;
+    APRS_IS_Utils::lastResponder = "";
+    DIGI_Utils::processLoRaPacket(String(packet));
+    bool ok = APRS_IS_Utils::lastResponder == String(expected);
+    std::printf("%s  responder  %s\n", ok ? "PASS" : "FAIL", label);
+    if (ok) { ++passed; return; }
+    std::printf("        expected : %s\n        got      : %s\n",
+                expected, APRS_IS_Utils::lastResponder.c_str());
+    ++failed;
+}
+
 int main() {
+    checkResponder("message to tactical answered as tactical", "F4MLV-1",
+                   "F4MLV-9>APLRG1::F4MLV-1  :?APRSV{I2", "F4MLV-1");
+    checkResponder("message to callsign without tactical answered as callsign", "",
+                   "F4MLV-9>APLRG1::F4MLV-15 :?APRSV{I1", "F4MLV-15");
     for (int mode : {1, 2, 3}) {
         check("lowercase explicit callsign", mode,
               "F4MLV-7>APLRT1,f4mlv-10,WIDE1-1:>test",

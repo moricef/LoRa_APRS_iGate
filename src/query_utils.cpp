@@ -37,7 +37,8 @@ extern String                           versionNumber;
 
 namespace QUERY_Utils {
 
-    String process(const String& query, const String& station, bool queryFromAPRSIS, bool thirdParty) {
+    String process(const String& query, const String& station, bool queryFromAPRSIS, bool thirdParty,
+                   const String& responder) {
         String answer;
         String effectiveQuery = query;
         bool authenticatedCommand = false;
@@ -181,14 +182,11 @@ namespace QUERY_Utils {
 
         if (answer == "") return "";
 
-        String queryAnswer = (Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign);
-        queryAnswer += ">APLRG1";
+        String queryAnswer;
         if (queryFromAPRSIS) {
-            queryAnswer += ",TCPIP,qAC";
+            queryAnswer = responder + ">APLRG1,TCPIP,qAC";
         } else {
-            queryAnswer = STATION_Utils::localReplyHeader(
-                Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign,
-                station, thirdParty);
+            queryAnswer = STATION_Utils::localReplyHeader(responder, station, thirdParty);
         }
         queryAnswer += "::";
 

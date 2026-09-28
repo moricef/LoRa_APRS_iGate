@@ -167,7 +167,8 @@ namespace APRS_IS_Utils {
         localMessages.beginReception();
     }
 
-    bool processReceivedLoRaMessage(const String& sender, const String& packet, bool thirdParty) {
+    bool processReceivedLoRaMessage(const String& sender, const String& packet, bool thirdParty,
+                                    const String& responder) {
         int leftCurlyBraceIndex = packet.indexOf("{");
         int colonIndex          = packet.indexOf(":");
         const String receivedMessage = leftCurlyBraceIndex > 0
@@ -186,7 +187,7 @@ namespace APRS_IS_Utils {
                 std::string(messageNumber.c_str(), messageNumber.length()));
 
             if (sender.length() >= 1 && sender.length() <= 9 && !ack.empty()) {
-                String addToBuffer = STATION_Utils::localReplyHeader(Config.callsign, sender, thirdParty);
+                String addToBuffer = STATION_Utils::localReplyHeader(responder, sender, thirdParty);
                 addToBuffer += "::";
 
                 String processedSender = sender;
@@ -206,7 +207,7 @@ namespace APRS_IS_Utils {
             if (!Config.display.alwaysOn && Config.display.timeout != 0) {
                 displayToggle(true);
             }
-            STATION_Utils::addToOutputPacketBuffer(QUERY_Utils::process(receivedMessage, sender, false, thirdParty));
+            STATION_Utils::addToOutputPacketBuffer(QUERY_Utils::process(receivedMessage, sender, false, thirdParty, responder));
             lastScreenOn = millis();
             displayShow(firstLine, secondLine, thirdLine, fourthLine, fifthLine, "Callsign = " + sender, "TYPE --> QUERY", 0);
             return true;
@@ -230,7 +231,8 @@ namespace APRS_IS_Utils {
                         Addressee.trim();
                         bool queryMessage = false;
                         if (doubleColonIndex > 10 && Addressee == Config.callsign) {      // its a message for me!
-                            queryMessage = processReceivedLoRaMessage(Sender, checkForStartingBytes(AddresseeAndMessage), false);
+                            queryMessage = processReceivedLoRaMessage(Sender, checkForStartingBytes(AddresseeAndMessage), false,
+                                                                  Config.callsign);
                         }
                         if (queryMessage) return;
 
@@ -374,7 +376,7 @@ namespace APRS_IS_Utils {
                         }
                         if (receivedMessage.indexOf("?") == 0 || receivedMessage.startsWith("!RC1:")) {
                             Utils::println("Rx Query (APRS-IS)  : " + packet);
-                            String queryAnswer = QUERY_Utils::process(receivedMessage, Sender, true, false);
+                            String queryAnswer = QUERY_Utils::process(receivedMessage, Sender, true, false, Config.callsign);
                             if (!Config.display.alwaysOn && Config.display.timeout != 0) {
                                 displayToggle(true);
                             }

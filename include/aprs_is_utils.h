@@ -32,7 +32,10 @@ namespace APRS_IS_Utils {
 
     String  buildPacketToUpload(const String& packet);
     void    beginLoRaReception();
-    bool    processReceivedLoRaMessage(const String& sender, const String& packet, bool thirdParty);
+    // responder is the local identity the message was addressed to; ACKs and
+    // query answers are sent from it.
+    bool    processReceivedLoRaMessage(const String& sender, const String& packet, bool thirdParty,
+                                       const String& responder);
     void    processLoRaPacket(const String& packet);
 
     String  buildPacketToTx(const String& aprsisPacket, uint8_t packetType);

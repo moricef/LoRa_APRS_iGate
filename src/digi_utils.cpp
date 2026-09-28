@@ -365,7 +365,8 @@ namespace DIGI_Utils {
             String Addressee                      = AddresseeAndMessage.substring(0, AddresseeAndMessage.indexOf(":"));
             Addressee.trim();
             if (Addressee == stationCallsign) {     // it's a message for me!
-                queryMessage = APRS_IS_Utils::processReceivedLoRaMessage(Sender, AddresseeAndMessage, thirdPartyPacket);
+                queryMessage = APRS_IS_Utils::processReceivedLoRaMessage(Sender, AddresseeAndMessage, thirdPartyPacket,
+                                                                          stationCallsign);
             }
         }
         if (queryMessage) { TELEMETRY_Utils::incDrop(); return; }                  // answer should not be repeated.

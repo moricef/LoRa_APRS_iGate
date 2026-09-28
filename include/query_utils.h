@@ -24,7 +24,9 @@
 
 namespace QUERY_Utils {
 
-    String process(const String& query, const String& station, bool queryFromAPRSIS, bool thirdParty);
+    // responder is the local identity the query was addressed to.
+    String process(const String& query, const String& station, bool queryFromAPRSIS, bool thirdParty,
+                   const String& responder);
 
 }
 
