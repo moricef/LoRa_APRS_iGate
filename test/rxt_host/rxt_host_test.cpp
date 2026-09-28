@@ -38,6 +38,29 @@ void expectNear(const std::string& name, float actual, float expected) {
 }
 
 int main() {
+    expectBool("255 bytes including LoRa prefix fit", RXT_Protocol::fitsLoRaPayload(252), true);
+    expectBool("256 bytes including LoRa prefix refused", RXT_Protocol::fitsLoRaPayload(253), false);
+    const std::string base = "SRC>DST:>";
+    const std::string fitsFirst = base + std::string(246 - base.size(), 'x');
+    expectEqual("first tuple exactly fills payload",
+                RXT_Protocol::attachTrailerWithinLimit(fitsFirst, "ABCD"), fitsFirst + "{ABCD}");
+    expectEqual("first tuple one byte too long falls back",
+                RXT_Protocol::attachTrailerWithinLimit(fitsFirst + "x", "ABCD"), fitsFirst + "x");
+    const std::string full = base + std::string(252 - base.size(), 'x');
+    expectEqual("full original preserved without RXT",
+                RXT_Protocol::attachTrailerWithinLimit(full, "ABCD"), full);
+    expectEqual("oversize original never truncated",
+                RXT_Protocol::attachTrailerWithinLimit(full + "x", "ABCD"), full + "x");
+    const std::string oneTuple = base + std::string(242 - base.size(), 'x') + "{ABCD}";
+    expectEqual("second tuple exactly fills payload",
+                RXT_Protocol::attachTrailerWithinLimit(oneTuple, "EFGH"),
+                oneTuple.substr(0, oneTuple.size() - 1) + "EFGH}");
+    expectEqual("fallback retains existing tuple",
+                RXT_Protocol::attachTrailerWithinLimit("x" + oneTuple, "EFGH"), "x" + oneTuple);
+    const std::string threeTuples = "SRC>DST:>test{ABCDEFGHIJKL}";
+    expectEqual("full tuple chain unchanged",
+                RXT_Protocol::attachTrailerWithinLimit(threeTuples, "MNOP"), threeTuples);
+
     const uint8_t ordinaryText[] = {'A', 'P', 'R', 'S', ' ', '"', '\\'};
     expectBool("safe ASCII JSON text",
                APRS_JSON_Text::isSafeUtf8(ordinaryText, sizeof(ordinaryText)), true);

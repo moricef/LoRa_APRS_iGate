@@ -39,9 +39,12 @@ uint16_t    telemetryCounter    = 0;
 uint32_t    telemetryEUPTime    = 0;
 bool        sendEUP             = false;    // Equations Units Parameters
 
-static uint32_t rxCount             = 0;    // frames heard (valid LoRa APRS) since last telemetry
-static uint32_t relayCount          = 0;    // frames digipeated since last telemetry
-static uint32_t dropCount           = 0;    // frames rejected by the digi (DUP, PATH, BLACK, self, NOGATE, etc.) since last telemetry
+// Independent activity counters, not RX = Relay + Drop (see docs/RXT.md).
+// Receiver blacklist rejections count as drops but never as accepted RX;
+// accepted RX without an active digi does not imply either a relay or a drop.
+static uint32_t rxCount             = 0;    // receiver-accepted frames after blacklist filtering
+static uint32_t relayCount          = 0;    // frames queued by the digi, not confirmed RF transmissions
+static uint32_t dropCount           = 0;    // blacklist rejections and frames not relayed by the digi (including local queries)
 static uint32_t telemetryWindowStart = 0;   // millis() at the previous encoded telemetry report
 static constexpr uint32_t telemetryMetadataInterval = 6UL * 60UL * 60UL * 1000UL;
 static constexpr uint16_t telemetrySequenceModulus = 8281;

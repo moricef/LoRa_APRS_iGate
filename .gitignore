@@ -13,6 +13,7 @@ installer/*.bin
 /test/digi-host/run
 /test/packet_dedup_host/packet_dedup_test
 /test/return_route_host/return_route_test
+/test/rxt_host/rxt_host_test
 
 # Local captures, logs and device configuration backups
 /logs/

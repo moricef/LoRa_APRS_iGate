@@ -166,6 +166,29 @@ namespace STATION_Utils {
         return false;
     }
 
+    void observeReturnPath(const String& packet) {
+        const int gt = packet.indexOf('>');
+        const int colon = packet.indexOf(':');
+        if (gt <= 0 || colon <= gt + 1 || colon + 1 >= static_cast<int>(packet.length())) return;
+        // The outer RF path of an Internet third-party message does not
+        // describe a route to its inner sender.
+        if (packet[colon + 1] == '}') return;
+        const String header = packet.substring(0, colon);
+        if (header.indexOf("TCPIP") != -1 || header.indexOf("TCPXX") != -1) return;
+        const String sender = packet.substring(0, gt);
+        if (sender == Config.callsign || sender == Config.tacticalCallsign ||
+            !Utils::callsignIsValid(sender)) return;
+        updateLastHeard(sender);
+        const int comma = packet.indexOf(',', gt + 1);
+        const String aprsDestination = packet.substring(gt + 1,
+            comma != -1 && comma < colon ? comma : colon);
+        // First RF copy wins, independently of upload and relay decisions.
+        if (claimPacketDestination(sender, packet.substring(colon + 1),
+                                   DEDUP_RETURN_ROUTE, aprsDestination)) {
+            learnReturnPath(sender, packet);
+        }
+    }
+
     void learnReturnPath(const String& station, const String& packet) {
         std::vector<std::string> aliases;
         aliases.emplace_back("WIDE");
@@ -223,8 +246,20 @@ namespace STATION_Utils {
         return false;
     }
 
+    String localReplyHeader(const String& source, const String& recipient, bool thirdParty) {
+        String path;
+        APRS_RETURN_ROUTE::Result route;
+        // Internet senders need the existing gateway-return behavior; do not
+        // substitute a possibly stale RF route to the encapsulated sender.
+        route.valid = !thirdParty && getReturnPath(recipient, path);
+        route.path = path.c_str();
+        const std::string header = APRS_RETURN_ROUTE::buildLocalReplyHeader(
+            source.c_str(), route, Config.beacon.path.c_str(), !thirdParty);
+        return String(header.c_str());
+    }
+
     bool claimPacketDestination(const String& station, const String& information,
-                                uint8_t destination) {
+                                uint8_t destination, const String& aprsDestination) {
         String baseStation = station;
         int gtIdx = baseStation.indexOf('>');
         if (gtIdx != -1) {
@@ -233,7 +268,8 @@ namespace STATION_Utils {
         baseStation.trim();
         const std::string source(baseStation.c_str(), baseStation.length());
         const std::string payload(information.c_str(), information.length());
-        return packetDedupCache.claim(source, payload, destination, millis());
+        return packetDedupCache.claim(source, payload, destination, millis(),
+            std::string(aprsDestination.c_str(), aprsDestination.length()));
     }
 
     void processOutputPacketBufferUltraEcoMode() {

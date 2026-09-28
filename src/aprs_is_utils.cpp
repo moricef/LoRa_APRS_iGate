@@ -30,6 +30,8 @@
 #include "tnc_utils.h"
 #include "lora_utils.h"
 #include "aprs_return_route.h"
+#include "aprs_message_number.h"
+#include "local_message_gate.h"
 #include "aprs_telemetry_rx.h"
 #include "aprs_telemetry_persistence.h"
 #include "display.h"
@@ -159,49 +161,48 @@ namespace APRS_IS_Utils {
         return LoRa_Utils::stripRxtTrailer(packetToUpload);
     }
 
+    static LocalMessageGate localMessages;
+
+    void beginLoRaReception() {
+        localMessages.beginReception();
+    }
+
     bool processReceivedLoRaMessage(const String& sender, const String& packet, bool thirdParty) {
-        String receivedMessage;
         int leftCurlyBraceIndex = packet.indexOf("{");
         int colonIndex          = packet.indexOf(":");
-        if (leftCurlyBraceIndex > 0) {     // ack?
+        const String receivedMessage = leftCurlyBraceIndex > 0
+            ? packet.substring(colonIndex + 1, leftCurlyBraceIndex)
+            : packet.substring(colonIndex + 1);
+        const bool isQuery = receivedMessage.startsWith("?") || receivedMessage.startsWith("!RC1:");
+        const auto decision = localMessages.claim(
+            std::string(sender.c_str(), sender.length()),
+            std::string(packet.c_str(), packet.length()), isQuery, millis());
+
+        if (decision.acknowledge && leftCurlyBraceIndex > 0) {     // ack?
             String messageNumber = packet.substring(leftCurlyBraceIndex + 1);
             messageNumber.trim();
 
-            // APRS message addressees are exactly nine characters wide and a
-            // message number contains one to five alphanumeric characters.
-            // Refuse to manufacture an invalid ACK from malformed input.
-            bool validMessageNumber = messageNumber.length() >= 1 && messageNumber.length() <= 5;
-            for (size_t i = 0; i < messageNumber.length() && validMessageNumber; i++) {
-                const char c = messageNumber[i];
-                validMessageNumber = (c >= '0' && c <= '9') ||
-                                     (c >= 'A' && c <= 'Z') ||
-                                     (c >= 'a' && c <= 'z');
-            }
+            const std::string ack = APRS_MESSAGE::ackText(
+                std::string(messageNumber.c_str(), messageNumber.length()));
 
-            if (sender.length() >= 1 && sender.length() <= 9 && validMessageNumber) {
-                String addToBuffer = Config.callsign;
-                addToBuffer += ">APLRG1";
-                if (!thirdParty) addToBuffer += ",RFONLY";
-                if (Config.beacon.path != "") {
-                    addToBuffer += ",";
-                    addToBuffer += Config.beacon.path;
-                }
+            if (sender.length() >= 1 && sender.length() <= 9 && !ack.empty()) {
+                String addToBuffer = STATION_Utils::localReplyHeader(Config.callsign, sender, thirdParty);
                 addToBuffer += "::";
 
                 String processedSender = sender;
                 while (processedSender.length() < 9) processedSender += ' ';
                 addToBuffer += processedSender;
-                addToBuffer += ":ack";
-                addToBuffer += messageNumber;
+                addToBuffer += ":";
+                addToBuffer += ack.c_str();
                 STATION_Utils::addToOutputPacketBuffer(addToBuffer);
             } else {
                 Serial.println("APRS message ACK suppressed: invalid sender or message number");
             }
-            receivedMessage = packet.substring(colonIndex + 1, leftCurlyBraceIndex);
-        } else {
-            receivedMessage = packet.substring(colonIndex + 1);
         }
-        if (receivedMessage.indexOf("?") == 0 || receivedMessage.startsWith("!RC1:")) {
+        if (isQuery) {
+            // A duplicate query is still consumed locally; it must not fall
+            // through into APRS-IS upload or RF relay handling.
+            if (!decision.executeQuery) return true;
             if (!Config.display.alwaysOn && Config.display.timeout != 0) {
                 displayToggle(true);
             }
@@ -222,16 +223,6 @@ namespace APRS_IS_Utils {
                 if (firstColonIndex > 5 && firstColonIndex < (packet.length() - 1) && packet[firstColonIndex + 1] != '}' && packet.indexOf("TCPIP") == -1) {
                     const String& Sender = packet.substring(0, packet.indexOf(">"));
                     if (Sender != Config.callsign && Utils::callsignIsValid(Sender)) {
-                        STATION_Utils::updateLastHeard(Sender);
-                        const String& information = packet.substring(firstColonIndex + 1);
-                        // The route destination bit makes this a first-copy-
-                        // wins decision independent of APRS-IS upload and digi
-                        // processing. Later RF copies may refresh last-heard
-                        // time but cannot replace the selected return path.
-                        if (STATION_Utils::claimPacketDestination(
-                                Sender, information, STATION_Utils::DEDUP_RETURN_ROUTE)) {
-                            STATION_Utils::learnReturnPath(Sender, packet);
-                        }
                         Utils::typeOfPacket(packet, 0);  // LoRa-APRS
                         int doubleColonIndex = packet.indexOf("::");
                         const String& AddresseeAndMessage = packet.substring(doubleColonIndex + 2);

@@ -186,11 +186,9 @@ namespace QUERY_Utils {
         if (queryFromAPRSIS) {
             queryAnswer += ",TCPIP,qAC";
         } else {
-            if (!thirdParty) queryAnswer += ",RFONLY";
-            if (Config.beacon.path != "") {
-                queryAnswer += ",";
-                queryAnswer += Config.beacon.path;
-            }
+            queryAnswer = STATION_Utils::localReplyHeader(
+                Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign,
+                station, thirdParty);
         }
         queryAnswer += "::";
 

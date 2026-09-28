@@ -19,18 +19,21 @@ struct Entry {
     uint8_t destinations;
 };
 
-uint64_t fingerprint(const std::string& source, const std::string& information);
+uint64_t fingerprint(const std::string& source, const std::string& information,
+                     const std::string& aprsDestination = "");
 
 class Cache {
 public:
     explicit Cache(uint32_t windowMs = DEFAULT_WINDOW_MS,
                    size_t maxEntries = DEFAULT_MAX_ENTRIES);
 
-    // Returns true only when this source+information pair has not yet been
+    // Mic-E also includes aprsDestination, which carries position data.
+    // Returns true only when this packet identity has not yet been
     // claimed for the requested destination during the active time window.
     // The destination bit is set before the function returns.
     bool claim(const std::string& source, const std::string& information,
-               uint8_t destination, uint32_t nowMs);
+               uint8_t destination, uint32_t nowMs,
+               const std::string& aprsDestination = "");
 
     size_t size() const { return entries_.size(); }
 

@@ -51,9 +51,11 @@ namespace STATION_Utils {
     void updateLastHeard(const String& station);
     bool wasHeard(const String& station);
     void learnReturnPath(const String& station, const String& packet);
+    void observeReturnPath(const String& packet);
     bool getReturnPath(const String& station, String& path);
+    String localReplyHeader(const String& source, const String& recipient, bool thirdParty);
     bool claimPacketDestination(const String& station, const String& information,
-                                uint8_t destination);
+                                uint8_t destination, const String& aprsDestination);
     void processOutputPacketBufferUltraEcoMode();
     void processOutputPacketBuffer();
     // eligibleForRxt defaults to false: RXT must only ever be attached to a

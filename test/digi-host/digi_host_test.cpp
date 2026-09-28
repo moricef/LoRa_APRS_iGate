@@ -5,6 +5,11 @@
 #include <cstdint>
 #include <cstdio>
 
+namespace DIGI_Utils {
+// Internal builder exposed only to this harness to test its cross-frequency guard.
+String buildPacket(const String& path, const String& packet, bool thirdParty, bool crossFreq);
+}
+
 Configuration Config;
 bool backupDigiMode = false;
 uint32_t lastScreenOn = 0;
@@ -20,7 +25,7 @@ String seventhLine;
 namespace STATION_Utils {
 bool isIn25SegHashBuffer(const String&, const String&) { return false; }
 void updateLastHeard(const String&) {}
-bool claimPacketDestination(const String&, const String&, uint8_t) { return true; }
+bool claimPacketDestination(const String&, const String&, uint8_t, const String&) { return true; }
 void addToOutputPacketBuffer(const String&, bool, bool) {}
 }
 
@@ -57,11 +62,12 @@ struct Options {
     const char* regionalAliases = "WIDE";
     int regionalMaxHops = 2;
     bool thirdParty = false;
+    const char* callsign = "F4MLV-10";
 };
 
 void check(const char* label, int mode, const char* packet,
            const char* expected, Options options = Options()) {
-    Config.callsign = "F4MLV-10";
+    Config.callsign = options.callsign;
     Config.tacticalCallsign = "";
     Config.digi.mode = mode;
     Config.digi.regionalAliases = options.regionalAliases;
@@ -89,6 +95,28 @@ void check(const char* label, int mode, const char* packet,
 }
 
 int main() {
+    for (int mode : {1, 2, 3}) {
+        check("lowercase explicit callsign", mode,
+              "F4MLV-7>APLRT1,f4mlv-10,WIDE1-1:>test",
+              "F4MLV-7>APLRT1,f4mlv-10*,WIDE1-1:>test");
+        check("mixed-case callsign after previous hop", mode,
+              "F4MLV-7>APLRT1,RELAY1*,f4MLv-10:>test",
+              "F4MLV-7>APLRT1,RELAY1,f4MLv-10*:>test");
+        check("lowercase already starred refuses loop", mode,
+              "F4MLV-7>APLRT1,f4mlv-10*,WIDE1-1:>test", NONE);
+        check("lowercase implicitly used refuses loop", mode,
+              "F4MLV-7>APLRT1,f4mlv-10,RELAY1*,WIDE1-1:>test", NONE);
+        check("duplicate identity with different case refused", mode,
+              "F4MLV-7>APLRT1,F4MLV-10,f4mlv-10,WIDE1-1:>test", NONE);
+        check("lowercase own hop cannot bypass previous unused relay", mode,
+              "F4MLV-7>APLRT1,RELAY1,f4mlv-10,WIDE1-1:>test", NONE);
+    }
+    check("local reply first explicit hop before RFONLY", 2,
+          "F4MLV-15>APLRG1,F4MLV-10,F4MLV-2,RFONLY::F4MLV-7  :ack01",
+          "F4MLV-15>APLRG1,F4MLV-10*,F4MLV-2,RFONLY::F4MLV-7  :ack01");
+    check("local reply second explicit hop before RFONLY", 2,
+          "F4MLV-15>APLRG1,F4MLV-2*,F4MLV-10,RFONLY::F4MLV-7  :ack01",
+          "F4MLV-15>APLRG1,F4MLV-2,F4MLV-10*,RFONLY::F4MLV-7  :ack01");
     std::printf("digi_utils.cpp - digipeated path output\n\n");
 
     std::printf("-- mode 1 : WIDE1-1 fill-in --\n");
@@ -203,6 +231,25 @@ int main() {
           "F4MLV-7>APLRT1,F6DEV-10*:=/8gk=NmQF[LWQ",
           "F4MLV-7>APLRT1,F6DEV-10,F4MLV-10*:=/8gk=NmQF[LWQ",
           crossFrequency);
+
+    crossFrequency.callsign = "F4MLV-1";
+    check("cross-freq similar callsign is not own identity", 1,
+          "SRC>APLRT1,F4MLV-10*:>test",
+          "SRC>APLRT1,F4MLV-10,F4MLV-1*:>test", crossFrequency);
+    check("cross-freq similar source is not a path element", 1,
+          "F4MLV-10>APLRT1:>test",
+          "F4MLV-10>APLRT1,F4MLV-1*:>test", crossFrequency);
+    check("cross-freq lowercase used identity refused", 1,
+          "SRC>APLRT1,f4mlv-1*:>test", NONE, crossFrequency);
+
+    // Exercise the cross-frequency guard directly: the public entry point
+    // normally routes explicit own hops through processMode3Path instead.
+    for (const char* path : {"F4MLV-1*", "f4mlv-1*", "RELAY*,f4MLv-1"}) {
+        const String packet = String("SRC>APLRT1,") + path + ":>test";
+        const bool ok = DIGI_Utils::buildPacket(path, packet, false, true).length() == 0;
+        std::printf("%s  cross-freq own identity guard: %s\n", ok ? "PASS" : "FAIL", path);
+        if (ok) ++passed; else ++failed;
+    }
 
     std::printf("\n%d passed, %d failed\n", passed, failed);
     return failed == 0 ? 0 : 1;

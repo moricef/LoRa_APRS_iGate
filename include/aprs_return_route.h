@@ -17,6 +17,13 @@ Result derive(const std::string& packet, const std::string& ownCallsign,
               const std::string& ownDigiCallsign,
               const std::vector<std::string>& regionalAliases);
 
+// A known empty route is DIRECT, not a reason to use the fallback path.
+// RFONLY follows explicit relays so it cannot obstruct the next hop.
+std::string buildLocalReplyHeader(const std::string& source,
+                                 const Result& route,
+                                 const std::string& fallbackPath,
+                                 bool rfOnly);
+
 // Wrap an APRS-IS message in a third-party RF frame using an explicit learned
 // path. Returns an empty string when the input is not a valid APRS message.
 std::string buildThirdPartyMessage(const std::string& iGateCallsign,

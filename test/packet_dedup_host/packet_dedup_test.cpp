@@ -1,4 +1,5 @@
 #include "packet_dedup.h"
+#include "local_message_gate.h"
 
 #include <cstdint>
 #include <iostream>
@@ -24,6 +25,93 @@ void expectDifferent(const std::string& name, uint64_t left, uint64_t right) {
 } // namespace
 
 int main() {
+    for (char dti : {'`', '\'', '\x1c', '\x1d'}) {
+        PACKET_DEDUP::Cache micE;
+        const std::string information = std::string(1, dti) + "abcdef>/";
+        for (uint8_t consumer : {PACKET_DEDUP::DIGI, PACKET_DEDUP::RETURN_ROUTE}) {
+            expect("Mic-E first latitude", micE.claim("SRC", information, consumer, 0, "490350"), true);
+            expect("Mic-E different latitude", micE.claim("SRC", information, consumer, 1, "490351"), true);
+            expect("Mic-E repeat same latitude", micE.claim("SRC", information, consumer, 2, "490350"), false);
+            expect("Mic-E repeat with RXT", micE.claim("SRC", information + "{ABCD}", consumer, 3, "490351"), false);
+        }
+    }
+    PACKET_DEDUP::Cache nonMicE;
+    expect("non-Mic-E initial", nonMicE.claim("SRC", ">status", PACKET_DEDUP::DIGI, 0, "APLRG1"), true);
+    expect("non-Mic-E behaviour unchanged", nonMicE.claim("SRC", ">status", PACKET_DEDUP::DIGI, 1, "APTEST"), false);
+    for (const std::string number : {"1", "12345", "aB9", "MM}AA", "MM}", "1}2"}) {
+        expect("valid ACK " + number,
+               APRS_MESSAGE::ackText(number) == "ack" + number, true);
+    }
+    for (const std::string number : {"", "123456", "}AA", "MM}}", "MM}AAA",
+                                     "MMM}A", "MM}A!", "A B", "A\nB", "A{B"}) {
+        expect("invalid ACK " + number, APRS_MESSAGE::ackText(number).empty(), true);
+    }
+    LocalMessageGate replyAck;
+    replyAck.beginReception();
+    expect("reply-ack query executes",
+           replyAck.claim("SRC", "TARGET   :?APRSV{MM}AA", true, 0).executeQuery, true);
+    replyAck.beginReception();
+    auto retry = replyAck.claim("SRC", "TARGET   :?APRSV{MM}BB", true, 1);
+    expect("changed piggyback ACK does not execute again", retry.executeQuery, false);
+    expect("changed piggyback ACK still acknowledged", retry.acknowledge, true);
+    replyAck.beginReception();
+    expect("empty piggyback ACK remains same query",
+           replyAck.claim("SRC", "TARGET   :?APRSV{MM}", true, 2).executeQuery, false);
+    replyAck.beginReception();
+    expect("new reply-ack number executes",
+           replyAck.claim("SRC", "TARGET   :?APRSV{MN}AA", true, 3).executeQuery, true);
+
+    LocalMessageGate local;
+    const std::string query = "F4MLV-15 :?TX=?{01";
+    local.beginReception();
+    auto decision = local.claim("F4MLV-7", query, true, 1000);
+    expect("local query first consumer ACK", decision.acknowledge, true);
+    expect("local query first consumer executes", decision.executeQuery, true);
+    decision = local.claim("F4MLV-7", query, true, 1001);
+    expect("same reception second consumer no ACK", decision.acknowledge, false);
+    expect("same reception second consumer no execution", decision.executeQuery, false);
+
+    local.beginReception();
+    decision = local.claim("F4MLV-7", query, true, 2000);
+    expect("RF retry can recover lost ACK", decision.acknowledge, true);
+    expect("RF copy or retry does not execute twice", decision.executeQuery, false);
+
+    local.beginReception();
+    decision = local.claim("F4MLV-7", "F4MLV-15 :?TX=?{02", true, 2001);
+    expect("new message number executes", decision.executeQuery, true);
+    local.beginReception();
+    decision = local.claim("F4MLV-8", query, true, 2002);
+    expect("another sender executes", decision.executeQuery, true);
+    local.beginReception();
+    decision = local.claim("F4MLV-7", "F4MLV-15 :?APRSV{01", true, 2003);
+    expect("different question executes", decision.executeQuery, true);
+
+    local.beginReception();
+    decision = local.claim("F4MLV-7", query, true, 26000);
+    expect("query suppressed at window boundary", decision.executeQuery, false);
+    local.beginReception();
+    decision = local.claim("F4MLV-7", query, true, 26001);
+    expect("query executes again after window", decision.executeQuery, true);
+
+    LocalMessageGate digiOnly;
+    digiOnly.beginReception();
+    expect("digi-only unnumbered query executes",
+           digiOnly.claim("SRC", "TARGET   :?APRSV", true, 0).executeQuery, true);
+    digiOnly.beginReception();
+    expect("digi-only unnumbered RF copy suppressed",
+           digiOnly.claim("SRC", "TARGET   :?APRSV", true, 1).executeQuery, false);
+
+    LocalMessageGate ordinary;
+    ordinary.beginReception();
+    decision = ordinary.claim("SRC", "TARGET   :hello{01", false, 0);
+    expect("ordinary message can be ACKed", decision.acknowledge, true);
+    expect("ordinary message is not a query", decision.executeQuery, false);
+    expect("ordinary message second consumer no ACK",
+           ordinary.claim("SRC", "TARGET   :hello{01", false, 1).acknowledge, false);
+    ordinary.beginReception();
+    expect("ordinary message retry can be ACKed",
+           ordinary.claim("SRC", "TARGET   :hello{01", false, 2).acknowledge, true);
+
     PACKET_DEDUP::Cache cache;
 
     expect("first digi claim",

@@ -199,8 +199,9 @@ namespace DIGI_Utils {
             if (delim == -1) delim = path.length();         // busca todo hasta lograr encontra una coma o el final del string
 
             String token = path.substring(start, delim);
-            bool tokenIsOwn = (token == stationCallsign) || (token == stationCallsign + "*");
             bool tokenStar = token.endsWith("*");
+            const String tokenCallsign = tokenStar ? token.substring(0, token.length() - 1) : token;
+            bool tokenIsOwn = tokenCallsign.equalsIgnoreCase(stationCallsign);
 
             if (tokenIsOwn) {
                 if (tokenStar) return "";                   // already digipeated
@@ -266,7 +267,7 @@ namespace DIGI_Utils {
             packetToRepeat += tempPath;
         } else {   // CrossFreq Digipeater
             packetToRepeat = cleanPath(packet.substring(0, suffixIndex));
-            if (packetToRepeat.indexOf(stationCallsign) != -1) return "";                  // stationCallsign shouldn't be in path
+            if (pathContainsCallsign(path, stationCallsign)) return "";                  // stationCallsign shouldn't be in path
             packetToRepeat += ",";
             packetToRepeat += stationCallsign;
             packetToRepeat += "*";
@@ -316,7 +317,7 @@ namespace DIGI_Utils {
             }
             if (digiMode == 3) {
                 String stationCallsign  = (Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign);
-                bool containsOwnCall    = path.indexOf(stationCallsign) != -1;
+                bool containsOwnCall    = pathContainsCallsign(path, stationCallsign);
                 if (containsOwnCall) return buildPacket(path, packet, thirdParty, false);
                 return "";
             }
@@ -372,11 +373,15 @@ namespace DIGI_Utils {
         String loraPacket = generateDigipeatedPacket(packet, thirdPartyPacket);
         if (loraPacket != "") {
             const int informationIndex = temp.indexOf(":");
+            const int destinationStart = temp.indexOf('>') + 1;
+            const int comma = temp.indexOf(',', destinationStart);
+            const String aprsDestination = temp.substring(destinationStart,
+                comma != -1 && comma < informationIndex ? comma : informationIndex);
             if (informationIndex < 0 ||
                 !STATION_Utils::claimPacketDestination(
                     Sender,
                     temp.substring(informationIndex + 1),
-                    STATION_Utils::DEDUP_DIGI)) {
+                    STATION_Utils::DEDUP_DIGI, aprsDestination)) {
                 SD_Utils::setDecision("DUP");
                 TELEMETRY_Utils::incDrop();
                 Utils::println("[DE-DUPE] Digipeat skipped for: " + Sender);

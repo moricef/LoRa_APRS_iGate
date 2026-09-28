@@ -16,7 +16,8 @@ void addByte(uint64_t& hash, uint8_t value) {
 
 namespace PACKET_DEDUP {
 
-uint64_t fingerprint(const std::string& source, const std::string& information) {
+uint64_t fingerprint(const std::string& source, const std::string& information,
+                     const std::string& aprsDestination) {
     const std::string cleanInformation = RXT_Protocol::stripTrailer(information);
     uint64_t hash = kFnvOffset;
 
@@ -25,6 +26,16 @@ uint64_t fingerprint(const std::string& source, const std::string& information) 
     addByte(hash, static_cast<uint8_t>(sourceLength >> 8));
     addByte(hash, static_cast<uint8_t>(sourceLength));
     for (const unsigned char value : source) addByte(hash, value);
+    // Mic-E stores latitude and other position bits in the AX.25 destination.
+    // Include it for current/old Mic-E, including the legacy beta identifiers.
+    if (!cleanInformation.empty() &&
+        (cleanInformation[0] == '`' || cleanInformation[0] == '\'' ||
+         cleanInformation[0] == '\x1c' || cleanInformation[0] == '\x1d')) {
+        const uint16_t length = static_cast<uint16_t>(aprsDestination.size());
+        addByte(hash, static_cast<uint8_t>(length >> 8));
+        addByte(hash, static_cast<uint8_t>(length));
+        for (const unsigned char value : aprsDestination) addByte(hash, value);
+    }
     for (const unsigned char value : cleanInformation) addByte(hash, value);
     return hash;
 }
@@ -43,10 +54,11 @@ void Cache::expire(uint32_t nowMs) {
 }
 
 bool Cache::claim(const std::string& source, const std::string& information,
-                  uint8_t destination, uint32_t nowMs) {
+                  uint8_t destination, uint32_t nowMs,
+                  const std::string& aprsDestination) {
     if (destination == 0) return false;
     expire(nowMs);
-    const uint64_t value = fingerprint(source, information);
+    const uint64_t value = fingerprint(source, information, aprsDestination);
     for (Entry& entry : entries_) {
         if (entry.fingerprint != value) continue;
         if ((entry.destinations & destination) != 0) return false;

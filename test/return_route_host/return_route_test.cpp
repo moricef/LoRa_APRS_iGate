@@ -25,6 +25,35 @@ void check(const char* label, const char* packet, bool valid, const char* expect
 } // namespace
 
 int main() {
+    const auto reply = [](const char* label, const char* received,
+                          const char* expected) {
+        const auto route = APRS_RETURN_ROUTE::derive(received, "N7UV-44", "TSRXBX", aliases);
+        const auto header = APRS_RETURN_ROUTE::buildLocalReplyHeader(
+            "N7UV-44", route, "WIDE1-1", true);
+        const bool ok = header == expected;
+        std::printf("%s  %s\n", ok ? "PASS" : "FAIL", label);
+        if (!ok) ++failures;
+    };
+    reply("local direct reply ignores beacon path",
+          "N7UV-4>APLRT1,WIDE1-1::N7UV-44  :?APRSV{01",
+          "N7UV-44>APLRG1,RFONLY");
+    reply("local one-hop ACK/reply header",
+          "N7UV-4>APLRT1,N7UV-6*,WIDE2-1::N7UV-44  :?APRSV{01",
+          "N7UV-44>APLRG1,N7UV-6,RFONLY");
+    reply("local two-hop ACK/reply header",
+          "N7UV-4>APLRT1,N7UV-6,SOMTNP*,WIDE2-1::N7UV-44  :?APRSV{01",
+          "N7UV-44>APLRG1,SOMTNP,N7UV-6,RFONLY");
+    reply("RFONLY request still yields a return route",
+          "N7UV-4>APLRT1,RFONLY,N7UV-6*,WIDE2-1::N7UV-44  :?APRSV{01",
+          "N7UV-44>APLRG1,N7UV-6,RFONLY");
+    reply("unknown route uses beacon fallback", "malformed",
+          "N7UV-44>APLRG1,WIDE1-1,RFONLY");
+    if (APRS_RETURN_ROUTE::buildLocalReplyHeader(
+            "N7UV-44", {}, "WIDE1-1", false) != "N7UV-44>APLRG1,WIDE1-1") {
+        std::printf("FAIL  Internet sender fallback permits gating\n");
+        ++failures;
+    }
+
     check("direct reception", "N7UV-4>APLRT1,WIDE1-1,WIDE2-2:>test", true, "");
     check("canonical two-hop route",
           "N7UV-4>APLRT1,N7UV-6,SOMTNP*,WIDE2-1:>test",

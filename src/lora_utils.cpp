@@ -575,6 +575,13 @@ namespace LoRa_Utils {
 
     void sendNewPacket(const String& rawPacket, const RxtRxContext* rxtContext) {
         if (!Config.loramodule.txActive) return;
+        // Check before changing frequency, LED state or waiting for the
+        // channel. Never truncate APRS data to fit the radio's payload.
+        if (!RXT_Protocol::fitsLoRaPayload(rawPacket.length())) {
+            Utils::println("[TX] Packet rejected: " + String(rawPacket.length()) +
+                           " APRS bytes exceed 252 (255 including LoRa prefix)");
+            return;
+        }
 
         unsigned long dwellTimeMs = 0;
         if (rxtContext != nullptr && rxtContext->valid) {
@@ -616,15 +623,22 @@ namespace LoRa_Utils {
         unsigned long finalTTH = 0;
         if (allowRxt) {
             String localTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, totalDwellAndChannelMs);
-            String pendingPacket = attachRxtTrailer(rawPacket, localTuple);
-            String fullPayloadWithHeader = "\x3c\xff\x01" + pendingPacket;
-
-            size_t totalBytes = fullPayloadWithHeader.length();
-            unsigned long timeOnAirMs = radio.getTimeOnAir(totalBytes) / 1000; 
-
-            finalTTH = totalDwellAndChannelMs + timeOnAirMs;
-            finalTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, finalTTH);
-            finalPacket = attachRxtTrailer(rawPacket, finalTuple);
+            const std::string original(rawPacket.c_str(), rawPacket.length());
+            const std::string pendingPacket = RXT_Protocol::attachTrailerWithinLimit(
+                original, localTuple.c_str());
+            if (pendingPacket == original) {
+                // No room, or three tuples already present: relay unchanged
+                // and do not log a local RXT tuple that was never transmitted.
+                allowRxt = false;
+                Utils::println("[RXT] Relaying without new tuple: trailer or payload limit");
+            } else {
+                const size_t totalBytes = pendingPacket.size() + RXT_Protocol::LORA_APRS_PREFIX_BYTES;
+                unsigned long timeOnAirMs = radio.getTimeOnAir(totalBytes) / 1000;
+                finalTTH = totalDwellAndChannelMs + timeOnAirMs;
+                finalTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, finalTTH);
+                // Both tuple encodings have the same four-byte length.
+                finalPacket = attachRxtTrailer(rawPacket, finalTuple);
+            }
         }
 
         int state = radio.transmit("\x3c\xff\x01" + finalPacket);
@@ -732,6 +746,13 @@ namespace LoRa_Utils {
 
                                 SD_Utils::beginEntry(cleanPacket, rssi, snr, freqOffset, lastRxtField); // decision is filled in later by the digi
                                 TELEMETRY_Utils::incRx();
+                                // Start one local-message handling cycle for this
+                                // reception, shared by iGate and digi consumers.
+                                // This also covers receptions waking eco mode.
+                                APRS_IS_Utils::beginLoRaReception();
+                                // Learn before local ACK/query handling, even
+                                // with APRS-IS disabled or an RFONLY request.
+                                STATION_Utils::observeReturnPath(packet);
                             } else {                                        // blacklisted sender
                                 SD_Utils::beginEntry(packet, radio.getRSSI(), radio.getSNR(), radio.getFrequencyError());
                                 SD_Utils::setDecision("BLACK");

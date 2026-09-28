@@ -72,6 +72,16 @@ bool isRoutingAlias(const std::string& node, const std::string& regionalAliases)
 
 namespace RXT_Protocol {
 
+bool fitsLoRaPayload(size_t packetBytes) {
+    return packetBytes <= LORA_MAX_PAYLOAD_BYTES - LORA_APRS_PREFIX_BYTES;
+}
+
+std::string attachTrailerWithinLimit(const std::string& packet, const std::string& newTuple) {
+    if (!fitsLoRaPayload(packet.size())) return packet;
+    const std::string candidate = attachTrailer(packet, newTuple);
+    return fitsLoRaPayload(candidate.size()) ? candidate : packet;
+}
+
 std::string attachTrailer(const std::string& packet, const std::string& newTuple) {
     size_t start = trailerStart(packet);
     if (start == std::string::npos) return packet + "{" + newTuple + "}";

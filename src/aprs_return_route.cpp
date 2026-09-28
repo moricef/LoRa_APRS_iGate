@@ -109,6 +109,17 @@ Result derive(const std::string& packet, const std::string& ownCallsign,
     return result;
 }
 
+std::string buildLocalReplyHeader(const std::string& source,
+                                 const Result& route,
+                                 const std::string& fallbackPath,
+                                 bool rfOnly) {
+    const std::string& path = route.valid ? route.path : fallbackPath;
+    std::string header = source + ">APLRG1";
+    if (!path.empty()) header += ',' + path;
+    if (rfOnly) header += ",RFONLY";
+    return header;
+}
+
 std::string buildThirdPartyMessage(const std::string& iGateCallsign,
                                    const std::string& path,
                                    const std::string& aprsisPacket) {
