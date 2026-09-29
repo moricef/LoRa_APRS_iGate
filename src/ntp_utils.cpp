@@ -16,8 +16,7 @@
  * along with LoRa APRS iGate. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <NTPClient.h>
-#include <WiFiUdp.h>
+#include <esp_sntp.h>
 #include "configuration.h"
 #include "network_manager.h"
 #include "ntp_utils.h"
@@ -26,22 +25,19 @@
 
 extern      Configuration  Config;
 extern      NetworkManager *networkManager;
-WiFiUDP     ntpUDP;
-NTPClient*  timeClient = nullptr;
+bool        ntpStarted  = false;
+bool        ntpSynced   = false;
 
 
 namespace NTP_Utils {
 
-    bool isSynchronized() {
-        return timeClient != nullptr && timeClient->isTimeSet();
-    }
-
     bool setup() {
         if (networkManager->isConnected() && Config.digi.ecoMode == 0 && Config.callsign != "NOCALL-10") {
-            int gmt = Config.ntp.gmtCorrection * 3600;
+            long gmt = Config.ntp.gmtCorrection * 3600;
             Serial.println("[NTP] Setting up, TZ offset: " + String(gmt) + " Server: " +  Config.ntp.server);
-            timeClient = new NTPClient(ntpUDP, Config.ntp.server.c_str(), gmt, 15 * 60 * 1000); // Update interval 15 min
-            timeClient->begin();
+            sntp_set_sync_interval(3 * 60 * 60 * 1000);         // Update interval 3 hours (ESP32 internal clock drift is negligible in that time)
+            configTime(gmt, 0, Config.ntp.server.c_str());      // SNTP runs in background (DNS + retries) and never blocks the loop
+            ntpStarted = true;
             return true;
         }
         return false;
@@ -51,20 +47,34 @@ namespace NTP_Utils {
         if (!networkManager->isConnected() || Config.digi.ecoMode != 0 || Config.callsign == "NOCALL-10") {
             return;
         }
-        if (timeClient == nullptr) {
+        if (!ntpStarted) {
             if (!setup()) {
                 return;
             }
         }
+        if (!ntpSynced) {
+            struct tm timeinfo;
+            if (getLocalTime(&timeinfo, 0)) {
+                ntpSynced = true;
+                Serial.println("[NTP] Time synced: " + getFormatedTime());
+            }
+        }
+    }
 
-        timeClient->update();
+    // True once the system clock has been set by SNTP (used by the APRS JSON
+    // stream to flag reliable timestamps).
+    bool isSynchronized() {
+        struct tm timeinfo;
+        return ntpStarted && getLocalTime(&timeinfo, 0);
     }
 
     String getFormatedTime() {
-        if (isSynchronized()) {
-            return timeClient->getFormattedTime();
-        }
-        return "";
+        if (Config.digi.ecoMode != 0) return "DigiEcoMode Active";
+        struct tm timeinfo;
+        if (!ntpStarted || !getLocalTime(&timeinfo, 0)) return "";     // 0 ms: don't wait (default timeout would block 5 s)
+        char formatedTime[9];
+        strftime(formatedTime, sizeof(formatedTime), "%H:%M:%S", &timeinfo);
+        return String(formatedTime);
     }
 
 }

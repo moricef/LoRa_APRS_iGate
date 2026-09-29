@@ -74,7 +74,7 @@ ___________________________________________________________________*/
 // External hook for RXT / TTH tracking from lora_utils.cpp
 extern unsigned long rxCompletedMillis;
 
-String              versionDate             = "2026-09-27";
+String              versionDate             = "2026-09-29";
 String              versionNumber           = "4.0.2RXT";
 Configuration       Config;
 WiFiClient          aprsIsClient;
@@ -195,7 +195,7 @@ void loop() {
         Utils::checkDisplayInterval();
         Utils::checkBeaconInterval();
 
-        APRS_IS_Utils::checkStatus(); // Need that to update display, maybe split this and send APRSIS status to display func?
+        APRS_IS_Utils::updateWiFiAPRSISDisplayInfo();   // WiFi / APRS-IS status line (wakes display only on status change)
 
         String packet = "";
         String jsonPacket = "";

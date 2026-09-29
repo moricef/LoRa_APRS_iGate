@@ -132,6 +132,7 @@ String sanitizeForWeb(const String& input) {
 int rssi, freqOffset;
 float snr;
 unsigned long rxCompletedMillis = 0;  // High-resolution timestamp marking exact packet read completion
+APRSPacket lastAprsPacket;
 
 
 namespace LoRa_Utils {
@@ -388,9 +389,16 @@ namespace LoRa_Utils {
         #else
             SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
         #endif
+        #ifdef RADIO_ANT_SW_PIN     // RAK3312 antenna switch needs power
+            pinMode(RADIO_ANT_SW_PIN, OUTPUT);
+            digitalWrite(RADIO_ANT_SW_PIN, RADIO_ANT_SW_ON_STATE);
+        #endif
         float freq = (float)Config.loramodule.rxFreq / 1000000;
         #if defined(RADIO_HAS_XTAL)
             radio.XTAL = true;
+        #endif
+        #if (defined(RADIO_RXEN) && defined(RADIO_TXEN))    // before begin() so RF switch is driven from start (Ebyte E22/E32 1W, QRP Labs LightGateway)
+            radio.setRfSwitchPins(RADIO_RXEN, RADIO_TXEN);
         #endif
         int state = radio.begin(freq);
         if (state != RADIOLIB_ERR_NONE) {
@@ -410,13 +418,14 @@ namespace LoRa_Utils {
         radio.setBandwidth(signalBandwidth);
         radio.setCRC(true);
 
-        #if (defined(RADIO_RXEN) && defined(RADIO_TXEN))    
-            radio.setRfSwitchPins(RADIO_RXEN, RADIO_TXEN);
-        #endif
+        /*#ifdef SX126X_DIO2_AS_RF_SWITCH
+        radio.setRfSwitchPins(RADIO_RXEN, RADIOLIB_NC);
+        radio.setDio2AsRfSwitch(true);
+        #endif*/
 
-        #ifdef HAS_1W_LORA  
-            state = radio.setOutputPower(Config.loramodule.power); 
-            radio.setCurrentLimit(140);
+        #ifdef HAS_1W_LORA  // Ebyte E22 400M30S (SX1268) / 900M30S (SX1262) / Ebyte E220 400M30S (LLCC68)
+            state = radio.setOutputPower(Config.loramodule.power); // max value 20dB for 1W modules as they have Low Noise Amp
+            radio.setCurrentLimit(140); // to be validated (100 , 120, 140)?
         #endif
         #if defined(HAS_SX1278) || defined(HAS_SX1276)
             state = radio.setOutputPower(Config.loramodule.power); 
@@ -582,7 +591,7 @@ namespace LoRa_Utils {
 
         if (state == RADIOLIB_ERR_NONE) {
             if (Config.syslog.active && networkManager->isConnected()) {
-                SYSLOG_Utils::log(3, finalPacket, 0, 0.0, 0);    
+                SYSLOG_Utils::logLoRaTx(finalPacket);
             }
             Utils::print("---> LoRa Packet Tx : ");
             Utils::println(finalPacket);
@@ -658,6 +667,7 @@ namespace LoRa_Utils {
                                 Serial.println("[RXT-STRIP] len=" + String(lastRxtField.length()) + " field=\"" + lastRxtField + "\"");
                                 #endif
 
+                                lastAprsPacket = APRSPacketLib::processReceivedPacket(cleanPacket, rssi, snr, freqOffset);
                                 if (Config.digi.ecoMode == 0) {
                                     if (receivedPackets.size() >= 10) {
                                         receivedPackets.erase(receivedPackets.begin());
@@ -670,14 +680,13 @@ namespace LoRa_Utils {
                                     receivedPacket.SNR      = snr;
                                     receivedPackets.push_back(receivedPacket);
 
-                                    APRSPacket aprsPacket = APRSPacketLib::processReceivedPacket(cleanPacket, rssi, snr, freqOffset);
-                                    if (aprsPacket.type == 0 || aprsPacket.type == 4) {   
-                                        MAP_Utils::upsert(aprsPacket.sender, aprsPacket.latitude, aprsPacket.longitude, aprsPacket.path, aprsPacket.overlay + aprsPacket.symbol, aprsPacket.rssi, aprsPacket.snr);
+                                    if (lastAprsPacket.type == 0 || lastAprsPacket.type == 4) {   // 0 = GPS, 4 = Mic-E (only ones with position)
+                                        MAP_Utils::upsert(lastAprsPacket.sender, lastAprsPacket.latitude, lastAprsPacket.longitude, lastAprsPacket.path, lastAprsPacket.overlay + lastAprsPacket.symbol, lastAprsPacket.rssi, lastAprsPacket.snr);
                                     }
                                 }
 
                                 if (Config.syslog.active && networkManager->isConnected()) {
-                                    SYSLOG_Utils::log(1, cleanPacket, rssi, snr, freqOffset);
+                                    SYSLOG_Utils::logLoRaRx(lastAprsPacket, cleanPacket, rssi, snr, freqOffset);
                                 }
 
                                 SD_Utils::beginEntry(cleanPacket, rssi, snr, freqOffset, lastRxtField); // decision is filled in later by the digi
@@ -709,7 +718,7 @@ namespace LoRa_Utils {
                     crcErrorPending = true;
                     Utils::println(formatCrcError(lastCrcError));
                     if (Config.syslog.active && networkManager->isConnected()) {
-                        SYSLOG_Utils::log(0, "", rssi, snr, freqOffset); 
+                        SYSLOG_Utils::logCRCError("", rssi, snr, freqOffset);
                     }
                     SD_Utils::logCRC(rssi, snr, freqOffset);
                     packet = "";
@@ -735,6 +744,9 @@ namespace LoRa_Utils {
 
     void sleepRadio() {
         radio.sleep();
+        #ifdef RADIO_ANT_SW_PIN
+            digitalWrite(RADIO_ANT_SW_PIN, !RADIO_ANT_SW_ON_STATE);
+        #endif
     }
 
 }

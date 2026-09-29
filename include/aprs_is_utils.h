@@ -27,8 +27,7 @@ namespace APRS_IS_Utils {
     void    upload(const String& line);
     void    connect();
 
-    void    checkStatus();
-    String  checkForStartingBytes(const String& packet);
+    void    updateWiFiAPRSISDisplayInfo();
 
     String  buildPacketToUpload(const String& packet);
     void    beginLoRaReception();

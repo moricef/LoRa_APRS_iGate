@@ -19,6 +19,7 @@
 #include <WiFi.h>
 #include "ESPmDNS.h"
 #include "configuration.h"
+#include "network_manager.h"
 #include "station_utils.h"
 #include "kiss_protocol.h"
 #include "kiss_utils.h"
@@ -28,6 +29,7 @@
 #include "lora_utils.h"
 
 extern Configuration    Config;
+extern NetworkManager   *networkManager;
 extern WiFiClient       aprsIsClient;
 extern bool             passcodeValid;
 extern int              rssi;
@@ -50,11 +52,11 @@ String inputSerialBuffer = "";
 namespace TNC_Utils {
 
     bool usesKissProtocol() {
-        return Config.tnc.protocol.equalsIgnoreCase("KISS");
+        return Config.tnc.kissProtocol;
     }
 
     void setup() {
-        if (Config.tnc.enableServer && Config.digi.ecoMode == 0) {
+        if (Config.tnc.enableServer && Config.digi.ecoMode == 0 && networkManager->hasActiveInterface()) {   // no WiFi STA/AP or Ethernet started = no TCP/IP stack
             tncServer.stop();
             tncServer.begin();
             String host = "igate-" + Config.callsign;
@@ -66,7 +68,7 @@ namespace TNC_Utils {
             if (!MDNS.addService("tnc", "tcp", TNC_PORT)) {
                 Serial.println("Error: Could not add mDNS service");
             }
-            Serial.println("TNC server started successfully (" + Config.tnc.protocol + " mode)");
+            Serial.println(String("TNC server started successfully (") + (Config.tnc.kissProtocol ? "KISS" : "TNC2") + " mode)");
             Serial.println("mDNS Host: " + host + ".local");
         }
     }

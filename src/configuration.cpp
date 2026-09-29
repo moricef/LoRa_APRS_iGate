@@ -161,7 +161,7 @@ bool Configuration::writeFile() {
         data["tnc"]["enableSerial"]                 = tnc.enableSerial;
         data["tnc"]["acceptOwn"]                    = tnc.acceptOwn;
         data["tnc"]["aprsBridgeActive"]             = tnc.aprsBridgeActive;
-        data["tnc"]["protocol"]                     = tnc.protocol;
+        data["tnc"]["kissProtocol"]                 = tnc.kissProtocol;
 
         data["mqtt"]["active"]                      = mqtt.active;
         data["mqtt"]["server"]                      = mqtt.server;
@@ -392,12 +392,18 @@ bool Configuration::readFile() {
             data["tnc"]["enableSerial"].isNull() ||
             data["tnc"]["acceptOwn"].isNull() ||
             data["tnc"]["aprsBridgeActive"].isNull() ||
-            data["tnc"]["protocol"].isNull()) needsRewrite = true;
+            data["tnc"]["kissProtocol"].isNull()) needsRewrite = true;
         tnc.enableServer                = data["tnc"]["enableServer"] | false;
         tnc.enableSerial                = data["tnc"]["enableSerial"] | false;
         tnc.acceptOwn                   = data["tnc"]["acceptOwn"] | false;
         tnc.aprsBridgeActive            = data["tnc"]["aprsBridgeActive"] | false;
-        tnc.protocol                    = data["tnc"]["protocol"] | "TNC2";
+        // Older fork configurations store "protocol": "TNC2" | "KISS".
+        if (data["tnc"]["kissProtocol"].isNull() && !data["tnc"]["protocol"].isNull()) {
+            String legacyProtocol = data["tnc"]["protocol"] | "TNC2";
+            tnc.kissProtocol            = legacyProtocol.equalsIgnoreCase("KISS");
+        } else {
+            tnc.kissProtocol            = data["tnc"]["kissProtocol"] | true;
+        }
 
         if (data["mqtt"]["active"].isNull() ||
             data["mqtt"]["server"].isNull() ||
@@ -570,7 +576,7 @@ void Configuration::setDefaultValues() {
     tnc.enableSerial                = false;
     tnc.acceptOwn                   = false;
     tnc.aprsBridgeActive            = false;
-    tnc.protocol                    = "TNC2";
+    tnc.kissProtocol                = true;
 
     mqtt.active                     = false;
     mqtt.server                     = "";

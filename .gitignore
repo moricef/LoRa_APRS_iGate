@@ -29,3 +29,5 @@ installer/*.bin
 
 # Local remote-command authentication secret
 /docs/APRS_commands_KEY.txt
+
+.claude/

@@ -16,6 +16,7 @@
  * along with LoRa APRS iGate. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <APRSPacketLib.h>
 #include <WiFi.h>
 #include "configuration.h"
 #include "station_utils.h"
@@ -33,6 +34,7 @@ extern float    snr;
 extern int      freqOffset;
 extern Configuration    Config;
 extern uint32_t         lastScreenOn;
+extern APRSPacket       lastAprsPacket;
 extern String           iGateBeaconPacket;
 extern String           firstLine;
 extern String           secondLine;
@@ -249,8 +251,9 @@ namespace DIGI_Utils {
                 if (tempPath == "") return "";
             } else {
                 int wide1Index = pathTokenIndex(tempPath, "WIDE1-1");
-                if (wide1Index != -1 && (digiMode == 1 || digiMode == 2)) {                 // WIDE1-1
+                if (wide1Index != -1 && (digiMode == 1 || digiMode == 2 || backupDigiMode)) {    // WIDE1-1
                 if (tempPath.indexOf("*") != -1 ) return "";                                // "*" shouldn't be in WIDE1-1 (only) type of packet
+                if (wide1Index != 0) return "";                                             // WIDE1-1 must be the first hop
                 tempPath = tempPath.substring(0, wide1Index) + stationCallsign + "*" +
                            tempPath.substring(wide1Index + 7);
                 } else if (digiMode == 2) {                                                 // Configured regional alias
@@ -272,7 +275,7 @@ namespace DIGI_Utils {
             packetToRepeat += stationCallsign;
             packetToRepeat += "*";
         }
-        packetToRepeat += APRS_IS_Utils::checkForStartingBytes(packet.substring(suffixIndex));
+        packetToRepeat += APRSPacketLib::checkForStartingBytes(packet.substring(suffixIndex));
         return packetToRepeat;
     }
 
@@ -357,7 +360,7 @@ namespace DIGI_Utils {
         if (!thirdPartyPacket && Config.tacticalCallsign == "" && !Utils::callsignIsValid(Sender)) { TELEMETRY_Utils::incDrop(); return; }  // No thirdParty + no tactical + invalid callsign
 
         STATION_Utils::updateLastHeard(Sender);
-        Utils::typeOfPacket(temp, 2);              // Digi
+        Utils::updateLoRaPacketDisplayInfo(lastAprsPacket, 1);               // Digi
         bool queryMessage                   = false;
         int doubleColonIndex                = temp.indexOf("::");
         if (doubleColonIndex > 10) {                // it's a message

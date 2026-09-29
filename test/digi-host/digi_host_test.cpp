@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <APRSPacketLib.h>
 #include <configuration.h>
 #include <digi_utils.h>
 
@@ -29,8 +30,13 @@ bool claimPacketDestination(const String&, const String&, uint8_t, const String&
 void addToOutputPacketBuffer(const String&, bool, bool) {}
 }
 
-namespace APRS_IS_Utils {
+APRSPacket lastAprsPacket;
+
+namespace APRSPacketLib {
 String checkForStartingBytes(const String& packet) { return packet; }
+}
+
+namespace APRS_IS_Utils {
 String lastResponder;
 bool processReceivedLoRaMessage(const String&, const String&, bool, const String& responder) {
     lastResponder = responder;
@@ -40,7 +46,7 @@ bool processReceivedLoRaMessage(const String&, const String&, bool, const String
 
 namespace Utils {
 bool callsignIsValid(const String&) { return true; }
-void typeOfPacket(const String&, uint8_t) {}
+void updateLoRaPacketDisplayInfo(APRSPacket&, uint8_t) {}
 void println(const String&) {}
 }
 
@@ -148,6 +154,8 @@ int main() {
           "F4MLV-7>APLRT1,F4MLV-10*:=/8gk=NmQF[LWQ");
     check("WIDE1-1 already marked -> refused", 1,
           "F4MLV-7>APLRT1,F6DEV-10*,WIDE1-1:=/8gk=NmQF[LWQ", NONE);
+    check("WIDE1-1 after an unused hop -> refused", 1,
+          "F4MLV-7>APLRT1,F6DEV-10,WIDE1-1:=/8gk=NmQF[LWQ", NONE);
     check("WIDE2 only -> not this mode", 1,
           "F4MLV-7>APLRT1,WIDE2-1:=/8gk=NmQF[LWQ", NONE);
     check("no path at all", 1,
