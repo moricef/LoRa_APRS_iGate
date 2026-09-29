@@ -22,6 +22,8 @@
 
 #include <SPI.h>
 #include <SD.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "utils.h"
 
 
@@ -33,6 +35,19 @@
 namespace SD_Utils {
 
     SPIClass sdSPI(HSPI);
+
+    // The main loop writes the log while the web server task may read it:
+    // the SD library is not safe for concurrent use, so every access holds
+    // this mutex. Readers never wait long, so a download cannot stall the
+    // radio loop.
+    SemaphoreHandle_t sdMutex = nullptr;
+
+    struct SdLock {
+        bool held;
+        explicit SdLock(TickType_t wait)
+            : held(sdMutex != nullptr && xSemaphoreTake(sdMutex, wait) == pdTRUE) {}
+        ~SdLock() { if (held) xSemaphoreGive(sdMutex); }
+    };
 
     bool    cardReady   = false;
 
@@ -59,6 +74,8 @@ namespace SD_Utils {
 
     void writeLine(const String& line) {
         if (!cardReady) return;
+        SdLock lock(pdMS_TO_TICKS(200));
+        if (!lock.held) return;                                 // reader busy too long: drop this line
         File logFile = SD.open(SD_LOG_FILE, FILE_APPEND);
         if (!logFile) {
             cardReady = false;                                  // card pulled out or gone bad, stop trying
@@ -80,19 +97,46 @@ namespace SD_Utils {
     }
 
     void setup() {
+        if (sdMutex == nullptr) sdMutex = xSemaphoreCreateMutex();
         sdSPI.begin(SD_SCLK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
         if (!SD.begin(SD_CS_PIN, sdSPI)) {
             Utils::println("init : SD Card       ...     not found! (no packet logging)");
             return;
         }
         cardReady = true;
-        rotateIfNeeded();
+        {
+            SdLock lock(portMAX_DELAY);
+            rotateIfNeeded();
+        }
         if (!SD.exists(SD_LOG_FILE)) {
             writeLine("# t_ms,event,rssi_dbm,snr_db,ferr_hz,tth_ms,rxt_rx_hex,rxt_tx_hex,tnc2");
         }
         writeLine("# boot");
         writeLine("# columns=t_ms,event,rssi_dbm,snr_db,ferr_hz,tth_ms,rxt_rx_hex,rxt_tx_hex,tnc2");
         Utils::println("init : SD Card       ...     done!    (logging to " + String(SD_LOG_FILE) + ")");
+    }
+
+    bool logFileSize(const bool previous, size_t& size) {
+        if (!cardReady) return false;
+        SdLock lock(pdMS_TO_TICKS(500));
+        if (!lock.held) return false;
+        File logFile = SD.open(previous ? SD_LOG_OLD_FILE : SD_LOG_FILE, FILE_READ);
+        if (!logFile) return false;
+        size = logFile.size();
+        logFile.close();
+        return true;
+    }
+
+    size_t readLog(const bool previous, const size_t offset, uint8_t* buffer, const size_t length) {
+        if (!cardReady) return 0;
+        SdLock lock(pdMS_TO_TICKS(20));
+        if (!lock.held) return READ_BUSY;
+        File logFile = SD.open(previous ? SD_LOG_OLD_FILE : SD_LOG_FILE, FILE_READ);
+        if (!logFile) return 0;
+        size_t count = 0;
+        if (logFile.seek(offset)) count = logFile.read(buffer, length);
+        logFile.close();
+        return count;
     }
 
     void beginEntry(const String& tnc2Packet, const int rssi, const float snr,

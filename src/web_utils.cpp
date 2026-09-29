@@ -27,6 +27,7 @@
 #include "utils.h"
 #include "lora_utils.h"
 #include "aprs_telemetry_rx.h"
+#include "sd_utils.h"
 
 
 extern Configuration               Config;
@@ -273,6 +274,34 @@ namespace WEB_Utils {
         String buffer;
         serializeJson(data, buffer);
         request->send(200, "application/json", buffer);
+    }
+
+    // SD packet log download. ?file=old returns the rotated file; ?tail=N
+    // returns only the last N bytes. The size is fixed when the request
+    // starts; the file is read in chunks so the radio loop keeps logging.
+    void handleSdLog(AsyncWebServerRequest *request) {
+        if (Config.webadmin.active && !request->authenticate(Config.webadmin.username.c_str(), Config.webadmin.password.c_str()))
+            return request->requestAuthentication();
+
+        const bool previous = request->hasParam("file") && request->getParam("file")->value() == "old";
+        size_t size = 0;
+        if (!SD_Utils::logFileSize(previous, size)) {
+            request->send(404, "text/plain", "SD log not available");
+            return;
+        }
+        size_t start = 0;
+        if (request->hasParam("tail")) {
+            const size_t tail = strtoul(request->getParam("tail")->value().c_str(), nullptr, 10);
+            if (tail < size) start = size - tail;
+        }
+        AsyncWebServerResponse* response = request->beginResponse("text/csv", size - start,
+            [previous, start](uint8_t* buffer, size_t maxLen, size_t index) -> size_t {
+                const size_t count = SD_Utils::readLog(previous, start + index, buffer, maxLen);
+                return count == SD_Utils::READ_BUSY ? RESPONSE_TRY_AGAIN : count;
+            });
+        response->addHeader("Content-Disposition",
+            previous ? "attachment; filename=aprs_rx.old.csv" : "attachment; filename=aprs_rx.csv");
+        request->send(response);
     }
 
     void handleStations(AsyncWebServerRequest *request) {
@@ -589,6 +618,7 @@ namespace WEB_Utils {
             server.on("/api/v1/aprs/stream", HTTP_GET, APRS_JSON_Utils::handleStream);
             server.on("/api/v1/aprs/events", HTTP_GET, APRS_JSON_Utils::handleEvents);
             server.on("/stations.json", HTTP_GET, handleStations);
+            server.on("/sd/log", HTTP_GET, handleSdLog);
             server.on("/configuration.json", HTTP_GET, handleReadConfiguration);
             server.on("/configuration.json", HTTP_POST, handleWriteConfiguration);
             server.on("/action", HTTP_POST, handleAction);

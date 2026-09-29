@@ -153,6 +153,19 @@ The logger writes a `# columns=...` marker after every `# boot`, allowing a
 file created by an older firmware to continue with the new schema without
 being mistaken for old six-column rows.
 
+The log can be downloaded without removing the card, with the WebUI
+credentials:
+
+```text
+GET /sd/log                  current file, aprs_rx.csv
+GET /sd/log?file=old         rotated file, aprs_rx.old
+GET /sd/log?tail=65536       last 65536 bytes of the current file
+```
+
+The size is fixed when the request starts. The file is read in chunks under
+a mutex shared with the logger, so logging continues during a download; a
+log line is dropped only if the card stays busy for more than 200 ms.
+
 ## APRS telemetry activity rates
 
 The separate APRS encoded telemetry contains three rates normalized using the

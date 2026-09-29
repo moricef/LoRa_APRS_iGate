@@ -40,6 +40,11 @@ namespace SD_Utils {
 
     #ifdef HAS_SD_LOG
 
+        // Remote download of the log (current file, or the rotated .old one).
+        constexpr size_t READ_BUSY = SIZE_MAX;   // readLog(): log being written, try again
+        bool    logFileSize(const bool previous, size_t& size);
+        size_t  readLog(const bool previous, const size_t offset, uint8_t* buffer, const size_t length);
+
         void setup();
         void beginEntry(const String& tnc2Packet, const int rssi, const float snr,
                         const int freqError, const String& receivedRxt = "");
@@ -51,6 +56,9 @@ namespace SD_Utils {
 
     #else
 
+        constexpr size_t READ_BUSY = SIZE_MAX;
+        inline bool logFileSize(const bool, size_t&) { return false; }
+        inline size_t readLog(const bool, const size_t, uint8_t*, const size_t) { return 0; }
         inline void setup() {}
         inline void beginEntry(const String&, const int, const float, const int, const String& = "") {}
         inline void setDecision(const char*) {}
