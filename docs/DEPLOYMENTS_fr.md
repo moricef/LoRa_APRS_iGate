@@ -10,8 +10,16 @@ Dernière mise à jour : 28 septembre 2026.
 ## ThinkPad — poste de développement distant
 
 - **Nom réseau :** `thinkpad`
-- **Adresse locale :** `192.168.1.106`
-- **Accès :** `ssh thinkpad`
+- **Adresse Ethernet vérifiée :** `192.168.1.100/24` (`enp0s25`)
+- **Adresse Wi-Fi vérifiée :** `192.168.4.2/24` (`wlp3s0`), sur le réseau/AP
+  de F4MLV-10.
+- **Accès SSH vérifié :**
+  `ssh -o Hostname=thinkpad.local -o HostKeyAlias=thinkpad thinkpad`.
+  Le nom `thinkpad` seul résout encore vers l'ancienne adresse
+  `192.168.1.106`, non joignable ; `thinkpad.local` résout vers `.100`.
+- **Routage vérifié :** route par défaut Ethernet via `192.168.1.1`, métrique
+  100, prioritaire sur celle du Wi-Fi via `192.168.4.1`, métrique 600.
+  Aucun routage inter-réseaux n'a été activé par l'agent.
 - **Dépôt iGate actif :**
   `/home/fab2/Developpement/CA2RXU/LoRa_APRS_iGate`
 - **Nature du dépôt actif :** clone Git du fork `moricef/LoRa_APRS_iGate`,
@@ -67,7 +75,13 @@ actuelle.
 - **Rôle normal :** tracker physique
 - **Rôle temporaire pendant les essais :** terminal physique pour `P201`, puis
   digipeater sur le profil Pologne pour l'essai à deux relais `P303`
-- **Firmware exact actuellement installé :** inconnu
+- **Firmware observé le 28 septembre 2026 :** Tracker, build
+  `2026-09-24 16:17:37 UTC` lu dans la WebUI ; commit exact inconnu.
+- **Essais du 28 septembre :** récepteur de contrôle ; mode répéteur désactivé,
+  aucun flash ni changement de configuration du T-Deck.
+- **Accessibilité en fin d'essai :** HTTP sur `.58` ne répond plus ; la capture
+  série confirme néanmoins des réceptions LoRa jusqu'à 20:44 UTC. Cause de
+  l'indisponibilité HTTP non déterminée.
 
 L'adresse `192.168.1.58` appartient au T-Deck/F4MLV-7. Elle ne doit jamais être
 attribuée à Firmin/F1ZDB-10.
@@ -77,6 +91,17 @@ attribuée à Firmin/F1ZDB-10.
 - **Indicatif :** `F4MLV-15`
 - **Rôle :** iGate utilisé pour les essais de routage retour
 - **Adresse de gestion :** `192.168.1.165`
+- **Firmware installé le 28 septembre 2026, 21:50 UTC :** variant
+  `ttgo-lora32-v21_SD`, build `2026-09-28 21:49:19 UTC`, commit `36ac992`,
+  confirmé dans la WebUI après OTA ; SHA-256 du binaire :
+  `32e7c112bde9537ba1d30c7e516d1c8e52d71feb8b815a948b0466245a0db18c`.
+  Il remplace le build `2026-09-28 19:34:05 UTC` (`a85b3d6`, SHA-256
+  `eeb8f1a698f7201c0f23e3edb2fc9dfcb8c3f21c2c396f7e47e01640d9be45d6`).
+  Configuration initiale sauvegardée dans
+  `logs/validation-20260928/F4MLV-15-before.json` (contient des secrets).
+- **Après la série complémentaire du 28 septembre :** configuration initiale
+  restaurée et relue pour comparaison vers 23:05 UTC ; firmware `36ac992`
+  conservé. Résultats : `docs/VALIDATION_CORRECTIFS_RF_20260928_fr.md`.
 - **Site physique :** inconnu dans les informations conservées
 - **Firmware pendant les essais du 27 septembre :** branche locale avec
   apprentissage et inversion du chemin RF de retour
@@ -91,6 +116,14 @@ Les résultats et leurs limites sont consignés dans
 - **Indicatif :** `F4MLV-2`
 - **Rôle :** digipeater utilisé pendant les essais de routage retour
 - **Adresse de gestion :** `192.168.1.161`
+- **Firmware installé le 28 septembre 2026, 21:52 UTC :** même binaire que
+  F4MLV-15 ci-dessus (`ttgo-lora32-v21_SD`, build `2026-09-28 21:49:19 UTC`,
+  commit `36ac992`), date confirmée dans la WebUI après OTA. Configuration
+  initiale sauvegardée dans `logs/validation-20260928/F4MLV-2-before.json`
+  (contient des secrets).
+- **Après la série complémentaire du 28 septembre :** configuration initiale
+  restaurée et relue pour comparaison vers 23:05 UTC ; firmware `36ac992`
+  conservé.
 - **Site physique :** inconnu dans les informations conservées
 - **Firmware pendant les essais du 27 septembre :** firmware de test de la
   branche locale de routage retour
@@ -103,13 +136,25 @@ Les résultats et leurs limites sont consignés dans
 - **Rôle établi :** digipeater RXT observé et utilisé sur le réseau
 - **Autres rôles éventuels :** inconnus dans les informations conservées
 - **Adresse de gestion locale/AP :** `192.168.4.1`
-- **Accessibilité depuis l'environnement de travail :** non joignable ; cet
-  environnement n'est pas connecté au réseau local/AP de F4MLV-10
+- **Accessibilité vérifiée le 28 septembre 2026 :** HTTP joignable depuis le
+  ThinkPad en Wi-Fi ; accès depuis le poste de travail par SSH sur le
+  ThinkPad. `/status` répond `OK`, et `/configuration.json` confirme
+  `F4MLV-10`, sans indicatif tactique, digi mode 2, ecoMode 0.
 - **Site physique :** inconnu dans les informations conservées
 - **Firmware établi :** même firmware que F4MLV-15 et F4MLV-2, avec
   apprentissage du routage retour (information communiquée par l'utilisateur
   le 28 septembre 2026)
-- **Build ou commit exact actuellement installé :** inconnu
+- **Build observé dans la WebUI :** `2026-09-28 10:21:26 UTC`, champ
+  `Board / Environment: ttgo-lora32-v21` ; commit exact et variante de build
+  précise inconnus. Aucune mise à jour de firmware pendant cette vérification.
+- **Série complémentaire du 28 septembre :** émission coupée
+  (`txActive=false`) de 21:53 à 23:03 UTC environ, pour qu'il ne participe pas
+  aux essais. Configuration initiale
+  (`logs/validation-complementaire-20260928/F4MLV-10-before.json`) restaurée et
+  relue ensuite : `txActive=true`, digi mode 2. Firmware inchangé.
+- **Essai à deux relais du 28 septembre :** reconfiguré temporairement vers
+  23:34–23:55 UTC (profils de test hors 433,775 MHz, serveur TNC activé) comme
+  relais 2 ; configuration initiale restaurée et relue ensuite.
 
 ## Réseau public de Jon — N7UV
 
