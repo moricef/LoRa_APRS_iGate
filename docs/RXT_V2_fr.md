@@ -54,16 +54,21 @@ Vecteurs de test :
 | F4MLV-10 | `0xD5C20F76` | 71 | `h` |
 | F5ZQC-10 | `0x237100C0` | 32 | `A` |
 
-89 valeurs ne suffisent évidemment pas à distinguer tous les indicatifs du
-monde, mais ce n'est pas nécessaire : l'empreinte ne départage que les deux ou
-trois digis d'un même chemin. Sur 133 indicatifs relevés dans mes journaux,
-1,28 % des paires entrent en collision, proche du 1/89 attendu. Quand deux
-digis d'un même chemin ont le même ID, les tuples sont attribués dans l'ordre
-du chemin, puisqu'ils sont ajoutés dans l'ordre des relais. Un tuple dont l'ID
-ne correspond à rien dans le chemin (digi qui n'a pas inscrit son indicatif)
-est affiché comme relais non identifié plutôt que deviné. L'attribution ne
-peut échouer que si deux digis de même ID sont dans le chemin et que l'un n'a
-pas ajouté de tuple : la mesure est alors mal attribuée, pas perdue.
+Personne n'attribue l'ID. Chaque digi calcule le sien à partir de son
+indicatif : pas de registre, pas de coordination entre digis, rien qui puisse
+s'épuiser. L'ID n'a pas à être unique dans une zone : l'indicatif complet est
+déjà dans le chemin, et l'ID ne départage que les deux ou trois digis d'un même
+chemin.
+
+Sur 133 indicatifs relevés dans mes journaux, 1,28 % des paires ont le même
+ID, proche du 1/89 attendu. Quand deux digis d'un même chemin ont le même ID
+et ont tous deux ajouté un tuple, les tuples sont attribués dans l'ordre du
+chemin, puisqu'ils sont ajoutés dans l'ordre des relais. Si l'un d'eux n'a pas
+ajouté de tuple, celui qui reste peut être attribué au mauvais digi : la
+mesure est alors mal attribuée, pas perdue. Un tuple dont l'ID ne correspond à
+rien dans le chemin (digi qui n'a pas inscrit son indicatif) est affiché comme
+relais non identifié plutôt que deviné ; l'empreinte ne peut pas retrouver un
+indicatif absent du chemin.
 
 Ces règles doivent être écrites précisément, puisque tout autre logiciel qui
 lira v2 devra les reproduire à l'identique.
@@ -81,7 +86,36 @@ passage vers APRS-IS :
   contrôle.
 
 Un commentaire terminé par `{abcde}` devrait correspondre par hasard à un digi
-utilisé : le risque devient très faible des deux côtés.
+utilisé : le risque devient très faible des deux côtés. Il n'est pas nul, mais
+en v1 un commentaire qui se termine comme `{abcd}` est toujours pris pour du
+RXT.
+
+## Pourquoi ni la position, ni une liste, ni une balise de capacité
+
+Savoir quels digis sont compatibles RXT ne suffit pas pour attribuer les
+tuples, même si tous les digis du réseau l'étaient :
+
+- un digi peut relayer un paquet sans ajouter de tuple, quand le tuple ferait
+  dépasser la taille maximale d'une trame LoRa (le firmware relaie alors le
+  paquet tel quel) ;
+- les chemins sont réécrits (`WIDE1*`/`WIDE2*` consommés retirés, alias
+  décrémentés sans inscription d'indicatif) : le n-ième tuple n'est pas
+  forcément le n-ième digi.
+
+Dans les deux cas, les tuples qui suivent le trou glissent sur les mauvais
+digis, et rien dans le paquet ne le montre. Il en va de même au passage vers
+APRS-IS : sans ID, l'iGate doit deviner d'après une liste si le `{...}` final
+est du RXT ou le texte de l'utilisateur, et deux iGates aux listes différentes
+envoient des paquets différents.
+
+Une balise de capacité dit ce qu'un digi sait faire, pas ce qu'il a fait sur
+ce paquet. Une balise locale sans chemin n'est entendue que par les stations
+qui entendent ce digi en direct, et rien ne garantit que l'iGate qui décode
+les tuples en fasse partie. Elle reste utile pour la découverte et peut
+coexister avec v2 ; le décodage n'en dépend simplement pas.
+
+L'ID n'est pas une mesure du récepteur. Il est là pour que chaque paquet
+contienne ce qu'il faut pour le lire, sans état conservé dans le réseau.
 
 ## v1 et v2 ensemble
 
@@ -100,9 +134,36 @@ identifié.
 
 ## Temps d'antenne
 
-Un octet de plus par tuple. Au profil EU (433,775 MHz, SF12, 125 kHz, CR 4/5),
-sur des paquets de 40 à 220 octets. Un autre profil donne d'autres valeurs
-absolues, mais des pourcentages voisins :
+Un octet de plus par tuple. Rapporté au seul champ RXT, c'est un octet sur
+cinq ; ce qui compte sur le canal, c'est la durée de la trame entière.
+
+Sur des trames réelles : le journal SD de F4MLV-10 contient 12 490 trames
+qu'il a émises avec un trailer RXT (12 320 en v1, 170 en v2 ; 11 977 à un
+tuple, 511 à deux, 2 à trois). En gardant la taille et le nombre de tuples de
+chaque trame, et en calculant sa durée avec 4 puis 5 caractères par tuple :
+
+| Profil | Trame v1 moyenne | Surcoût v2 | Trames allongées | Bloc |
+| --- | --- | --- | --- | --- |
+| EU : SF12, 125 kHz, CR 4/5 | 3 383 ms | +0,72 % | 15 % | 164 ms |
+| SF7, 125 kHz, CR 4/6 | 168 ms | +1,35 % | 37 % | 6,1 ms |
+
+C'est un calcul sur des trames v1 émises, pas une mesure du trafic v2. Les
+trames viennent de notre réseau ; des trames aux commentaires plus longs
+donnent un pourcentage plus faible.
+
+Même calcul sur ton réseau, à partir du flux TNC public
+`n7uv1.duckdns.org:33001` le 29 septembre 2026, de 15:14 à 16:54 UTC : 957
+trames de 39 stations, dont 384 avec des tuples (322 à un tuple, 61 à deux, 1
+à trois). Le flux montre les trames sans leur trailer et donne les sauts
+décodés à part : le nombre de tuples vient des lignes de saut qui ne sont pas
+`NA`, et le trailer v1 est reconstitué à 4 caractères par tuple plus les
+accolades.
+
+| Profil | Trame v1 moyenne | Surcoût v2 | Trames allongées | Bloc |
+| --- | --- | --- | --- | --- |
+| SF7, 125 kHz, CR 4/6 | 238 ms | +0,87 % | 34 % | 6,1 ms |
+
+Sur des tailles de paquets synthétiques de 40 à 220 octets, profil EU :
 
 | Tuples | Moyenne | Max | Paquets concernés |
 | --- | --- | --- | --- |
