@@ -31,3 +31,6 @@ installer/*.bin
 /docs/APRS_commands_KEY.txt
 
 .claude/
+
+# Private deployment inventory (management addresses, tunnels)
+/docs/DEPLOYMENTS_fr.md
