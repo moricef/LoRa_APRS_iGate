@@ -23,7 +23,9 @@ Dernière mise à jour : 28 septembre 2026.
 - **Dépôt iGate actif :**
   `/home/fab2/Developpement/CA2RXU/LoRa_APRS_iGate`
 - **Nature du dépôt actif :** clone Git du fork `moricef/LoRa_APRS_iGate`,
-  branche `feature/reverse-message-routing`
+  branche `feature/reverse-message-routing`, renommée `rxt` sur GitHub le
+  29 septembre 2026 ; ce clone porte encore l'ancien nom tant qu'il n'a pas été
+  mis à jour (`git branch -m`, `git branch -u fork/rxt`)
 - **Commit vérifié le 28 septembre 2026 :** `42a8a18` —
   `Implement learned reverse routing for APRS messages`
 - **Sauvegarde de l'ancienne copie sans métadonnées Git :**

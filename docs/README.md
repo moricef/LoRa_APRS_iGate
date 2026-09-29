@@ -1,6 +1,6 @@
 # Web Flasher du fork
 
-Le flasher publie trois variants de la branche `feature/reverse-message-routing` :
+Le flasher publie trois variants de la branche `rxt` :
 
 - `ttgo-lora32-v21_SD` (ESP32) ;
 - `heltec_wifi_lora_32_V3_2` (ESP32-S3) ;
