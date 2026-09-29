@@ -115,6 +115,13 @@ attribuée à Firmin/F1ZDB-10.
   `3b8851ad757857ac5e46d1c7135e2ec4126df289d5755d2bb70b7ccb15b1650c`. Pas de
   lecteur SD. Configuration initiale restaurée après les essais RXT v2 (digi
   0) ; la clé `rxtWhitelist` n'est plus écrite par ce firmware.
+- **Firmware installé le 29 septembre 2026, vers 13:46 UTC :** variant `ttgo-lora32-v21_SD`, build `2026-09-29 13:35:58 UTC`, arbre
+  commité ensuite dans `0874bb8` (`merge/upstream-20260929`, fusion de
+  l'upstream `fc256de` dans `rxt`), confirmé dans la WebUI ; SHA-256
+  `40e54be5359c133c3274b4b66c60dd98385b95ada3fcd674379c883a1cfdae6c`.
+  La clé `tnc.protocol: TNC2` a migré en `kissProtocol: false`.
+  Configuration d'avant essai (`logs/merge-upstream-20260929/F4MLV-15-before.json`,
+  contient des secrets) restaurée et relue après les essais RF.
 - **Site physique :** inconnu dans les informations conservées
 - **Firmware pendant les essais du 27 septembre :** branche locale avec
   apprentissage et inversion du chemin RF de retour
@@ -140,6 +147,9 @@ Les résultats et leurs limites sont consignés dans
 - **Firmware installé le 29 septembre 2026, vers 12:06 UTC :** même binaire
   RXT v2 que F4MLV-15 (build `2026-09-29 12:04:17 UTC`, commit `95a559d`).
   Pas de lecteur SD.
+- **Firmware installé le 29 septembre 2026, vers 13:48 UTC :** même binaire
+  que F4MLV-15 (build `2026-09-29 13:35:58 UTC`, `0874bb8`), confirmé dans la
+  WebUI ; même migration TNC2. Configuration de service conservée.
 - **Liaison USB :** branché en USB sur le PC de développement
   (`/dev/serial/by-id/usb-1a86_USB_Single_Serial_595D012085-if00`,
   `/dev/ttyACM0` le 29 septembre). Graywolf gardait ce port ouvert via le
@@ -185,6 +195,12 @@ Les résultats et leurs limites sont consignés dans
   remplace le build RXT v2 `2026-09-29 12:04:17 UTC` installé vers 12:06 UTC,
   lui-même remplaçant le build `2026-09-28 10:21:26 UTC`. Configuration de
   service conservée (digi mode 2, RXT activé).
+- **Firmware installé le 29 septembre 2026, vers 13:50 UTC :** variant `ttgo-lora32-v21_SD`, build `2026-09-29 13:35:58 UTC`, arbre
+  commité ensuite dans `0874bb8` (`merge/upstream-20260929`, fusion de
+  l'upstream `fc256de` dans `rxt`), confirmé dans la WebUI ; SHA-256
+  `40e54be5359c133c3274b4b66c60dd98385b95ada3fcd674379c883a1cfdae6c`.
+  La clé `tnc.protocol: TNC2` a migré en `kissProtocol: false`.
+  Configuration de service conservée.
 
 ## Réseau public de Jon — N7UV
 
