@@ -148,9 +148,26 @@ actual elapsed time since the previous encoded telemetry report:
 
 | Parameter | Meaning |
 | --- | --- |
-| RX_rate | Valid LoRa APRS packets accepted by the receiver, in packets/hour |
+| RX_rate | LoRa APRS packets accepted by the receiver after blacklist filtering, in packets/hour |
 | RelRate | Packets accepted and queued for digipeating, in packets/hour |
 | DrpRate | Packets rejected by blacklist, duplicate, path, self or NOGATE rules, in packets/hour |
+
+These are activity counters, not a delivery balance:
+
+- With digipeating disabled (or RF transmission disabled), accepted receptions
+  still increase `RX_rate`, without a relay or digi-rejection decision. They
+  must not be counted as drops merely because the device is acting as an iGate.
+- Blacklisted packets increase `DrpRate` before the receiver accepts them, so
+  they do not increase `RX_rate`, even when digipeating is enabled.
+- `RelRate` counts packets accepted and queued by the digi, not confirmed RF
+  transmissions or successful delivery. Local ACKs/replies and APRS-IS-to-RF
+  messages are not digipeated receptions and do not increase this counter.
+- Each rate is independently rounded and capped at 8280 packets/hour.
+
+Consequently, `RX_rate = RelRate + DrpRate` is **not an invariant**, including
+in digi mode. A difference between these values is not by itself evidence of
+packet loss. Locally handled queries are also counted as digi drops when they
+reach the digi handler: they are consumed rather than relayed.
 
 The raw counters reset after a report is generated. The transmitted hourly
 rate saturates at 8280, the maximum value of the two-character base-91 field.
