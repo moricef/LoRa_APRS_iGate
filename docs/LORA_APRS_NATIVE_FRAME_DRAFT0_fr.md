@@ -170,4 +170,9 @@ Essai RF du 29 septembre 2026, F4MLV-2 et F4MLV-15 (`ttgo-lora32-v21_SD`) :
   natif (demandé, utilisé, restant) n'est pas encore défini.
 - Une trame native est relayée en passant par le texte : la logique de relais
   travaille sur le chemin TNC2.
-- Le tracker (T-Deck) ne traite pas encore les trames natives.
+- Le tracker traite les trames natives sur la branche `feature/native-frames`
+  de `moricef/LoRa_APRS_Tracker` (commit `4ced9cc7`), avec une copie de ce
+  codec. Essai avec le T-Deck F4MLV-7 et F4MLV-2 le 29 septembre 2026 : une
+  balise Mic-E (29 octets au lieu de 44), un message avec reply-ack (35 au lieu
+  de 52) et son accusé (31 au lieu de 48) ont été décodés dans les deux
+  sens.

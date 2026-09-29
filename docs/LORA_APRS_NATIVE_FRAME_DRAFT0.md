@@ -165,4 +165,8 @@ RF test on 29 September 2026, F4MLV-2 and F4MLV-15 (`ttgo-lora32-v21_SD`):
   (requested, used, remaining) is not defined yet.
 - A native frame is relayed by converting it to text and back: the relay
   logic works on the TNC2 path.
-- The tracker (T-Deck) does not handle native frames yet.
+- The tracker handles native frames on branch `feature/native-frames` of
+  `moricef/LoRa_APRS_Tracker` (commit `4ced9cc7`), with a copy of this codec.
+  Tested with the T-Deck F4MLV-7 and F4MLV-2 on 29 September 2026: a Mic-E
+  beacon (29 bytes instead of 44), a message with reply-ack (35 instead of
+  52) and its ack (31 instead of 48) were decoded in both directions.
