@@ -164,6 +164,7 @@ function loadSettings(settings) {
     document.getElementById("lora.txSignalBandwidth").value             = settings.lora.txSignalBandwidth;
     document.getElementById("lora.power").value                         = settings.lora.power;
     document.getElementById("lora.cadActive").checked                   = settings.lora.cadActive;
+    document.getElementById("lora.txFormat").value                      = settings.lora.txFormat ?? 0;
     LoRaTxCheckbox.checked = settings.lora.txActive;
     LoRaTxFreq.disabled             = !LoRaTxCheckbox.checked;
     LoRaTxSpreadingFactor.disabled  = !LoRaTxCheckbox.checked;

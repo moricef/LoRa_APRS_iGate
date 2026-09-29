@@ -89,6 +89,7 @@ public:
     long    txSignalBandwidth;
     int     power;
     bool    cadActive;
+    int     txFormat;       // 0 text, 1 native, 2 both (text then native)
 };
 
 class Display {

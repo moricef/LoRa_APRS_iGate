@@ -29,6 +29,7 @@
 #include "ntp_utils.h"
 #include "sd_utils.h"
 #include "rxt_protocol.h"
+#include "native_aprs.h"
 #include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
@@ -518,6 +519,18 @@ namespace LoRa_Utils {
                " FO:" + (context.fo >= 0 ? "+" : "") + String(context.fo);
     }
 
+    // Native form of a text packet, or empty when it has to go as text.
+    std::vector<uint8_t> nativeFrame(const std::string& text) {
+        std::string tnc2;
+        std::vector<NATIVE_APRS::RxtTuple> rxt;
+        std::vector<uint8_t> frame;
+        if (!NATIVE_APRS::fromText(text, Config.digi.regionalAliases.c_str(), tnc2, rxt) ||
+            !NATIVE_APRS::encode(tnc2, rxt, frame) || frame.size() > RXT_Protocol::LORA_MAX_PAYLOAD_BYTES) {
+            return {};
+        }
+        return frame;
+    }
+
     void sendNewPacket(const String& rawPacket, const RxtRxContext* rxtContext) {
         if (!Config.loramodule.txActive) return;
         // Check before changing frequency, LED state or waiting for the
@@ -577,7 +590,13 @@ namespace LoRa_Utils {
                 allowRxt = false;
                 Utils::println("[RXT] Relaying without new tuple: trailer or payload limit");
             } else {
-                const size_t totalBytes = pendingPacket.size() + RXT_Protocol::LORA_APRS_PREFIX_BYTES;
+                // TTH covers the frame actually sent: its size does not
+                // depend on the tuple values, only on their number.
+                size_t totalBytes = pendingPacket.size() + RXT_Protocol::LORA_APRS_PREFIX_BYTES;
+                if (Config.loramodule.txFormat == 1) {
+                    const std::vector<uint8_t> native = nativeFrame(pendingPacket);
+                    if (!native.empty()) totalBytes = native.size();
+                }
                 unsigned long timeOnAirMs = radio.getTimeOnAir(totalBytes) / 1000;
                 finalTTH = totalDwellAndChannelMs + timeOnAirMs;
                 finalTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, finalTTH);
@@ -586,8 +605,25 @@ namespace LoRa_Utils {
             }
         }
 
-        int state = radio.transmit("\x3c\xff\x01" + finalPacket);
+        std::vector<uint8_t> native;
+        if (Config.loramodule.txFormat != 0) {
+            native = nativeFrame(std::string(finalPacket.c_str(), finalPacket.length()));
+            if (native.empty()) Utils::println("[NATIVE] Sent as text: packet cannot be encoded");
+        }
+        int state;
+        if (Config.loramodule.txFormat == 1 && !native.empty()) {
+            state = radio.transmit(native.data(), native.size());
+        } else {
+            state = radio.transmit("\x3c\xff\x01" + finalPacket);
+            if (state == RADIOLIB_ERR_NONE && Config.loramodule.txFormat == 2 && !native.empty()) {
+                state = radio.transmit(native.data(), native.size());
+            }
+        }
         transmitFlag = true;
+        if (!native.empty()) {
+            Utils::println("[NATIVE] Tx " + String(native.size()) + " bytes (text frame " +
+                           String(finalPacket.length() + RXT_Protocol::LORA_APRS_PREFIX_BYTES) + " bytes)");
+        }
 
         if (state == RADIOLIB_ERR_NONE) {
             if (Config.syslog.active && networkManager->isConnected()) {
@@ -616,6 +652,26 @@ namespace LoRa_Utils {
 
     }
 
+    // Text packet for a received LoRa payload. A native frame is decoded to
+    // TNC2 with its RXT block as a v2 trailer; a text frame keeps the
+    // behaviour of readData(String&), which stops at the first zero byte.
+    String packetFromRadio(uint8_t* data, size_t length) {
+        if (NATIVE_APRS::isNativeFrame(data, length)) {
+            std::string tnc2;
+            std::vector<NATIVE_APRS::RxtTuple> rxt;
+            if (!NATIVE_APRS::decode(data, length, tnc2, rxt)) {
+                Utils::println("[NATIVE] Undecodable frame (" + String(length) + " bytes)");
+                return "";
+            }
+            std::string text = NATIVE_APRS::toText(tnc2, rxt, Config.digi.regionalAliases.c_str());
+            Utils::println("[NATIVE] " + String(length) + " bytes -> " + String(text.size()) + " bytes of text" +
+                           (rxt.size() && text == tnc2 ? ", RXT block dropped" : ""));
+            return String(text.c_str());
+        }
+        data[length] = 0;
+        return String(reinterpret_cast<char*>(data));
+    }
+
     String receivePacket(String* jsonPacket) {
         String packet = "";
         lastRxtField = ""; // State hygiene reset at packet boundary
@@ -627,8 +683,13 @@ namespace LoRa_Utils {
                 radio.startReceive();
                 transmitFlag = false;
             } else {
-                int state = radio.readData(packet);
+                // Read raw bytes: a native frame contains zero bytes, which
+                // readData(String&) would cut at.
+                uint8_t rxBuffer[RXT_Protocol::LORA_MAX_PAYLOAD_BYTES + 1];
+                size_t rxLength = min(radio.getPacketLength(), (size_t)RXT_Protocol::LORA_MAX_PAYLOAD_BYTES);
+                int state = radio.readData(rxBuffer, rxLength);
                 if (state == RADIOLIB_ERR_NONE) {
+                    packet = packetFromRadio(rxBuffer, rxLength);
                     rxCompletedMillis = millis();  
                     if (packet != "") {
                         if (packet.startsWith("\x3c\xff\x01")) {

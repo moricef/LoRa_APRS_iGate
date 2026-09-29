@@ -1452,6 +1452,13 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                             >
                                         </div>
                                         <div class="form-check form-switch mt-2"><input type="checkbox" name="lora.cadActive" id="lora.cadActive" class="form-check-input" /><label for="lora.cadActive" class="form-label">Enable CAD</label></div>
+                                        <label for="lora.txFormat" class="form-label mt-2">Tx frame format</label>
+                                        <select class="form-select" name="lora.txFormat" id="lora.txFormat">
+                                            <option value="0" selected>Text (standard)</option>
+                                            <option value="1">Native (draft 0, test only)</option>
+                                            <option value="2">Text and native</option>
+                                        </select>
+                                        <div class="form-text">Native frames are ignored by other firmware.</div>
                                     </div>
                                     <div class="col-6 mt-1">
                                         <label

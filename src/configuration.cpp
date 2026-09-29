@@ -111,6 +111,7 @@ bool Configuration::writeFile() {
         data["lora"]["txSignalBandwidth"]           = loramodule.txSignalBandwidth;
         data["lora"]["power"]                       = loramodule.power;
         data["lora"]["cadActive"]                   = loramodule.cadActive;
+        data["lora"]["txFormat"]                    = loramodule.txFormat;
 
         int rxSpreadingFactor = loramodule.rxSpreadingFactor;
         int txSpreadingFactor = loramodule.txSpreadingFactor;
@@ -324,7 +325,8 @@ bool Configuration::readFile() {
             data["lora"]["txCodingRate4"].isNull() ||
             data["lora"]["txSignalBandwidth"].isNull() ||
             data["lora"]["power"].isNull() ||
-            data["lora"]["cadActive"].isNull()) needsRewrite = true;
+            data["lora"]["cadActive"].isNull() ||
+            data["lora"]["txFormat"].isNull()) needsRewrite = true;
         loramodule.rxActive             = data["lora"]["rxActive"] | true;
         loramodule.rxFreq               = data["lora"]["rxFreq"] | 433775000;
         loramodule.rxSpreadingFactor    = data["lora"]["rxSpreadingFactor"] | 12;
@@ -337,6 +339,8 @@ bool Configuration::readFile() {
         loramodule.txSignalBandwidth    = data["lora"]["txSignalBandwidth"] | 125000;
         loramodule.power                = data["lora"]["power"] | 20;
         loramodule.cadActive            = data["lora"]["cadActive"] | true;
+        loramodule.txFormat             = data["lora"]["txFormat"] | 0;
+        if (loramodule.txFormat < 0 || loramodule.txFormat > 2) loramodule.txFormat = 0;
 
         if (data["display"]["alwaysOn"].isNull() ||
             data["display"]["timeout"].isNull() ||
@@ -544,6 +548,7 @@ void Configuration::setDefaultValues() {
     loramodule.txSignalBandwidth    = 125000;
     loramodule.power                = 20;
     loramodule.cadActive            = true;
+    loramodule.txFormat             = 0;
 
     display.alwaysOn                = true;
     display.timeout                 = 4;
