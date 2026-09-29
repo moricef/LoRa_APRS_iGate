@@ -14,6 +14,8 @@ installer/*.bin
 /test/packet_dedup_host/packet_dedup_test
 /test/return_route_host/return_route_test
 /test/rxt_host/rxt_host_test
+/test/native_aprs_host/native_aprs_host_test
+/tools/native_aprs/native_aprs_tool
 
 # Local captures, logs and device configuration backups
 /logs/
