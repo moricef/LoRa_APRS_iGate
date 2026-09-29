@@ -54,9 +54,14 @@ Dernière mise à jour : 29 septembre 2026.
   Graywolf ou son connecteur ; ce n'est pas une adresse permettant de joindre
   directement le PC Firmin ou le LilyGo depuis une autre machine
 - **Lignée du firmware :** fork RXT/TNC2 local, et non firmware upstream pur
-- **Routage retour appris :** absent du firmware actuellement identifié sur
-  Firmin ; Firmin n'a pas reçu le firmware testé le 27 septembre
-- **Build ou commit exact actuellement installé :** inconnu
+- **Firmware avant le 29 septembre :** `4.0.2RXT`, build
+  `2026-09-27 12:25:42 UTC` (commit exact inconnu), sans routage retour.
+- **Firmware installé le 29 septembre 2026, vers 13:05 UTC :** build publié
+  RXT v2, variant `ttgo-lora32-v21_SD`, build `2026-09-29 12:51:26 UTC`,
+  branche `rxt` (`30a9fd9`), SHA-256 commençant par `ff105fee0e9d21c5`,
+  envoyé par OTA via `ssh -L 18101:192.168.10.101:80 firmin`. Build confirmé
+  dans la WebUI ; configuration relue identique à la sauvegarde
+  `logs/firmin-20260929/F1ZDB-10-before.json` (contient des secrets).
 
 La sauvegarde `images/iGateConfigurationBackup_Firmin.json` confirme notamment
 la présence de RXT, de la liste blanche RXT et du protocole TNC2. Elle contient
