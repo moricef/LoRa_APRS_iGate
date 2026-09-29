@@ -68,15 +68,10 @@ const int   FO_CENTER_INDEX = 45; // Center of base -89 range
 const float TTH_BASE = 1.08f;
 const float TTH_SCALE_FACTOR = 10.0f; // tthScale = symbolTimeMs * TTH_SCALE_FACTOR
 
-// --- RXT Whitelist ---
-// Crutch until every digi on the network is RXT-enabled: callsigns known to
-// measure and append RXT tuples. Used by isRxtWhitelisted()/findAllRxtHops()
-// to distinguish RXT-capable digis (which contribute a hop + tuple) from
-// legacy digis (which only pass the trailer through unmodified).
-// Which stations are RXT-capable is now runtime-configurable via
-// Config.rxtWhitelist (Station -> Black List tab in the web GUI), loaded
-// once at startup by loadRxtWhitelist(). No recompile needed to add a
-// newly-upgraded digi -- see rxtWhitelistLoaded below.
+// --- RXT v2 identity ---
+// Each tuple starts with the fingerprint of the relaying digi's callsign
+// (RXT_Protocol::fingerprint), matched against the path when decoding. No
+// whitelist of RXT-capable digis is needed (docs/RXT_V2.md).
 //=================================================================
 //=================================================================
 
@@ -230,10 +225,16 @@ namespace LoRa_Utils {
         return (char)(v_rssi + ASCII_OFFSET);
     }
 
+    // Callsign this station writes into the path when it digipeats.
+    String pathIdentity() {
+        return Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign;
+    }
+
     String buildRxtTuple(int rssi_val, float snr_val, int fo_val, unsigned long tth_val) {
         float tthScale = currentTthScale();
 
         String tuple = "";
+        tuple += RXT_Protocol::fingerprint(pathIdentity().c_str());
         tuple += encodeRSSI(rssi_val);
         tuple += encodeSNR(snr_val);
         tuple += encodeFO(fo_val);
@@ -242,80 +243,20 @@ namespace LoRa_Utils {
     }
 
     String attachRxtTrailer(const String& packet, const String& newTuple) {
-        return String(RXT_Protocol::attachTrailer(packet.c_str(), newTuple.c_str()).c_str());
+        return String(RXT_Protocol::attachTrailer(packet.c_str(), newTuple.c_str(),
+                                                  Config.digi.regionalAliases.c_str()).c_str());
     }        
 
     String stripRxtTrailer(const String& packet, String* outTuple) {
         std::string tuples;
-        std::string clean = RXT_Protocol::stripTrailer(packet.c_str(), outTuple == nullptr ? nullptr : &tuples);
+        std::string clean = RXT_Protocol::stripTrailer(packet.c_str(), outTuple == nullptr ? nullptr : &tuples,
+                                                       Config.digi.regionalAliases.c_str());
         if (outTuple != nullptr) *outTuple = tuples.c_str();
         return String(clean.c_str());
     }
 
     String getLastRxtField() {
         return lastRxtField;
-    }
-
-    // --- MULTI-HOP RXT PATH RESOLUTION ---
-    // Crutch until every digi on the network is RXT-enabled: a runtime
-    // whitelist of callsigns known to append RXT tuples. Used to figure out
-    // which path elements actually measured/appended a tuple versus which
-    // are plain legacy digis just passing the trailer through unmodified.
-    //
-    // Populated from Config.rxtWhitelist (space-delimited callsigns, set via
-    // the web GUI's Station -> Black List tab) by loadRxtWhitelist(), called
-    // once at startup -- same pattern as STATION_Utils::loadBlacklistAndManagers().
-    // Adding a newly-upgraded RXT digi is now a config change + reboot, not
-    // a recompile.
-    std::vector<String> rxtWhitelistLoaded;
-
-    void loadRxtWhitelist() {
-        rxtWhitelistLoaded = STATION_Utils::loadCallsignList(Config.rxtWhitelist);
-    }
-
-    bool isRxtWhitelisted(const String& callsign) {
-        String candidate = callsign;
-        candidate.trim();
-        candidate.toUpperCase();
-        for (size_t i = 0; i < rxtWhitelistLoaded.size(); i++) {
-            String whitelistCall = rxtWhitelistLoaded[i];
-            whitelistCall.trim();
-            whitelistCall.toUpperCase();
-            // RXT capability belongs to one exact AX.25 station identity.
-            // F4GCF-4 and F4GCF-10 must therefore remain distinct.
-            if (candidate.equals(whitelistCall)) return true;
-        }
-        return false;
-    }
-
-    struct RxtHopIdentifier {
-        String fromNode;
-        String toNode;
-    };
-
-    // Walks the path in transmission order (source first, most recent digi
-    // last). usedPathNodes must already be star-trimmed -- i.e. contain only
-    // elements that have actually transmitted this packet, with the '*'
-    // stripped -- so trailing unconsumed aliases (WIDE2-1, etc.) are never
-    // mistaken for real hops.
-    //
-    // Every time a whitelisted RXT digi is encountered, its immediate
-    // predecessor in the path -- RXT-enabled or not -- is recorded as the
-    // fromNode for that hop. Because RXT trailers are appended left-to-right
-    // in the order digis actually transmit, the hop list built here is in
-    // the same order as the tuples packed into lastRxtField: hops[i] always
-    // pairs with tuple i.
-    std::vector<RxtHopIdentifier> findAllRxtHops(const String& sourceCall, const std::vector<String>& usedPathNodes) {
-        std::vector<RxtHopIdentifier> hops;
-        for (size_t i = 0; i < usedPathNodes.size(); i++) {
-            if (isRxtWhitelisted(usedPathNodes[i])) {
-                RxtHopIdentifier hop;
-                hop.toNode   = usedPathNodes[i];
-                hop.fromNode = (i == 0) ? sourceCall : usedPathNodes[i - 1];
-                hops.push_back(hop);
-            }
-        }
-        return hops;
     }
 
     std::vector<RxtHopMetric> getDecodedRxtMetrics(const String& packet) {
@@ -349,43 +290,38 @@ namespace LoRa_Utils {
         // (no RXT-capable digi has touched this packet), realHops simply
         // stays empty and every hop below will show as NA -- the full
         // chain is still reported either way, for visual consistency.
-        if (lastRxtField.length() >= 4 && lastRxtField.length() % 4 == 0) {
+        const size_t tupleBytes = RXT_Protocol::TUPLE_BYTES;
+        if (lastRxtField.length() >= tupleBytes && lastRxtField.length() % tupleBytes == 0) {
             // Decoding node's own live modem config -- valid for this network
             // since all infrastructure nodes run a fixed SF/BW/CR; gear-shifting
             // is out-of-band for these statistics.
             float tthScale = currentTthScale();
 
-            std::vector<RxtHopIdentifier> hops = findAllRxtHops(sourceCall, usedPathNodes);
-            int numHops = lastRxtField.length() / 4;
-            // Mismatch between tuples present and RXT digis resolved from the
-            // path (e.g. a whitelist gap or a corrupted trailer) is handled by
-            // pairing what we can, from the start; unresolved trailing tuples
-            // get a placeholder node name rather than silently misattributing
-            // them to the wrong hop. Callers needing to detect this can compare
-            // numHops to hops.size() themselves if that becomes useful.
-
+            // Attribute each tuple to the used path node whose fingerprint
+            // matches its ID, in path order. A tuple matching nothing stays
+            // visible as an unidentified relay rather than being guessed.
+            std::vector<std::string> nodes;
+            for (const String& node : usedPathNodes) nodes.push_back(node.c_str());
+            const std::vector<int> owners = RXT_Protocol::attributeTuples(lastRxtField.c_str(), nodes);
+            int numHops = lastRxtField.length() / tupleBytes;
             for (int i = 0; i < numHops; i++) {
-                String hopTuple = lastRxtField.substring(i * 4, (i + 1) * 4);
-
-                char cRssi = hopTuple.charAt(0);
-                char cSnr  = hopTuple.charAt(1);
-                char cFo   = hopTuple.charAt(2);
-                char cTth  = hopTuple.charAt(3);
+                String hopTuple = lastRxtField.substring(i * tupleBytes, (i + 1) * tupleBytes);
 
                 RxtHopMetric hop;
                 hop.hasData = true;
-                hop.rssi = decodeRSSI(cRssi);
-                hop.snr  = decodeSNR(cSnr);
-                hop.fo   = decodeFO(cFo);
-                hop.tth  = decodeTTH(cTth, tthScale);
-                for (int tupleByte = 0; tupleByte < 4; tupleByte++) {
+                hop.rssi = decodeRSSI(hopTuple.charAt(1));
+                hop.snr  = decodeSNR(hopTuple.charAt(2));
+                hop.fo   = decodeFO(hopTuple.charAt(3));
+                hop.tth  = decodeTTH(hopTuple.charAt(4), tthScale);
+                for (size_t tupleByte = 0; tupleByte < tupleBytes; tupleByte++) {
                     hop.rawTuple[tupleByte] = hopTuple.charAt(tupleByte);
                 }
-                hop.rawTuple[4] = '\0';
+                hop.rawTuple[tupleBytes] = '\0';
 
-                if ((size_t)i < hops.size()) {
-                    hop.toNode   = hops[i].toNode;
-                    hop.fromNode = hops[i].fromNode;
+                const int match = owners[i];
+                if (match >= 0) {
+                    hop.toNode   = usedPathNodes[match];
+                    hop.fromNode = (match == 0) ? sourceCall : usedPathNodes[match - 1];
                 } else {
                     hop.toNode   = "RXT_NODE_" + String(i + 1);
                     hop.fromNode = "UNKNOWN";
@@ -434,8 +370,8 @@ namespace LoRa_Utils {
             }
         }
 
-        // A missing or incomplete whitelist must not make valid RXT data
-        // disappear from TNC2 output. Keep unresolved tuples visible with
+        // A tuple whose ID matches no used path node must not disappear
+        // from TNC2 output. Keep unresolved tuples visible with
         // their placeholder identity, newest tuple first like the hop chain.
         for (int i = (int)realHops.size() - 1; i >= 0; i--) {
             if (!realHopEmitted[i]) fullChainMetrics.push_back(realHops[i]);
@@ -625,7 +561,7 @@ namespace LoRa_Utils {
             String localTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, totalDwellAndChannelMs);
             const std::string original(rawPacket.c_str(), rawPacket.length());
             const std::string pendingPacket = RXT_Protocol::attachTrailerWithinLimit(
-                original, localTuple.c_str());
+                original, localTuple.c_str(), Config.digi.regionalAliases.c_str());
             if (pendingPacket == original) {
                 // No room, or three tuples already present: relay unchanged
                 // and do not log a local RXT tuple that was never transmitted.

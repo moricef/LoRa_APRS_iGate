@@ -32,7 +32,7 @@ int main() {
             expect("Mic-E first latitude", micE.claim("SRC", information, consumer, 0, "490350"), true);
             expect("Mic-E different latitude", micE.claim("SRC", information, consumer, 1, "490351"), true);
             expect("Mic-E repeat same latitude", micE.claim("SRC", information, consumer, 2, "490350"), false);
-            expect("Mic-E repeat with RXT", micE.claim("SRC", information + "{ABCD}", consumer, 3, "490351"), false);
+            expect("Mic-E repeat with RXT", micE.claim("SRC", information + "{hABCD}", consumer, 3, "490351"), false);
         }
     }
     PACKET_DEDUP::Cache nonMicE;
@@ -141,13 +141,15 @@ int main() {
 
     PACKET_DEDUP::Cache rxt;
     expect("first RXT form",
-           rxt.claim("SRC", "payload{ABCD}", PACKET_DEDUP::DIGI, 0), true);
+           rxt.claim("SRC", "payload{hABCD}", PACKET_DEDUP::DIGI, 0), true);
     expect("accumulated RXT is same information",
-           rxt.claim("SRC", "payload{ABCDEFGH}", PACKET_DEDUP::DIGI, 1), false);
+           rxt.claim("SRC", "payload{hABCD*EFGH}", PACKET_DEDUP::DIGI, 1), false);
     expect("clean information matches RXT form",
            rxt.claim("SRC", "payload", PACKET_DEDUP::DIGI, 2), false);
+    // Without a path only the v2 shape can be checked: 5, 10 or 15
+    // characters in braces are ignored in the key, other braces are not.
     expect("ordinary brace text remains significant",
-           rxt.claim("SRC", "payload{hello}", PACKET_DEDUP::DIGI, 3), true);
+           rxt.claim("SRC", "payload{hi}", PACKET_DEDUP::DIGI, 3), true);
 
     PACKET_DEDUP::Cache expiry;
     expect("initial expiry claim", expiry.claim("SRC", "p", PACKET_DEDUP::RETURN_ROUTE, 10), true);

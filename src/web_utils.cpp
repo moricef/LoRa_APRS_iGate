@@ -369,7 +369,6 @@ namespace WEB_Utils {
 
         Config.blacklist                    = getParamStringSafe("blacklist", Config.blacklist);
         Config.rxtEnabled                   = request->hasParam("rxtEnabled", true);
-        Config.rxtWhitelist                 = getParamStringSafe("rxtWhitelist", Config.rxtWhitelist);
 
         Config.digi.mode                    = getParamIntSafe("digi.mode", Config.digi.mode);
         Config.digi.ecoMode                 = getParamIntSafe("digi.ecoMode", Config.digi.ecoMode);

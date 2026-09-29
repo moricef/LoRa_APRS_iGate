@@ -18,7 +18,7 @@ namespace PACKET_DEDUP {
 
 uint64_t fingerprint(const std::string& source, const std::string& information,
                      const std::string& aprsDestination) {
-    const std::string cleanInformation = RXT_Protocol::stripTrailer(information);
+    const std::string cleanInformation = RXT_Protocol::stripTrailerShape(information);
     uint64_t hash = kFnvOffset;
 
     // Length-prefix the source so concatenation boundaries are unambiguous.

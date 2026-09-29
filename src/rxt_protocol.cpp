@@ -2,11 +2,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 
 namespace {
 
+// RXT v2 trailer content: 1 to MAX_TUPLES tuples of TUPLE_BYTES printable
+// characters (ID RSSI SNR FO TTH), each in the '!'..'z' range.
 bool isRxtContent(const std::string& content) {
-    if (content.empty() || content.size() > 12 || content.size() % 4 != 0) return false;
+    if (content.empty() || content.size() > RXT_Protocol::TUPLE_BYTES * RXT_Protocol::MAX_TUPLES ||
+        content.size() % RXT_Protocol::TUPLE_BYTES != 0) return false;
     for (char c : content) {
         if (c < 33 || c > 122) return false;
     }
@@ -76,35 +80,87 @@ bool fitsLoRaPayload(size_t packetBytes) {
     return packetBytes <= LORA_MAX_PAYLOAD_BYTES - LORA_APRS_PREFIX_BYTES;
 }
 
-std::string attachTrailerWithinLimit(const std::string& packet, const std::string& newTuple) {
+std::string attachTrailerWithinLimit(const std::string& packet, const std::string& newTuple,
+                                     const std::string& regionalAliases) {
     if (!fitsLoRaPayload(packet.size())) return packet;
-    const std::string candidate = attachTrailer(packet, newTuple);
+    const std::string candidate = attachTrailer(packet, newTuple, regionalAliases);
     return fitsLoRaPayload(candidate.size()) ? candidate : packet;
 }
 
-std::string attachTrailer(const std::string& packet, const std::string& newTuple) {
+char fingerprint(const std::string& callsign) {
+    uint32_t hash = 0x811C9DC5u;
+    for (unsigned char c : callsign) {
+        if (c == '*') continue;
+        hash ^= static_cast<uint8_t>(std::toupper(c));
+        hash *= 0x01000193u;
+    }
+    return static_cast<char>(33 + hash % 89);
+}
+
+bool trailerMatchesPath(const std::string& packet, const std::string& content,
+                        const std::string& regionalAliases) {
+    if (!isRxtContent(content)) return false;
+    std::string ids;
+    for (const std::string& node : usedPathNodes(packet, regionalAliases)) {
+        ids += fingerprint(node);
+    }
+    for (size_t i = 0; i < content.size(); i += TUPLE_BYTES) {
+        if (ids.find(content[i]) == std::string::npos) return false;
+    }
+    return true;
+}
+
+std::string attachTrailer(const std::string& packet, const std::string& newTuple,
+                          const std::string& regionalAliases) {
     size_t start = trailerStart(packet);
     if (start == std::string::npos) return packet + "{" + newTuple + "}";
 
     std::string content = packet.substr(start + 1, packet.size() - start - 2);
-    if (!isRxtContent(content)) {
+    // A final {...} that is not RXT data from digis of this path is user
+    // text: leave it intact and open a new trailer after it.
+    if (!trailerMatchesPath(packet, content, regionalAliases)) {
         return packet + "{" + newTuple + "}";
     }
-    if (content.size() >= 12) return packet;
+    if (content.size() >= TUPLE_BYTES * MAX_TUPLES) return packet;
     return packet.substr(0, start) + "{" + content + newTuple + "}";
 }
 
-std::string stripTrailer(const std::string& packet, std::string* outTuples) {
+std::string stripTrailer(const std::string& packet, std::string* outTuples,
+                         const std::string& regionalAliases) {
     size_t start = trailerStart(packet);
     if (start != std::string::npos) {
         std::string content = packet.substr(start + 1, packet.size() - start - 2);
-        if (isRxtContent(content)) {
+        if (trailerMatchesPath(packet, content, regionalAliases)) {
             if (outTuples != nullptr) *outTuples = content;
             return packet.substr(0, start);
         }
     }
     if (outTuples != nullptr) outTuples->clear();
     return packet;
+}
+
+std::vector<int> attributeTuples(const std::string& content,
+                                 const std::vector<std::string>& usedNodes) {
+    std::vector<int> owners;
+    size_t nextNode = 0;
+    for (size_t i = 0; i + TUPLE_BYTES <= content.size(); i += TUPLE_BYTES) {
+        size_t match = nextNode;
+        while (match < usedNodes.size() && fingerprint(usedNodes[match]) != content[i]) match++;
+        if (match < usedNodes.size()) {
+            owners.push_back(static_cast<int>(match));
+            nextNode = match + 1;
+        } else {
+            owners.push_back(-1);
+        }
+    }
+    return owners;
+}
+
+std::string stripTrailerShape(const std::string& information) {
+    size_t start = trailerStart(information);
+    if (start == std::string::npos) return information;
+    std::string content = information.substr(start + 1, information.size() - start - 2);
+    return isRxtContent(content) ? information.substr(0, start) : information;
 }
 
 std::vector<std::string> usedPathNodes(const std::string& packet,

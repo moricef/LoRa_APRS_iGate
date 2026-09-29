@@ -44,7 +44,7 @@ namespace LoRa_Utils {
         int fo;
         unsigned long tth; // ms -- unsigned long (not int) so slow SF/BW configs
                             // (e.g. SF12, ~2000-3000 ms packet frames) can't overflow
-        char rawTuple[5] = {0}; // Exact four-byte RXT tuple, NUL-terminated;
+        char rawTuple[6] = {0}; // Exact five-byte RXT v2 tuple, NUL-terminated;
                                 // empty for an uninstrumented hop.
     };
 
@@ -59,7 +59,6 @@ namespace LoRa_Utils {
         std::vector<RxtHopMetric> hops;
     };
     void    setup();
-    void    loadRxtWhitelist();
     RxtRxContext captureRxtRxContext();
     bool    takeCrcError(RxtRxContext& context);
     String  formatCrcError(const RxtRxContext& context);

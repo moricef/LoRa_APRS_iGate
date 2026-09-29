@@ -40,26 +40,28 @@ void expectNear(const std::string& name, float actual, float expected) {
 int main() {
     expectBool("255 bytes including LoRa prefix fit", RXT_Protocol::fitsLoRaPayload(252), true);
     expectBool("256 bytes including LoRa prefix refused", RXT_Protocol::fitsLoRaPayload(253), false);
-    const std::string base = "SRC>DST:>";
-    const std::string fitsFirst = base + std::string(246 - base.size(), 'x');
+    // RXT v2: F4MLV-2 -> '*', F4MLV-10 -> 'h' (docs/RXT_V2.md test vectors).
+    const std::string base = "SRC>DST,F4MLV-10*:>";
+    const std::string fitsFirst = base + std::string(245 - base.size(), 'x');
     expectEqual("first tuple exactly fills payload",
-                RXT_Protocol::attachTrailerWithinLimit(fitsFirst, "ABCD"), fitsFirst + "{ABCD}");
+                RXT_Protocol::attachTrailerWithinLimit(fitsFirst, "hABCD"), fitsFirst + "{hABCD}");
     expectEqual("first tuple one byte too long falls back",
-                RXT_Protocol::attachTrailerWithinLimit(fitsFirst + "x", "ABCD"), fitsFirst + "x");
+                RXT_Protocol::attachTrailerWithinLimit(fitsFirst + "x", "hABCD"), fitsFirst + "x");
     const std::string full = base + std::string(252 - base.size(), 'x');
     expectEqual("full original preserved without RXT",
-                RXT_Protocol::attachTrailerWithinLimit(full, "ABCD"), full);
+                RXT_Protocol::attachTrailerWithinLimit(full, "hABCD"), full);
     expectEqual("oversize original never truncated",
-                RXT_Protocol::attachTrailerWithinLimit(full + "x", "ABCD"), full + "x");
-    const std::string oneTuple = base + std::string(242 - base.size(), 'x') + "{ABCD}";
+                RXT_Protocol::attachTrailerWithinLimit(full + "x", "hABCD"), full + "x");
+    const std::string twoHops = "SRC>DST,F4MLV-2,F4MLV-10*:>";
+    const std::string oneTuple = twoHops + std::string(240 - twoHops.size(), 'x') + "{*BCDE}";
     expectEqual("second tuple exactly fills payload",
-                RXT_Protocol::attachTrailerWithinLimit(oneTuple, "EFGH"),
-                oneTuple.substr(0, oneTuple.size() - 1) + "EFGH}");
+                RXT_Protocol::attachTrailerWithinLimit(oneTuple, "hFGHI"),
+                oneTuple.substr(0, oneTuple.size() - 1) + "hFGHI}");
     expectEqual("fallback retains existing tuple",
-                RXT_Protocol::attachTrailerWithinLimit("x" + oneTuple, "EFGH"), "x" + oneTuple);
-    const std::string threeTuples = "SRC>DST:>test{ABCDEFGHIJKL}";
+                RXT_Protocol::attachTrailerWithinLimit(oneTuple + "x", "hFGHI"), oneTuple + "x");
+    const std::string threeTuples = "SRC>DST,F4MLV-2,F4MLV-10*:>test{*BCDEhFGHIhJKLM}";
     expectEqual("full tuple chain unchanged",
-                RXT_Protocol::attachTrailerWithinLimit(threeTuples, "MNOP"), threeTuples);
+                RXT_Protocol::attachTrailerWithinLimit(threeTuples, "hNOPQ"), threeTuples);
 
     const uint8_t ordinaryText[] = {'A', 'P', 'R', 'S', ' ', '"', '\\'};
     expectBool("safe ASCII JSON text",
@@ -104,22 +106,71 @@ int main() {
     expectNodes("payload comma is not a path",
                 RXT_Protocol::usedPathNodes("SRC>DST:payload,with,commas"), {});
 
-    expectEqual("append first tuple", RXT_Protocol::attachTrailer("SRC>DST:payload", "ABCD"),
-                "SRC>DST:payload{ABCD}");
-    expectEqual("append second tuple", RXT_Protocol::attachTrailer("SRC>DST:payload{ABCD}", "EFGH"),
-                "SRC>DST:payload{ABCDEFGH}");
-    expectEqual("three tuple cap", RXT_Protocol::attachTrailer("SRC>DST:payload{ABCDEFGHIJKL}", "MNOP"),
-                "SRC>DST:payload{ABCDEFGHIJKL}");
-    expectEqual("preserve ordinary brace suffix", RXT_Protocol::attachTrailer("SRC>DST:payload{hello}", "ABCD"),
-                "SRC>DST:payload{hello}{ABCD}");
+    expectEqual("fingerprint F4MLV-MC", std::string(1, RXT_Protocol::fingerprint("F4MLV-MC")), "I");
+    expectEqual("fingerprint ignores case and star",
+                std::string(1, RXT_Protocol::fingerprint("f4mlv-mc*")), "I");
+    expectEqual("fingerprint F4MLV-18", std::string(1, RXT_Protocol::fingerprint("F4MLV-18")), "C");
+    expectEqual("fingerprint F6DEV-10", std::string(1, RXT_Protocol::fingerprint("F6DEV-10")), "C");
+    expectEqual("fingerprint F4MLV-2", std::string(1, RXT_Protocol::fingerprint("F4MLV-2")), "*");
+    expectEqual("fingerprint F1ZDB-10", std::string(1, RXT_Protocol::fingerprint("F1ZDB-10")), "*");
+    expectEqual("fingerprint F4MLV-10", std::string(1, RXT_Protocol::fingerprint("F4MLV-10")), "h");
+    expectEqual("fingerprint F5ZQC-10", std::string(1, RXT_Protocol::fingerprint("F5ZQC-10")), "A");
+
+    const std::string twoRelays = "SRC>DST,F4MLV-2,F4MLV-10*:payload";
+    expectEqual("append first tuple",
+                RXT_Protocol::attachTrailer("SRC>DST,F4MLV-2*:payload", "*BCDE"),
+                "SRC>DST,F4MLV-2*:payload{*BCDE}");
+    expectEqual("extend trailer of a used digi",
+                RXT_Protocol::attachTrailer(twoRelays + "{*BCDE}", "hFGHI"),
+                twoRelays + "{*BCDEhFGHI}");
+    expectEqual("three tuple cap",
+                RXT_Protocol::attachTrailer(twoRelays + "{*BCDEhFGHIhJKLM}", "hNOPQ"),
+                twoRelays + "{*BCDEhFGHIhJKLM}");
+    expectEqual("user comment shaped like v2 is left intact",
+                RXT_Protocol::attachTrailer(twoRelays + "{abcde}", "hFGHI"),
+                twoRelays + "{abcde}{hFGHI}");
+    expectEqual("legacy v1 trailer is left intact",
+                RXT_Protocol::attachTrailer(twoRelays + "{ABCD}", "hFGHI"),
+                twoRelays + "{ABCD}{hFGHI}");
+    expectEqual("ordinary brace suffix is left intact",
+                RXT_Protocol::attachTrailer(twoRelays + "{world}", "hFGHI"),
+                twoRelays + "{world}{hFGHI}");
 
     std::string tuples;
-    expectEqual("strip trailer", RXT_Protocol::stripTrailer("SRC>DST:payload{ABCDEFGH}", &tuples),
-                "SRC>DST:payload");
-    expectEqual("decoded tuples", tuples, "ABCDEFGH");
-    expectEqual("keep ordinary brace suffix", RXT_Protocol::stripTrailer("SRC>DST:payload{hello}", &tuples),
-                "SRC>DST:payload{hello}");
+    expectEqual("strip trailer of used digis",
+                RXT_Protocol::stripTrailer(twoRelays + "{*BCDEhFGHI}", &tuples), twoRelays);
+    expectEqual("stripped tuples", tuples, "*BCDEhFGHI");
+    expectEqual("keep user comment shaped like v2",
+                RXT_Protocol::stripTrailer(twoRelays + "{abcde}", &tuples), twoRelays + "{abcde}");
+    expectEqual("no tuples from user comment", tuples, "");
+    expectEqual("keep legacy v1 trailer",
+                RXT_Protocol::stripTrailer(twoRelays + "{ABCD}", &tuples), twoRelays + "{ABCD}");
+    expectEqual("keep trailer when no relay was used",
+                RXT_Protocol::stripTrailer("SRC>DST,WIDE1-1:payload{*BCDE}", &tuples),
+                "SRC>DST,WIDE1-1:payload{*BCDE}");
+    expectEqual("keep ordinary brace suffix",
+                RXT_Protocol::stripTrailer(twoRelays + "{world}", &tuples), twoRelays + "{world}");
     expectEqual("no tuples from ordinary suffix", tuples, "");
+    // Documented residual risk: a 5-character comment whose first character
+    // happens to be the ID of a used digi ('h' = F4MLV-10) passes the check.
+    expectEqual("chance collision is treated as RXT",
+                RXT_Protocol::stripTrailer(twoRelays + "{hello}", &tuples), twoRelays);
+    expectEqual("strip on APRS-IS upload form",
+                RXT_Protocol::stripTrailer("SRC>DST,F4MLV-2,F4MLV-10*,qAR,IGATE:payload{hFGHI}", &tuples),
+                "SRC>DST,F4MLV-2,F4MLV-10*,qAR,IGATE:payload");
+    expectEqual("shape-only strip for duplicate keys",
+                RXT_Protocol::stripTrailerShape(":payload{abcde}"), ":payload");
+
+    const std::vector<std::string> collision = {"F4MLV-2", "F1ZDB-10"};  // both '*'
+    const std::vector<int> ordered = RXT_Protocol::attributeTuples("*BCDE*FGHI", collision);
+    expectBool("same ID attributed in path order",
+               ordered.size() == 2 && ordered[0] == 0 && ordered[1] == 1, true);
+    const std::vector<int> partial =
+        RXT_Protocol::attributeTuples("hBCDE", {"F4MLV-2", "F4MLV-10"});
+    expectBool("tuple skips uninstrumented relay",
+               partial.size() == 1 && partial[0] == 1, true);
+    const std::vector<int> unknown = RXT_Protocol::attributeTuples("ABCDE", {"F4MLV-2"});
+    expectBool("unmatched ID is unidentified", unknown.size() == 1 && unknown[0] == -1, true);
 
     expectBool("direct APRS message",
                RXT_Protocol::isAprsMessage("SRC>DST::TARGET   :hello{1"), true);
