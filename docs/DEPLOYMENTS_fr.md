@@ -5,7 +5,7 @@ indicatifs, les sites, les adresses réseau, les rôles et les firmwares. Une
 information absente est indiquée comme inconnue et ne doit pas être déduite à
 partir d'un autre équipement.
 
-Dernière mise à jour : 28 septembre 2026.
+Dernière mise à jour : 29 septembre 2026.
 
 ## ThinkPad — poste de développement distant
 
@@ -104,6 +104,12 @@ attribuée à Firmin/F1ZDB-10.
 - **Après la série complémentaire du 28 septembre :** configuration initiale
   restaurée et relue pour comparaison vers 23:05 UTC ; firmware `36ac992`
   conservé. Résultats : `docs/VALIDATION_CORRECTIFS_RF_20260928_fr.md`.
+- **Firmware installé le 29 septembre 2026, vers 12:06 UTC :** RXT v2,
+  variant `ttgo-lora32-v21_SD`, build `2026-09-29 12:04:17 UTC`, commit
+  `95a559d` (`feature/rxt-v2`), confirmé dans la WebUI après OTA ; SHA-256
+  `3b8851ad757857ac5e46d1c7135e2ec4126df289d5755d2bb70b7ccb15b1650c`. Pas de
+  lecteur SD. Configuration initiale restaurée après les essais RXT v2 (digi
+  0) ; la clé `rxtWhitelist` n'est plus écrite par ce firmware.
 - **Site physique :** inconnu dans les informations conservées
 - **Firmware pendant les essais du 27 septembre :** branche locale avec
   apprentissage et inversion du chemin RF de retour
@@ -126,6 +132,14 @@ Les résultats et leurs limites sont consignés dans
 - **Après la série complémentaire du 28 septembre :** configuration initiale
   restaurée et relue pour comparaison vers 23:05 UTC ; firmware `36ac992`
   conservé.
+- **Firmware installé le 29 septembre 2026, vers 12:06 UTC :** même binaire
+  RXT v2 que F4MLV-15 (build `2026-09-29 12:04:17 UTC`, commit `95a559d`).
+  Pas de lecteur SD.
+- **Liaison USB :** branché en USB sur le PC de développement
+  (`/dev/serial/by-id/usb-1a86_USB_Single_Serial_595D012085-if00`,
+  `/dev/ttyACM0` le 29 septembre). Graywolf gardait ce port ouvert via le
+  port série de sa configuration TNC2 ; ce port série a été retiré le
+  29 septembre, Graywolf n'utilise plus que le TCP `192.168.1.161:8001`.
 - **Site physique :** inconnu dans les informations conservées
 - **Firmware pendant les essais du 27 septembre :** firmware de test de la
   branche locale de routage retour
@@ -157,6 +171,15 @@ Les résultats et leurs limites sont consignés dans
 - **Essai à deux relais du 28 septembre :** reconfiguré temporairement vers
   23:34–23:55 UTC (profils de test hors 433,775 MHz, serveur TNC activé) comme
   relais 2 ; configuration initiale restaurée et relue ensuite.
+- **Carte SD :** seul équipement de test équipé d'un lecteur microSD ; variant
+  `ttgo-lora32-v21_SD`.
+- **Firmware installé le 29 septembre 2026, vers 12:35 UTC :** RXT v2 et
+  téléchargement du journal SD (`GET /sd/log`), variant `ttgo-lora32-v21_SD`,
+  build `2026-09-29 12:33:37 UTC`, compilé depuis l'arbre commité ensuite
+  dans `7ff658c` (`feature/rxt-v2`), confirmé dans la WebUI ; SHA-256 commençant par `4e0f49926d909fe5`. Il
+  remplace le build RXT v2 `2026-09-29 12:04:17 UTC` installé vers 12:06 UTC,
+  lui-même remplaçant le build `2026-09-28 10:21:26 UTC`. Configuration de
+  service conservée (digi mode 2, RXT activé).
 
 ## Réseau public de Jon — N7UV
 
