@@ -20,17 +20,18 @@ and spreading factor.
 
 ## RF format
 
-An RXT-capable digipeater appends one four-character tuple to a relayed APRS
-packet:
+This is RXT v2 (proposal: `docs/RXT_V2.md`). An RXT-capable digipeater
+appends one five-character tuple to a relayed APRS packet:
 
 ```text
-SOURCE>DEST,PATH:payload{RFSH}
+SOURCE>DEST,PATH:payload{IRFSH}
 ```
 
-The four printable characters encode, in order:
+The five printable characters encode, in order:
 
 | Field | Meaning | Encoding |
 | --- | --- | --- |
+| I | Relay identity | Fingerprint of the callsign the digipeater writes into the path |
 | R | RSSI | Linear, -130 dBm to -41 dBm, 1 dB steps |
 | S | SNR | Linear, -9 dB to +12 dB, 0.25 dB steps |
 | F | Frequency offset | Non-linear, approximately -2500 Hz to +2500 Hz |
@@ -40,8 +41,13 @@ TTH covers the interval from completion of reception to completion of the
 relay transmission. It therefore includes time spent in the output queue,
 CAD/DIFS/backoff waiting and the transmitted packet's time on air.
 
+The fingerprint is the 32-bit FNV-1a hash of the callsign in upper case,
+without `*`, SSID included (the tactical callsign when one is configured),
+taken modulo 89 plus 33. Test vectors are listed in `docs/RXT_V2.md`.
+
 Each subsequent RXT-capable digipeater appends its tuple inside the same
-braces. The implementation retains at most three tuples (12 characters).
+braces, but only if the existing trailer passes the path check below. The
+implementation retains at most three tuples (15 characters).
 
 RXT is attached only to a genuine digipeated RF packet. Locally generated
 beacons, APRS telemetry, query responses, APRS-IS-to-RF packets, MQTT input
@@ -56,7 +62,7 @@ into the output queue together with the packet. Delayed packets therefore do
 not reuse measurements from a later reception, and a beacon queued ahead of a
 relay cannot erase its TTH origin.
 
-## Path resolution and whitelist
+## Path resolution and trailer check
 
 The decoder considers path entries through the last starred entry to have
 been used. This supports both conventions encountered on air:
@@ -68,18 +74,24 @@ CALL1*,WIDE2-2*,CALL2*,WIDE2-1
 
 Entries after the last `*` are unconsumed and are not reported as hops.
 
-`rxtWhitelist` is a space-separated list of digipeaters known to append RXT
-tuples. It is configured in the WebUI under the station blacklist/manager
-section and loaded at startup. Matching is case-insensitive but otherwise
-exact, including the SSID when present. For example, `F4GCF-4` and
-`F4GCF-10` are distinct stations. This prevents a tuple from being assigned
-to another station sharing the same base callsign.
+A final `{...}` is treated as RXT only if it has 5, 10 or 15 characters in the
+`!`..`z` range and every tuple ID matches the fingerprint of a used path
+entry. The same check applies at both points where the firmware handles the
+trailer:
 
-Legacy digipeaters may appear in the physical path but do not consume an RXT
-tuple. TNC2 output reports these hops as `NA`.
+- when relaying, a trailer that fails the check is left intact and a new
+  `{...}` is opened after it;
+- before APRS-IS, MQTT, TNC and the JSON stream, the final `{...}` is removed
+  only if it passes the check.
 
-If a valid tuple cannot be associated with a path entry because the whitelist
-is missing or incomplete, TNC2 still reports its decoded values under the
+Tuples are attributed in path order: each tuple goes to the next used entry
+whose fingerprint matches its ID, so two relays sharing a fingerprint are
+separated by their order. No whitelist of RXT-capable digipeaters is needed.
+
+Legacy digipeaters may appear in the physical path but do not add a tuple.
+TNC2 output reports these hops as `NA`.
+
+A tuple whose ID matches no remaining path entry is still reported, under the
 placeholder `RXT_NODE_n<--UNKNOWN`. The tuple is never silently discarded.
 
 ## Output boundaries
@@ -98,8 +110,8 @@ stream. The `tnc.protocol` setting controls both serial and TCP input/output.
 The WebUI RXT panel keeps the last ten received frames carrying an RXT
 trailer. It shows the clean APRS frame, the local receiver RSSI/SNR/frequency
 offset, the raw tuple field and one decoded row per physical hop, including
-`NA` for legacy hops and placeholder names for tuples that cannot be
-associated with the configured whitelist. The newest frame is shown first
+`NA` for legacy hops and placeholder names for tuples whose ID matches no
+path entry. The newest frame is shown first
 and the panel refreshes every five seconds while it is open.
 
 The same records are available from `GET /rxt.json`. Each record includes an
@@ -141,6 +153,19 @@ The logger writes a `# columns=...` marker after every `# boot`, allowing a
 file created by an older firmware to continue with the new schema without
 being mistaken for old six-column rows.
 
+The log can be downloaded without removing the card, with the WebUI
+credentials:
+
+```text
+GET /sd/log                  current file, aprs_rx.csv
+GET /sd/log?file=old         rotated file, aprs_rx.old
+GET /sd/log?tail=65536       last 65536 bytes of the current file
+```
+
+The size is fixed when the request starts. The file is read in chunks under
+a mutex shared with the logger, so logging continues during a download; a
+log line is dropped only if the card stays busy for more than 200 ms.
+
 ## APRS telemetry activity rates
 
 The separate APRS encoded telemetry contains three rates normalized using the
@@ -181,13 +206,16 @@ and weather telemetry is inactive. They do not consume RXT tuples.
 
 ## Compatibility limitation
 
-The wire format is kept compatible with N7UV's implementation. It has no
-explicit marker other than braces: an ordinary APRS payload ending with 4, 8
-or 12 printable characters enclosed in `{}` is indistinguishable from RXT.
-Changing that format requires coordination between all RXT implementations.
+RXT v2 is not compatible with v1 (four-character tuples, whitelist-based
+attribution). A v1 trailer fails the v2 check: it is neither decoded nor
+removed, and a v2 relay opens a new trailer after it. All RXT-capable
+digipeaters of a network must therefore be updated together.
 
-An ordinary brace suffix of any other length is preserved when a new RXT
-tuple is appended.
+The trailer check reduces, but does not remove, the risk of treating a user
+comment as RXT data: a comment ending with 5, 10 or 15 characters in braces
+whose tuple IDs happen to match used relays (about 1 chance in 89 per tuple)
+is treated as RXT. For duplicate suppression, where no path is available,
+only the v2 shape is checked.
 
 ## Configuration migration
 
@@ -216,7 +244,10 @@ Build both tested firmware variants:
 pio run -e ttgo-lora32-v21 -e ttgo-lora32-v21_SD
 ```
 
-Host tests cover trailer append/strip behavior, the three-tuple cap,
+Host tests cover the fingerprint test vectors, the path check when relaying
+and before APRS-IS, attribution in path order with colliding fingerprints,
+the documented chance collision, trailer append/strip behavior, the
+three-tuple cap,
 multi-star paths, single-star paths, unused paths, commas in APRS payloads,
 message detection through nested third-party frames, and safe text projection
 for binary Mic-E packets. On 2026-09-25, F4MLV-15 received a controlled Mic-E
