@@ -52,9 +52,9 @@ const float RSSI_MIN = -130.0f;
 const float RSSI_RES = 1.0f;
 
 // SNR Parameters (Linear)
-const float SNR_MIN = -9.0f;
-const float SNR_MAX = 12.0f;
-const float SNR_RES = 0.25f; // 1 / 4.0
+const float SNR_MIN = -24.0f;   // SF12 still decodes well below -9 dB
+const float SNR_MAX = 20.0f;
+const float SNR_RES = 0.5f;     // 89 steps cover -24 to +20 dB
 
 // --- FO Parameters (Quadratic / Non-linear Symmetrical) ---
 // Maps a base-89 char to a signed frequency offset in Hz (-2500 to +2500)

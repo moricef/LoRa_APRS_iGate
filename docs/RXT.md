@@ -33,7 +33,7 @@ The five printable characters encode, in order:
 | --- | --- | --- |
 | I | Relay identity | Fingerprint of the callsign the digipeater writes into the path |
 | R | RSSI | Linear, -130 dBm to -41 dBm, 1 dB steps |
-| S | SNR | Linear, -9 dB to +12 dB, 0.25 dB steps |
+| S | SNR | Linear, -24 dB to +20 dB, 0.5 dB steps |
 | F | Frequency offset | Non-linear, approximately -2500 Hz to +2500 Hz |
 | H | Time to hop (TTH) | Exponential, scaled from the active LoRa symbol time |
 
