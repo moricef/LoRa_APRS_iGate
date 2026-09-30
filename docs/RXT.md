@@ -21,11 +21,29 @@ and spreading factor.
 ## RF format
 
 This is RXT v2 (proposal: `docs/RXT_V2.md`). An RXT-capable digipeater
-appends one five-character tuple to a relayed APRS packet:
+adds one five-character tuple to a relayed APRS packet. On air, the tuples
+travel in a hidden block after the text packet:
+
+```text
+<0x3C 0xFF 0x01> SOURCE>DEST,PATH:payload <0x00> <0x01> IRFSH
+```
+
+The text packet is left untouched. Firmware that reads the LoRa payload as a C
+string, such as the upstream CA2RXU firmware, stops at the zero byte: it sees,
+relays and uploads the original packet, so APRS-IS drops the relayed copy as a
+duplicate and no trailer reaches aprs.fi. A third-party digipeater relays the
+text only, so the measurements of earlier hops are lost after it.
+
+Inside the firmware the block is handled as the trailer described below:
 
 ```text
 SOURCE>DEST,PATH:payload{IRFSH}
 ```
+
+A received hidden block is turned back into that trailer only if it passes the
+path check; a received visible trailer from older firmware is still read. When
+a text frame is sent, a trailer that passes the check is moved into the hidden
+block.
 
 The five printable characters encode, in order:
 
@@ -96,14 +114,14 @@ placeholder `RXT_NODE_n<--UNKNOWN`. The tuple is never silently discarded.
 
 ## Output boundaries
 
-The RXT trailer is retained while a packet remains on RF so another
-RXT-capable digipeater can append its measurement. It is removed before the
-packet is sent to APRS-IS, MQTT, the WebUI map or a TNC client.
+The RXT tuples stay with a packet while it remains on RF, in the hidden block,
+so another RXT-capable digipeater can add its measurement. They are removed
+before the packet is sent to APRS-IS, MQTT, the WebUI map or a TNC client.
 
 In TNC2 mode, clients receive the clean APRS packet followed by local receiver
 metrics and decoded hop records. In KISS mode, clients receive only the
 KISS-encoded APRS frame; textual metrics are never inserted into the binary
-stream. The `tnc.protocol` setting controls both serial and TCP input/output.
+stream. The `tnc.kissProtocol` setting controls both serial and TCP input/output.
 
 ## Web dashboard
 
