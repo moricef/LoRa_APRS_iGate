@@ -227,6 +227,28 @@ int main() {
     expectEqual("metadata target", metadataStation, "F4MLV-2");
     expectEqual("metadata kind", metadataKind, "EQNS");
 
+    // Hidden extension after a zero byte.
+    {
+        const std::string text = "F4MLV-9>APLRG1,F4MLV-15*:>ext test";
+        const std::string tuple = std::string(1, RXT_Protocol::fingerprint("F4MLV-15")) + "jf$?";
+        const std::string withTrailer = text + "{" + tuple + "}";
+        const std::string payload = RXT_Protocol::toExtensionPayload(withTrailer);
+        expectEqual("extension payload", payload, text + std::string(1, '\0') + "\x01" + tuple);
+        expectEqual("extension read back as trailer", RXT_Protocol::fromExtensionPayload(payload), withTrailer);
+        expectEqual("C-string view of the payload", std::string(payload.c_str()), text);
+        expectEqual("packet without trailer unchanged", RXT_Protocol::toExtensionPayload(text), text);
+        const std::string comment = "F4MLV-9>APLRG1,F4MLV-15*:>hello {world}";
+        expectEqual("user braces stay in the text", RXT_Protocol::toExtensionPayload(comment), comment);
+        expectEqual("comment then extension",
+                    RXT_Protocol::fromExtensionPayload(RXT_Protocol::toExtensionPayload(comment + "{" + tuple + "}")),
+                    comment + "{" + tuple + "}");
+        expectEqual("zero byte without marker is cut",
+                    RXT_Protocol::fromExtensionPayload(text + std::string(1, '\0') + "garbage"), text);
+        expectEqual("extension not matching the path is dropped",
+                    RXT_Protocol::fromExtensionPayload(text + std::string(1, '\0') + "\x01" + "!jf$?"), text);
+        expectEqual("payload without zero byte unchanged", RXT_Protocol::fromExtensionPayload(text), text);
+    }
+
     if (failures != 0) return 1;
     std::cout << "RXT and APRS telemetry host tests passed\n";
     return 0;

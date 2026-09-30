@@ -222,4 +222,24 @@ bool isAprsMessage(const std::string& packet) {
     }
 }
 
+std::string toExtensionPayload(const std::string& packet, const std::string& regionalAliases) {
+    std::string content;
+    std::string text = stripTrailer(packet, &content, regionalAliases);
+    if (content.empty()) return packet;
+    text.push_back('\0');
+    text.push_back(EXTENSION_MARKER);
+    return text + content;
+}
+
+std::string fromExtensionPayload(const std::string& payload, const std::string& regionalAliases) {
+    size_t zero = payload.find('\0');
+    if (zero == std::string::npos) return payload;
+    std::string text = payload.substr(0, zero);
+    if (zero + 1 < payload.size() && payload[zero + 1] == EXTENSION_MARKER) {
+        std::string content = payload.substr(zero + 2);
+        if (trailerMatchesPath(text, content, regionalAliases)) return text + "{" + content + "}";
+    }
+    return text;
+}
+
 }

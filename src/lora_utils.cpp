@@ -614,7 +614,12 @@ namespace LoRa_Utils {
         if (Config.loramodule.txFormat == 1 && !native.empty()) {
             state = radio.transmit(native.data(), native.size());
         } else {
-            state = radio.transmit("\x3c\xff\x01" + finalPacket);
+            // RXT content travels after a zero byte, out of sight of firmware
+            // that reads the payload as a C string, so every other station
+            // sees and uploads the untouched text packet.
+            const std::string frame = std::string("\x3c\xff\x01") + RXT_Protocol::toExtensionPayload(
+                std::string(finalPacket.c_str(), finalPacket.length()), Config.digi.regionalAliases.c_str());
+            state = radio.transmit(reinterpret_cast<const uint8_t*>(frame.data()), frame.size());
             if (state == RADIOLIB_ERR_NONE && Config.loramodule.txFormat == 2 && !native.empty()) {
                 state = radio.transmit(native.data(), native.size());
             }
@@ -668,8 +673,13 @@ namespace LoRa_Utils {
                            (rxt.size() && text == tnc2 ? ", RXT block dropped" : ""));
             return String(text.c_str());
         }
-        data[length] = 0;
-        return String(reinterpret_cast<char*>(data));
+        // Text frame: read up to the first zero byte, as readData(String&)
+        // did, but turn a hidden RXT extension back into a trailer.
+        std::string payload(reinterpret_cast<const char*>(data), length);
+        const bool prefixed = payload.compare(0, 3, "\x3c\xff\x01") == 0;
+        std::string text = RXT_Protocol::fromExtensionPayload(prefixed ? payload.substr(3) : payload,
+                                                              Config.digi.regionalAliases.c_str());
+        return String(((prefixed ? std::string("\x3c\xff\x01") : std::string()) + text).c_str());
     }
 
     String receivePacket(String* jsonPacket) {

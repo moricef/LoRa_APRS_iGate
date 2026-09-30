@@ -45,6 +45,20 @@ namespace RXT_Protocol {
         const std::string& regionalAliases = "");
     bool isAprsMessage(const std::string& packet);
 
+    // Hidden extension: on air, the RXT content follows the text packet after
+    // a zero byte and EXTENSION_MARKER. Firmware that reads the payload as a C
+    // string stops at the zero byte and only sees the untouched text packet.
+    constexpr char EXTENSION_MARKER = '\x01';
+    // Packet whose final trailer passes trailerMatchesPath() -> text packet,
+    // zero byte, marker, content. Any other packet is returned unchanged.
+    std::string toExtensionPayload(const std::string& packet,
+                                   const std::string& regionalAliases = "");
+    // Received payload (without the LoRa prefix) -> text packet, with the
+    // extension turned back into a trailer when it passes trailerMatchesPath().
+    // Anything else after a zero byte is dropped, as a C string read would.
+    std::string fromExtensionPayload(const std::string& payload,
+                                     const std::string& regionalAliases = "");
+
 }
 
 #endif
