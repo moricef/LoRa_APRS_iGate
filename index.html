@@ -75,7 +75,7 @@
 
     <div class="board">
       <h3>TTGO LoRa32 v2.1 avec microSD</h3>
-      <p class="build-time">Build : 30 septembre 2026 à 19:15:04 UTC</p>
+      <p class="build-time">Build : 13 octobre 2026 à 16:45:52 UTC</p>
       <esp-web-install-button class="install-btn" manifest="manifest-ttgo-lora32-v21-sd.json">
         <button slot="activate">Installer ou mettre à jour</button>
         <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
@@ -85,7 +85,7 @@
 
     <div class="board">
       <h3>Heltec WiFi LoRa 32 V3.2</h3>
-      <p class="build-time">Build : 30 septembre 2026 à 19:15:16 UTC</p>
+      <p class="build-time">Build : 13 octobre 2026 à 16:46:24 UTC</p>
       <esp-web-install-button class="install-btn" manifest="manifest-heltec-wifi-lora-32-v3-2.json">
         <button slot="activate">Installer ou mettre à jour</button>
         <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
@@ -95,7 +95,7 @@
 
     <div class="board">
       <h3>QRP Labs LightGateway Plus 1.0</h3>
-      <p class="build-time">Build : 30 septembre 2026 à 19:15:27 UTC</p>
+      <p class="build-time">Build : 13 octobre 2026 à 16:46:51 UTC</p>
       <esp-web-install-button class="install-btn" manifest="manifest-qrplabs-lightgateway-plus-1-0.json">
         <button slot="activate">Installer ou mettre à jour</button>
         <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
@@ -104,7 +104,9 @@
     </div>
   </div>
 
-  <p class="version">Firmware <strong>4.0.2RXT</strong> - builds du 30 septembre 2026 à 19:15 UTC - ESP32 / ESP32-S3 / 433 MHz</p>
+  <p class="version">Firmware <strong>4.0.2RXT</strong> - builds du 13 octobre 2026 - ESP32 / ESP32-S3 / 433 MHz</p>
+
+  <p>Correctif RXT vérifié en radio sur deux TTGO LoRa32 v2.1. Les variantes Heltec et QRP Labs ont été compilées ; elles n’ont pas été testées sur matériel lors de ces essais. <a href="https://github.com/moricef/LoRa_APRS_iGate/blob/rxt/docs/VALIDATION_RXT_NATIVE_RF_20261013.md">RF test report (English)</a> · <a href="https://github.com/moricef/LoRa_APRS_iGate/blob/rxt/docs/VALIDATION_RXT_NATIVE_RF_20261013_fr.md">Compte rendu en français</a>.</p>
 
   <div class="warning">
     <strong>Avant l'installation :</strong>
@@ -124,9 +126,10 @@
       <li>Journal des paquets sur carte microSD, téléchargeable depuis la WebUI</li>
       <li>Télémétrie APRS RX / Relay / Drop</li>
       <li>Tableau de bord de télémétrie APRS reçue avec libellés et unités</li>
-      <li>Télémétrie RXT multi-sauts de N7UV, format v2 : chaque mesure identifie son relais, sans liste blanche ; mesures transmises dans un bloc caché après la trame, invisibles pour les autres firmwares et pour APRS-IS ; SNR de −24 à +20 dB (incompatible avec v1 et avec les builds précédents)</li>
+      <li>Télémétrie RXT multi-sauts de N7UV, format v2 : chaque mesure identifie son relais, sans liste blanche ; attribution ambiguë signalée sans deviner le relais ; mesures transmises dans un bloc caché après la trame, invisibles pour les autres firmwares et pour APRS-IS ; SNR de −24 à +20 dB (incompatible avec v1 et avec les builds précédents)</li>
       <li>Tableau RXT adapté aux écrans compacts</li>
-      <li>Trames LoRa APRS natives (brouillon 0) : réception, émission au choix (texte par défaut)</li>
+      <li>Trames LoRa APRS natives (brouillon 0) : réception, émission au choix (texte par défaut) ; identité des mesures conservée pendant le relais et la mise en attente</li>
+      <li>Télémétrie batterie et activité séparée en trames T# pour les balises météo</li>
       <li>Flux LoRa APRS JSON versionné avec reprise d'historique</li>
       <li>Snapshot JSON des dix dernières réceptions pour les tableaux de bord</li>
       <li>Traitement exact des jetons WIDE2-n et chemin TNC2 canonique à une seule étoile</li>

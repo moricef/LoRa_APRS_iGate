@@ -21,11 +21,36 @@ and spreading factor.
 ## RF format
 
 This is RXT v2 (proposal: `docs/RXT_V2.md`). An RXT-capable digipeater
-appends one five-character tuple to a relayed APRS packet:
+adds one five-character tuple to a relayed APRS packet. On air, the tuples
+travel in a hidden block after the text packet:
+
+```text
+<0x3C 0xFF 0x01> SOURCE>DEST,PATH:payload <0x00> <0x01> IRFSH
+```
+
+The text packet is left untouched. Firmware that reads the LoRa payload as a C
+string, such as the upstream CA2RXU firmware, stops at the zero byte: it sees,
+relays and uploads the original packet, so APRS-IS drops the relayed copy as a
+duplicate and no trailer reaches aprs.fi. A third-party digipeater relays the
+text only, so the measurements of earlier hops are lost after it.
+
+Inside the firmware the block is handled as the trailer described below:
 
 ```text
 SOURCE>DEST,PATH:payload{IRFSH}
 ```
+
+Native frame reception is different: the APRS text and the indexed native
+measurements stay separate, including in the queued RF context. Hop displays
+use these indexes and native retransmission remaps them by full callsign after
+path rewriting. Derived five-character tuples are only a log or text-export
+representation. A native-to-text transmission necessarily returns to the v2
+fingerprint attribution rules.
+
+A received hidden block is turned back into that trailer only if it passes the
+path check; a received visible trailer from older firmware is still read. When
+a text frame is sent, a trailer that passes the check is moved into the hidden
+block.
 
 The five printable characters encode, in order:
 
@@ -33,7 +58,7 @@ The five printable characters encode, in order:
 | --- | --- | --- |
 | I | Relay identity | Fingerprint of the callsign the digipeater writes into the path |
 | R | RSSI | Linear, -130 dBm to -41 dBm, 1 dB steps |
-| S | SNR | Linear, -9 dB to +12 dB, 0.25 dB steps |
+| S | SNR | Linear, -24 dB to +20 dB, 0.5 dB steps |
 | F | Frequency offset | Non-linear, approximately -2500 Hz to +2500 Hz |
 | H | Time to hop (TTH) | Exponential, scaled from the active LoRa symbol time |
 
@@ -88,6 +113,17 @@ Tuples are attributed in path order: each tuple goes to the next used entry
 whose fingerprint matches its ID, so two relays sharing a fingerprint are
 separated by their order. No whitelist of RXT-capable digipeaters is needed.
 
+When relays of the path share a fingerprint and fewer tuples carry it than
+there are such relays, path order cannot tell which of them produced the
+tuple. The tuple is then not attributed. It is reported under the names of
+all the relays that can have produced it, as `CALL1|CALL2<--UNKNOWN`, and the
+hops of those relays stay `NA` in the chain. In the JSON stream the hop has
+`identity_status` set to `unresolved`. A tuple of another relay placed between
+them restores the order: the tuple before it belongs to the earlier relay, the
+tuple after it to the later one. A packet holding an ambiguous tuple is sent
+as text even when native transmission is selected, since the native block
+needs a definite position for each tuple.
+
 Legacy digipeaters may appear in the physical path but do not add a tuple.
 TNC2 output reports these hops as `NA`.
 
@@ -96,14 +132,14 @@ placeholder `RXT_NODE_n<--UNKNOWN`. The tuple is never silently discarded.
 
 ## Output boundaries
 
-The RXT trailer is retained while a packet remains on RF so another
-RXT-capable digipeater can append its measurement. It is removed before the
-packet is sent to APRS-IS, MQTT, the WebUI map or a TNC client.
+The RXT tuples stay with a packet while it remains on RF, in the hidden block,
+so another RXT-capable digipeater can add its measurement. They are removed
+before the packet is sent to APRS-IS, MQTT, the WebUI map or a TNC client.
 
 In TNC2 mode, clients receive the clean APRS packet followed by local receiver
 metrics and decoded hop records. In KISS mode, clients receive only the
 KISS-encoded APRS frame; textual metrics are never inserted into the binary
-stream. The `tnc.protocol` setting controls both serial and TCP input/output.
+stream. The `tnc.kissProtocol` setting controls both serial and TCP input/output.
 
 ## Web dashboard
 
