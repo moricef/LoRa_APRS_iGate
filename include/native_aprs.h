@@ -19,6 +19,35 @@ namespace NATIVE_APRS {
         char    tuple[4];
     };
 
+    // Snapshot kept with the RF reception, including while a relay is queued.
+    // The path indexes remain authoritative; text fingerprints are only an
+    // export representation, never used to recover these owners.
+    struct RxtState {
+        bool native = false;
+        std::string packet;
+        std::vector<RxtTuple> tuples;
+    };
+
+    // Index of each tuple in usedPathNodes(), or -1 for an unused/alias entry.
+    std::vector<int> tupleOwners(const std::string& packet,
+                                const std::vector<RxtTuple>& tuples,
+                                const std::string& regionalAliases = "");
+    // Printable export for logs; supports all eight native measurements.
+    // It does not preserve positional identity and must not be decoded back.
+    std::string rawTuples(const std::string& packet, const std::vector<RxtTuple>& tuples);
+    // Same source, destination and information, irrespective of transport path.
+    bool samePacketContent(const std::string& first, const std::string& second);
+
+    // Move measurements to their full callsign in a rewritten relay path.
+    // Removed relays lose their measurement. Repeated callsigns must retain
+    // their occurrence count, otherwise their identity cannot be recovered.
+    // False also prevents accidentally attaching a snapshot to another packet.
+    bool remapRxt(const RxtState& state, const std::string& packet,
+                  const std::string& regionalAliases, std::vector<RxtTuple>& tuples);
+    bool appendRelayTuple(const std::string& packet, const std::string& callsign,
+                          const std::string& values, const std::string& regionalAliases,
+                          std::vector<RxtTuple>& tuples);
+
     // Header byte: path count (bits 7-4), RXT block (bit 3),
     // Huffman text (bit 2), information kind (bits 1-0).
     constexpr uint8_t RXT_FLAG     = 0x08;
@@ -52,7 +81,8 @@ namespace NATIVE_APRS {
     // Inverse of toText(): split a text packet into tnc2 and its RXT tuples,
     // each placed on the path element whose fingerprint it carries (in path
     // order). A trailer that fails RXT_Protocol::trailerMatchesPath() is not
-    // RXT and stays in tnc2. Returns false if a tuple matches no element.
+    // RXT and stays in tnc2. Returns false if a tuple matches no element, or
+    // if several relays of the path can have produced it.
     bool fromText(const std::string& text, const std::string& regionalAliases,
                   std::string& tnc2, std::vector<RxtTuple>& rxt);
 

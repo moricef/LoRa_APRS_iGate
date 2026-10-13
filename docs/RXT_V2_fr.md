@@ -64,8 +64,10 @@ Sur 133 indicatifs relevés dans mes journaux, 1,28 % des paires ont le même
 ID, proche du 1/89 attendu. Quand deux digis d'un même chemin ont le même ID
 et ont tous deux ajouté un tuple, les tuples sont attribués dans l'ordre du
 chemin, puisqu'ils sont ajoutés dans l'ordre des relais. Si l'un d'eux n'a pas
-ajouté de tuple, celui qui reste peut être attribué au mauvais digi : la
-mesure est alors mal attribuée, pas perdue. Un tuple dont l'ID ne correspond à
+ajouté de tuple, l'ordre ne permet plus de dire auquel des deux appartient
+celui qui reste : il est signalé comme venant de l'un ou de l'autre, et n'est
+attribué à aucun. Un tuple d'un autre digi placé entre les deux rétablit
+l'ordre. Un tuple dont l'ID ne correspond à
 rien dans le chemin (digi qui n'a pas inscrit son indicatif) est affiché comme
 relais non identifié plutôt que deviné ; l'empreinte ne peut pas retrouver un
 indicatif absent du chemin.

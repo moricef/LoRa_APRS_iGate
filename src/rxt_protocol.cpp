@@ -34,7 +34,12 @@ bool matchesNumberedAlias(const std::string& upper, const std::string& alias) {
     if (upper.size() == alias.size()) return true;
 
     size_t dash = upper.find('-', alias.size() + 1);
-    if (dash == std::string::npos || dash + 1 >= upper.size()) return false;
+    if (dash == std::string::npos) {
+        return std::all_of(upper.begin() + alias.size(), upper.end(), [](unsigned char c) {
+            return std::isdigit(c);
+        });
+    }
+    if (dash + 1 >= upper.size()) return false;
     for (size_t i = alias.size(); i < dash; ++i) {
         if (!std::isdigit(static_cast<unsigned char>(upper[i]))) return false;
     }
@@ -139,19 +144,55 @@ std::string stripTrailer(const std::string& packet, std::string* outTuples,
     return packet;
 }
 
+std::vector<std::vector<int>> tupleCandidates(const std::string& content,
+                                              const std::vector<std::string>& usedNodes) {
+    std::string ids;
+    for (size_t i = 0; i + TUPLE_BYTES <= content.size(); i += TUPLE_BYTES) ids += content[i];
+    std::string nodeIds;
+    for (const std::string& node : usedNodes) nodeIds += fingerprint(node);
+
+    // Earliest node each tuple can belong to, taking tuples in path order.
+    std::vector<int> earliest;
+    bool consistent = true;
+    size_t nextNode = 0;
+    for (char id : ids) {
+        size_t match = nodeIds.find(id, nextNode);
+        if (match == std::string::npos) {
+            earliest.push_back(-1);
+            consistent = false;
+        } else {
+            earliest.push_back(static_cast<int>(match));
+            nextNode = match + 1;
+        }
+    }
+
+    std::vector<std::vector<int>> candidates(ids.size());
+    if (!consistent) {
+        // Some tuple fits no remaining node: keep the in-order result as is.
+        for (size_t i = 0; i < ids.size(); i++) {
+            if (earliest[i] >= 0) candidates[i].push_back(earliest[i]);
+        }
+        return candidates;
+    }
+
+    // Latest node each tuple can belong to, taking tuples from the last one.
+    // Every node with the tuple's ID between both bounds is a possible owner.
+    size_t limit = nodeIds.size();
+    for (size_t i = ids.size(); i-- > 0;) {
+        const size_t latest = nodeIds.rfind(ids[i], limit - 1);
+        for (size_t node = static_cast<size_t>(earliest[i]); node <= latest; node++) {
+            if (nodeIds[node] == ids[i]) candidates[i].push_back(static_cast<int>(node));
+        }
+        limit = latest;
+    }
+    return candidates;
+}
+
 std::vector<int> attributeTuples(const std::string& content,
                                  const std::vector<std::string>& usedNodes) {
     std::vector<int> owners;
-    size_t nextNode = 0;
-    for (size_t i = 0; i + TUPLE_BYTES <= content.size(); i += TUPLE_BYTES) {
-        size_t match = nextNode;
-        while (match < usedNodes.size() && fingerprint(usedNodes[match]) != content[i]) match++;
-        if (match < usedNodes.size()) {
-            owners.push_back(static_cast<int>(match));
-            nextNode = match + 1;
-        } else {
-            owners.push_back(-1);
-        }
+    for (const std::vector<int>& nodes : tupleCandidates(content, usedNodes)) {
+        owners.push_back(nodes.size() == 1 ? nodes[0] : -1);
     }
     return owners;
 }

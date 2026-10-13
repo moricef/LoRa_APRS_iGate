@@ -79,6 +79,7 @@ const float TTH_SCALE_FACTOR = 10.0f; // tthScale = symbolTimeMs * TTH_SCALE_FAC
 bool operationDone      = true;
 bool transmitFlag       = true;
 String lastRxtField     = "";
+NATIVE_APRS::RxtState lastNativeRxt;
 bool crcErrorPending    = false;
 LoRa_Utils::RxtRxContext lastCrcError = {false, 0, 0.0F, 0, 0};
 
@@ -250,6 +251,10 @@ namespace LoRa_Utils {
     }        
 
     String stripRxtTrailer(const String& packet, String* outTuple) {
+        if (lastNativeRxt.native && NATIVE_APRS::samePacketContent(lastNativeRxt.packet, packet.c_str())) {
+            if (outTuple != nullptr) *outTuple = lastRxtField;
+            return packet;
+        }
         std::string tuples;
         std::string clean = RXT_Protocol::stripTrailer(packet.c_str(), outTuple == nullptr ? nullptr : &tuples,
                                                        Config.digi.regionalAliases.c_str());
@@ -301,10 +306,20 @@ namespace LoRa_Utils {
 
             // Attribute each tuple to the used path node whose fingerprint
             // matches its ID, in path order. A tuple matching nothing stays
-            // visible as an unidentified relay rather than being guessed.
+            // visible as an unidentified relay rather than being guessed, and
+            // a tuple that several relays of the path can have produced is
+            // reported under all their names ("A|B").
             std::vector<std::string> nodes;
             for (const String& node : usedPathNodes) nodes.push_back(node.c_str());
-            const std::vector<int> owners = RXT_Protocol::attributeTuples(lastRxtField.c_str(), nodes);
+            std::vector<std::vector<int>> owners;
+            if (lastNativeRxt.native && packet == lastNativeRxt.packet.c_str()) {
+                for (int owner : NATIVE_APRS::tupleOwners(lastNativeRxt.packet,
+                         lastNativeRxt.tuples, Config.digi.regionalAliases.c_str())) {
+                    owners.push_back(owner < 0 ? std::vector<int>{} : std::vector<int>{owner});
+                }
+            } else {
+                owners = RXT_Protocol::tupleCandidates(lastRxtField.c_str(), nodes);
+            }
             int numHops = lastRxtField.length() / tupleBytes;
             for (int i = 0; i < numHops; i++) {
                 String hopTuple = lastRxtField.substring(i * tupleBytes, (i + 1) * tupleBytes);
@@ -320,12 +335,20 @@ namespace LoRa_Utils {
                 }
                 hop.rawTuple[tupleBytes] = '\0';
 
-                const int match = owners[i];
-                if (match >= 0) {
+                const std::vector<int>& candidates = owners[i];
+                if (candidates.size() == 1) {
+                    const int match = candidates[0];
                     hop.toNode   = usedPathNodes[match];
                     hop.fromNode = (match == 0) ? sourceCall : usedPathNodes[match - 1];
-                } else {
+                } else if (candidates.empty()) {
                     hop.toNode   = "RXT_NODE_" + String(i + 1);
+                    hop.fromNode = "UNKNOWN";
+                } else {
+                    hop.toNode = "";
+                    for (int candidate : candidates) {
+                        if (hop.toNode.length() > 0) hop.toNode += "|";
+                        hop.toNode += usedPathNodes[candidate];
+                    }
                     hop.fromNode = "UNKNOWN";
                 }
 
@@ -503,7 +526,7 @@ namespace LoRa_Utils {
     }
 
     RxtRxContext captureRxtRxContext() {
-        return {rxCompletedMillis > 0, rssi, snr, freqOffset, rxCompletedMillis};
+        return {rxCompletedMillis > 0, rssi, snr, freqOffset, rxCompletedMillis, lastNativeRxt};
     }
 
     bool takeCrcError(RxtRxContext& context) {
@@ -520,12 +543,23 @@ namespace LoRa_Utils {
     }
 
     // Native form of a text packet, or empty when it has to go as text.
-    std::vector<uint8_t> nativeFrame(const std::string& text) {
+    std::vector<uint8_t> nativeFrame(const std::string& text,
+                                    const RxtRxContext* context = nullptr,
+                                    const std::string& relayPacket = "",
+                                    const String& localTuple = "") {
         std::string tnc2;
         std::vector<NATIVE_APRS::RxtTuple> rxt;
         std::vector<uint8_t> frame;
-        if (!NATIVE_APRS::fromText(text, Config.digi.regionalAliases.c_str(), tnc2, rxt) ||
-            !NATIVE_APRS::encode(tnc2, rxt, frame) || frame.size() > RXT_Protocol::LORA_MAX_PAYLOAD_BYTES) {
+        if (context != nullptr && context->nativeRxt.native) {
+            tnc2 = relayPacket;
+            if (!NATIVE_APRS::remapRxt(context->nativeRxt, tnc2,
+                                     Config.digi.regionalAliases.c_str(), rxt)) return {};
+            if (localTuple.length() && !NATIVE_APRS::appendRelayTuple(tnc2, pathIdentity().c_str(),
+                    localTuple.substring(1).c_str(), Config.digi.regionalAliases.c_str(), rxt)) return {};
+        } else if (!NATIVE_APRS::fromText(text, Config.digi.regionalAliases.c_str(), tnc2, rxt)) {
+            return {};
+        }
+        if (!NATIVE_APRS::encode(tnc2, rxt, frame) || frame.size() > RXT_Protocol::LORA_MAX_PAYLOAD_BYTES) {
             return {};
         }
         return frame;
@@ -533,10 +567,23 @@ namespace LoRa_Utils {
 
     void sendNewPacket(const String& rawPacket, const RxtRxContext* rxtContext) {
         if (!Config.loramodule.txActive) return;
+        // Text is an export for legacy peers. Native transmission below uses
+        // the queued snapshot directly, including colliding fingerprints.
+        String relayPacket = rawPacket;
+        size_t nativeTupleCount = 0;
+        if (rxtContext != nullptr && rxtContext->nativeRxt.native) {
+            std::vector<NATIVE_APRS::RxtTuple> tuples;
+            if (NATIVE_APRS::remapRxt(rxtContext->nativeRxt, rawPacket.c_str(),
+                                     Config.digi.regionalAliases.c_str(), tuples)) {
+                nativeTupleCount = tuples.size();
+                relayPacket = NATIVE_APRS::toText(rawPacket.c_str(), tuples,
+                                                Config.digi.regionalAliases.c_str()).c_str();
+            }
+        }
         // Check before changing frequency, LED state or waiting for the
         // channel. Never truncate APRS data to fit the radio's payload.
-        if (!RXT_Protocol::fitsLoRaPayload(rawPacket.length())) {
-            Utils::println("[TX] Packet rejected: " + String(rawPacket.length()) +
+        if (!RXT_Protocol::fitsLoRaPayload(relayPacket.length())) {
+            Utils::println("[TX] Packet rejected: " + String(relayPacket.length()) +
                            " APRS bytes exceed 252 (255 including LoRa prefix)");
             return;
         }
@@ -571,17 +618,18 @@ namespace LoRa_Utils {
         // behind it and must never carry RXT data, regardless of this
         // packet's payload shape.
         bool allowRxt = Config.rxtEnabled && rxtContext != nullptr && rxtContext->valid;
+        if (nativeTupleCount >= RXT_Protocol::MAX_TUPLES) allowRxt = false;
         // Appending data to an APRS message can corrupt its message number,
         // ACK or REJ. Check the effective data type after unwrapping any
         // third-party frame(s), not only the outer payload.
         if (RXT_Protocol::isAprsMessage(rawPacket.c_str())) allowRxt = false;
 
-        String finalPacket = rawPacket;
+        String finalPacket = relayPacket;
         String finalTuple = "";
         unsigned long finalTTH = 0;
         if (allowRxt) {
             String localTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, totalDwellAndChannelMs);
-            const std::string original(rawPacket.c_str(), rawPacket.length());
+            const std::string original(relayPacket.c_str(), relayPacket.length());
             const std::string pendingPacket = RXT_Protocol::attachTrailerWithinLimit(
                 original, localTuple.c_str(), Config.digi.regionalAliases.c_str());
             if (pendingPacket == original) {
@@ -594,20 +642,22 @@ namespace LoRa_Utils {
                 // depend on the tuple values, only on their number.
                 size_t totalBytes = pendingPacket.size() + RXT_Protocol::LORA_APRS_PREFIX_BYTES;
                 if (Config.loramodule.txFormat == 1) {
-                    const std::vector<uint8_t> native = nativeFrame(pendingPacket);
+                    const std::vector<uint8_t> native = nativeFrame(pendingPacket, rxtContext,
+                                                                   rawPacket.c_str(), localTuple);
                     if (!native.empty()) totalBytes = native.size();
                 }
                 unsigned long timeOnAirMs = radio.getTimeOnAir(totalBytes) / 1000;
                 finalTTH = totalDwellAndChannelMs + timeOnAirMs;
                 finalTuple = buildRxtTuple(rxtContext->rssi, rxtContext->snr, rxtContext->fo, finalTTH);
                 // Both tuple encodings have the same four-byte length.
-                finalPacket = attachRxtTrailer(rawPacket, finalTuple);
+                finalPacket = attachRxtTrailer(relayPacket, finalTuple);
             }
         }
 
         std::vector<uint8_t> native;
         if (Config.loramodule.txFormat != 0) {
-            native = nativeFrame(std::string(finalPacket.c_str(), finalPacket.length()));
+            native = nativeFrame(std::string(finalPacket.c_str(), finalPacket.length()),
+                                 rxtContext, rawPacket.c_str(), allowRxt ? finalTuple : String(""));
             if (native.empty()) Utils::println("[NATIVE] Sent as text: packet cannot be encoded");
         }
         int state;
@@ -657,8 +707,8 @@ namespace LoRa_Utils {
 
     }
 
-    // Text packet for a received LoRa payload. A native frame is decoded to
-    // TNC2 with its RXT block as a v2 trailer; a text frame keeps the
+    // Native RXT stays in a separate, indexed snapshot; only APRS text is
+    // returned to the application. A text frame keeps the
     // behaviour of readData(String&), which stops at the first zero byte.
     String packetFromRadio(uint8_t* data, size_t length) {
         if (NATIVE_APRS::isNativeFrame(data, length)) {
@@ -668,10 +718,14 @@ namespace LoRa_Utils {
                 Utils::println("[NATIVE] Undecodable frame (" + String(length) + " bytes)");
                 return "";
             }
-            std::string text = NATIVE_APRS::toText(tnc2, rxt, Config.digi.regionalAliases.c_str());
-            Utils::println("[NATIVE] " + String(length) + " bytes -> " + String(text.size()) + " bytes of text" +
-                           (rxt.size() && text == tnc2 ? ", RXT block dropped" : ""));
-            return String(text.c_str());
+            lastNativeRxt.native = true;
+            lastNativeRxt.packet = tnc2;
+            lastNativeRxt.tuples = rxt;
+            // Printable raw tuples for logs/JSON; attribution uses the indexed
+            // snapshot above, never these derived fingerprints.
+            lastRxtField = NATIVE_APRS::rawTuples(tnc2, rxt).c_str();
+            Utils::println("[NATIVE] " + String(length) + " bytes -> " + String(tnc2.size()) + " bytes of text");
+            return String(tnc2.c_str());
         }
         // Text frame: read up to the first zero byte, as readData(String&)
         // did, but turn a hidden RXT extension back into a trailer.
@@ -685,6 +739,7 @@ namespace LoRa_Utils {
     String receivePacket(String* jsonPacket) {
         String packet = "";
         lastRxtField = ""; // State hygiene reset at packet boundary
+        lastNativeRxt = {};
         if (jsonPacket != nullptr) *jsonPacket = "";
         
         if (operationDone) {

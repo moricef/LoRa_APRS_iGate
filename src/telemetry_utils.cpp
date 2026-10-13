@@ -47,7 +47,7 @@ static uint32_t relayCount          = 0;    // frames queued by the digi, not co
 static uint32_t dropCount           = 0;    // blacklist rejections and frames not relayed by the digi (including local queries)
 static uint32_t telemetryWindowStart = 0;   // millis() at the previous encoded telemetry report
 static constexpr uint32_t telemetryMetadataInterval = 6UL * 60UL * 60UL * 1000UL;
-static constexpr uint16_t telemetrySequenceModulus = 8281;
+static uint16_t telemetrySequenceModulus = 8281;
 static constexpr uint16_t telemetrySequenceReservation = 64;
 static uint16_t telemetrySequencesRemaining = 0;
 
@@ -68,7 +68,12 @@ static void reserveTelemetrySequences() {
     telemetrySequencesRemaining = telemetrySequenceReservation;
 }
 
-static uint16_t nextTelemetrySequence() {
+static uint16_t nextTelemetrySequence(bool standalone) {
+    const uint16_t modulus = standalone ? 1000 : 8281;
+    if (modulus != telemetrySequenceModulus) {
+        telemetrySequenceModulus = modulus;
+        telemetrySequencesRemaining = 0;
+    }
     if (telemetrySequencesRemaining == 0) reserveTelemetrySequences();
     const uint16_t sequence = telemetryCounter;
     telemetryCounter = static_cast<uint16_t>((telemetryCounter + 1) % telemetrySequenceModulus);
@@ -91,7 +96,7 @@ namespace TELEMETRY_Utils {
     std::vector<String> getEquationCoefficients() {
         std::vector<String> coefficients;
         if (Config.battery.sendInternalVoltage) coefficients.push_back("0,0.01,0");
-        if (Config.battery.sendExternalVoltage) coefficients.push_back("0,0.02,0");
+        if (Config.battery.sendExternalVoltage) coefficients.push_back(Config.battery.useExternalI2CSensor ? "0,0.01,0" : "0,0.02,0");
         coefficients.push_back("0,1,0");
         coefficients.push_back("0,1,0");
         coefficients.push_back("0,1,0");
@@ -179,7 +184,7 @@ namespace TELEMETRY_Utils {
         return static_cast<uint16_t>((rate > 8280ULL) ? 8280ULL : rate);
     }
 
-    String generateEncodedTelemetry() {
+    String generateEncodedTelemetry(bool standalone) {
         const uint32_t now       = millis();
         const uint32_t elapsedMs = now - telemetryWindowStart;
         const uint16_t rxRate    = counterRatePerHour(rxCount, elapsedMs);
@@ -187,7 +192,7 @@ namespace TELEMETRY_Utils {
         const uint16_t dropRate  = counterRatePerHour(dropCount, elapsedMs);
 
         String telemetry = "|";
-        telemetry += generateEncodedTelemetryBytes(nextTelemetrySequence(), true, 0);
+        telemetry += generateEncodedTelemetryBytes(nextTelemetrySequence(standalone), true, 0);
         if (Config.battery.sendInternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkInternalVoltage(), false, 0);
         if (Config.battery.sendExternalVoltage) telemetry += generateEncodedTelemetryBytes(BATTERY_Utils::checkExternalVoltage(), false, Config.battery.useExternalI2CSensor ? 0 : 1);
         telemetry += generateEncodedTelemetryBytes(rxRate,    true, 0);

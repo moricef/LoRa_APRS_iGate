@@ -94,6 +94,9 @@ int main() {
     expectNodes("single last-used star",
                 RXT_Protocol::usedPathNodes("SRC>DST,F6DEV,F4MLV-10*,WIDE2-1:payload"),
                 {"F6DEV", "F4MLV-10"});
+    expectNodes("exhausted numbered aliases are not physical hops",
+                RXT_Protocol::usedPathNodes("SRC>DST,WIDE1*,F6DEV,TRACE2*,F4MLV-10*:payload"),
+                {"F6DEV", "F4MLV-10"});
     expectNodes("Jon three-hop mixed stars",
                 RXT_Protocol::usedPathNodes(
                     "SUNSET>APLRG1,SOMTNX,TSRXBX*,TSRXAX*:payload"),
@@ -171,6 +174,36 @@ int main() {
                partial.size() == 1 && partial[0] == 1, true);
     const std::vector<int> unknown = RXT_Protocol::attributeTuples("ABCDE", {"F4MLV-2"});
     expectBool("unmatched ID is unidentified", unknown.size() == 1 && unknown[0] == -1, true);
+
+    // F4MLV-18 and F6DEV-10 both give 'C'. With one tuple per relay the path
+    // order tells them apart; with a single 'C' tuple either relay can have
+    // produced it, and it must not be attributed by guessing.
+    const std::vector<std::string> sharedC = {"F4MLV-18", "F6DEV-10"};
+    const std::vector<std::vector<int>> bothC = RXT_Protocol::tupleCandidates("CBCDECFGHI", sharedC);
+    expectBool("two tuples for two relays sharing an ID resolve by order",
+               bothC.size() == 2 && bothC[0] == std::vector<int>{0} && bothC[1] == std::vector<int>{1}, true);
+    const std::vector<std::vector<int>> oneC = RXT_Protocol::tupleCandidates("CBCDE", sharedC);
+    expectBool("one tuple for two relays sharing an ID is ambiguous",
+               oneC.size() == 1 && oneC[0] == std::vector<int>{0, 1}, true);
+    const std::vector<int> oneCOwner = RXT_Protocol::attributeTuples("CBCDE", sharedC);
+    expectBool("ambiguous tuple is not attributed", oneCOwner.size() == 1 && oneCOwner[0] == -1, true);
+
+    // A tuple of another relay between them fixes the order again.
+    const std::vector<std::string> split = {"F4MLV-18", "F4MLV-10", "F6DEV-10"};  // C, h, C
+    const std::vector<std::vector<int>> after = RXT_Protocol::tupleCandidates("hBCDECFGHI", split);
+    expectBool("ID after another relay's tuple belongs to the later relay",
+               after.size() == 2 && after[0] == std::vector<int>{1} && after[1] == std::vector<int>{2}, true);
+    const std::vector<std::vector<int>> before = RXT_Protocol::tupleCandidates("CBCDEhFGHI", split);
+    expectBool("ID before another relay's tuple belongs to the earlier relay",
+               before.size() == 2 && before[0] == std::vector<int>{0} && before[1] == std::vector<int>{1}, true);
+    const std::vector<std::vector<int>> alone = RXT_Protocol::tupleCandidates("CBCDE", split);
+    expectBool("lone tuple keeps both relays sharing its ID as candidates",
+               alone.size() == 1 && alone[0] == std::vector<int>{0, 2}, true);
+    // Tuples out of path order: unchanged in-order result, no ambiguity claimed.
+    const std::vector<std::vector<int>> outOfOrder =
+        RXT_Protocol::tupleCandidates("hBCDE*FGHI", {"F4MLV-2", "F4MLV-10"});
+    expectBool("out-of-order tuple stays unidentified",
+               outOfOrder.size() == 2 && outOfOrder[0] == std::vector<int>{1} && outOfOrder[1].empty(), true);
 
     expectBool("direct APRS message",
                RXT_Protocol::isAprsMessage("SRC>DST::TARGET   :hello{1"), true);

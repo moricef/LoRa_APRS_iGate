@@ -161,6 +161,11 @@ void testFromText() {
     std::vector<NATIVE_APRS::RxtTuple> two = {tuple(0, "aaaa"), tuple(1, "bbbb")};
     expect("fromText resolves a shared fingerprint in path order",
            NATIVE_APRS::fromText(NATIVE_APRS::toText(shared, two), "", back, rxt) && back == shared && sameRxt(rxt, two));
+    // A single tuple for two relays sharing a fingerprint has no known place
+    // in the mask: the packet must stay in text form.
+    std::vector<NATIVE_APRS::RxtTuple> second = {tuple(1, "bbbb")};
+    expect("fromText refuses a tuple that two relays can have produced",
+           !NATIVE_APRS::fromText(NATIVE_APRS::toText(shared, second), "", back, rxt));
 
     std::vector<uint8_t> frame;
     std::string decoded;
@@ -183,6 +188,85 @@ void testHuffman() {
            !NATIVE_APRS::huffmanDecode(coded.data(), coded.size() / 2, all.size(), back));
 }
 
+void testNativeRelayIdentity() {
+    // Both calls have ID 'C'. Only the second measured the reception.
+    const std::string received = "F4MLV-9>APLRG1,WIDE1*,F4MLV-18,F6DEV-10*,WIDE2-1:>test {world}";
+    NATIVE_APRS::RxtState state;
+    state.native = true;
+    std::vector<uint8_t> frame;
+    expect("encode exact second owner despite fingerprint collision",
+           NATIVE_APRS::encode(received, {tuple(2, "bbbb")}, frame));
+    expect("decode native relay snapshot",
+           NATIVE_APRS::decode(frame.data(), frame.size(), state.packet, state.tuples));
+    expect("native reception attributes second colliding relay exactly",
+           NATIVE_APRS::tupleOwners(state.packet, state.tuples) == std::vector<int>{1});
+
+    // Exercise the queued copy after another reception replaces live state.
+    const NATIVE_APRS::RxtState queued = state;
+    state.packet = "OTHER>APRS:>unrelated";
+    state.tuples.clear();
+    const std::string relayed = "F4MLV-9>APLRG1,F4MLV-18,F6DEV-10,F4MLV-10*:>test {world}";
+    std::vector<NATIVE_APRS::RxtTuple> remapped;
+    expect("removing consumed alias preserves queued measurement owner",
+           NATIVE_APRS::remapRxt(queued, relayed, "", remapped) &&
+           sameRxt(remapped, {tuple(1, "bbbb")}));
+    expect("append local measurement using full callsign",
+           NATIVE_APRS::appendRelayTuple(relayed, "F4MLV-10", "cccc", "", remapped));
+    std::string back;
+    std::vector<NATIVE_APRS::RxtTuple> decoded;
+    expect("native relay preserves second owner and new local measurement",
+           NATIVE_APRS::encode(relayed, remapped, frame) &&
+           NATIVE_APRS::decode(frame.data(), frame.size(), back, decoded) && back == relayed &&
+           sameRxt(decoded, {tuple(1, "bbbb"), tuple(2, "cccc")}));
+    expect("a relay cannot append a tuple under another callsign",
+           !NATIVE_APRS::appendRelayTuple(relayed, "F4MLV-18", "dddd", "", remapped));
+    expect("snapshot cannot be applied to unrelated APRS data",
+           !NATIVE_APRS::remapRxt(queued, "F4MLV-9>APLRG1,F6DEV-10*:>other", "", remapped));
+    expect("removing measured relay does not transfer its measurement",
+           NATIVE_APRS::remapRxt(queued, "F4MLV-9>APLRG1,F4MLV-18,F4MLV-10*:>test {world}", "", remapped) && remapped.empty());
+
+    NATIVE_APRS::RxtState repeated;
+    repeated.native = true;
+    repeated.packet = "SRC>APRS,F6DEV-10,F6DEV-10*:>test";
+    repeated.tuples = {tuple(1, "bbbb")};
+    expect("repeated full callsigns preserve their occurrence",
+           NATIVE_APRS::remapRxt(repeated, "SRC>APRS,F6DEV-10,F6DEV-10,NEW*:>test", "", remapped) &&
+           sameRxt(remapped, {tuple(1, "bbbb")}));
+    expect("deleting one repeated callsign refuses to guess",
+           !NATIVE_APRS::remapRxt(repeated, "SRC>APRS,F6DEV-10,NEW*:>test", "", remapped));
+
+    NATIVE_APRS::RxtState many;
+    many.native = true;
+    many.packet = "SRC>APRS,A1,B1,C1,D1*:>test";
+    many.tuples = {tuple(0, "aaaa"), tuple(1, "bbbb"), tuple(2, "cccc"), tuple(3, "dddd")};
+    expect("native snapshot retains more than three measurements",
+           NATIVE_APRS::remapRxt(many, many.packet, "", remapped) && sameRxt(remapped, many.tuples));
+    expect("raw native metrics export retains all measurements",
+           NATIVE_APRS::rawTuples(many.packet, many.tuples).size() == 20);
+
+    // A legitimate APRS comment resembling a text trailer is never split
+    // when the packet was decoded natively.
+    NATIVE_APRS::RxtState comment;
+    comment.native = true;
+    comment.packet = "SRC>APRS,F4MLV-18,F6DEV-10*:>user {Cbbbb}";
+    comment.tuples = {tuple(1, "aaaa")};
+    const std::string withComment = "SRC>APRS,F4MLV-18,F6DEV-10,F4MLV-10*:>user {Cbbbb}";
+    expect("native relay preserves a trailer-looking user comment",
+           NATIVE_APRS::remapRxt(comment, withComment, "", remapped) &&
+           NATIVE_APRS::encode(withComment, remapped, frame) &&
+           NATIVE_APRS::decode(frame.data(), frame.size(), back, decoded) && back == withComment &&
+           sameRxt(decoded, {tuple(1, "aaaa")}));
+    expect("APRS-IS path changes keep native user comment opaque",
+           NATIVE_APRS::samePacketContent(comment.packet,
+               "SRC>APRS,F4MLV-18,F6DEV-10*,qAR,F4MLV-10:>user {Cbbbb}"));
+    expect("content guard distinguishes changed destination",
+           !NATIVE_APRS::samePacketContent(comment.packet,
+               "SRC>OTHER,F6DEV-10*:>user {Cbbbb}"));
+    remapped.clear();
+    expect("local measurement accepts tactical relay identity",
+           NATIVE_APRS::appendRelayTuple("SRC>APRS,F6DEV-10,PINAL*:>test", "PINAL", "aaaa", "", remapped));
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -191,6 +275,7 @@ int main(int argc, char** argv) {
     testHuffman();
     testToText();
     testFromText();
+    testNativeRelayIdentity();
     if (failures) {
         std::cerr << failures << " of " << checks << " checks failed\n";
         return 1;

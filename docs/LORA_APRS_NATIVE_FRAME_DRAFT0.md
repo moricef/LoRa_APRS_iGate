@@ -140,12 +140,25 @@ exactly.
 
 ## Firmware support
 
-The iGate receives native frames: it decodes them to TNC2 and turns the RXT
-block into a v2 trailer, so APRS-IS, digipeating, TNC, JSON and SD logging
-work unchanged. `lora.txFormat` selects what it sends: 0 text (default), 1
-native, 2 text then native. When sending native, the v2 trailer of the packet
-is moved into the RXT block, and a packet that cannot be encoded goes out as
-text.
+The iGate decodes native frames to clean TNC2 and keeps their indexed RXT
+measurements separately in the reception context, including queued relays.
+TNC and JSON hop attribution use those indexes directly. When the relay path
+changes, measurements are moved by full callsign, not by fingerprint; a
+removed relay loses its measurement. Repeated callsigns are matched by
+occurrence only when their count is unchanged.
+
+`lora.txFormat` selects what it sends: 0 text (default), 1 native, 2 text then
+native. Native reception followed by native transmission preserves positional
+identity. Text transmission exports a v2 trailer into the hidden block, so a
+subsequent text receiver may encounter fingerprint ambiguity. For text
+receptions, a v2 trailer is converted to native only when its owners can be
+determined. A packet that cannot be encoded goes out as text.
+
+Builds published on 13 October 2026 preserve the indexed reception context.
+The earlier 30 September build converted received native RXT to a v2 trailer
+internally. The wire format is unchanged.
+
+See the [13 October RF test report](VALIDATION_RXT_NATIVE_RF_20261013.md).
 
 RF test on 29 September 2026, F4MLV-2 and F4MLV-15 (`ttgo-lora32-v21_SD`):
 
@@ -163,8 +176,8 @@ RF test on 29 September 2026, F4MLV-2 and F4MLV-15 (`ttgo-lora32-v21_SD`):
   of the airtime at F4MLV-10 and 17 % on the N7UV feed.
 - Relay state is the TNC2 path, with its `*` markers. A native relay state
   (requested, used, remaining) is not defined yet.
-- A native frame is relayed by converting it to text and back: the relay
-  logic works on the TNC2 path.
+- The relay logic still works on the TNC2 path; the native RXT measurements
+  stay separate from that text while the path is rewritten.
 - The tracker handles native frames on branch `feature/native-frames` of
   `moricef/LoRa_APRS_Tracker` (commit `4ced9cc7`), with a copy of this codec.
   Tested with the T-Deck F4MLV-7 and F4MLV-2 on 29 September 2026: a Mic-E

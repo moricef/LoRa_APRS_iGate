@@ -60,8 +60,10 @@ path, and the ID only picks among the two or three digis of one path.
 On 133 callsigns from my logs, 1.28 % of pairs share an ID, close to the
 expected 1/89. When two digis in the same path share an ID and both added a
 tuple, the tuples are matched in path order, since they are appended in relay
-order. If one of them did not add a tuple, the remaining one may be attributed
-to the wrong digi: the measurement is then misattributed, not lost. A tuple
+order. If one of them did not add a tuple, order cannot tell which digi the
+remaining one belongs to: it is reported as coming from one of the two, and
+attributed to neither. A tuple of another digi between them restores the
+order. A tuple
 whose ID matches nothing in the path (a digi that didn't insert its callsign)
 is shown as an unidentified relay rather than guessed; the fingerprint cannot
 recover a callsign that is not in the path.

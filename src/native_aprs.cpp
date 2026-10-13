@@ -493,6 +493,114 @@ namespace NATIVE_APRS {
         return tnc2 + "{" + content + "}";
     }
 
+    namespace {
+        std::string unstarred(std::string node) {
+            node.erase(std::remove(node.begin(), node.end(), '*'), node.end());
+            return node;
+        }
+
+        std::vector<int> usedIndexes(const std::string& packet,
+                                     const std::vector<std::string>& addresses,
+                                     const std::string& aliases) {
+            const auto nodes = RXT_Protocol::usedPathNodes(packet, aliases);
+            std::vector<int> indexes;
+            size_t next = 1;
+            for (const auto& node : nodes) {
+                while (next < addresses.size() && unstarred(addresses[next]) != node) next++;
+                if (next == addresses.size()) return {};
+                indexes.push_back(static_cast<int>(next++ - 1));
+            }
+            return indexes;
+        }
+    }
+
+    std::vector<int> tupleOwners(const std::string& packet,
+                                const std::vector<RxtTuple>& tuples,
+                                const std::string& regionalAliases) {
+        std::string src, info;
+        std::vector<std::string> addresses;
+        std::vector<int> owners(tuples.size(), -1);
+        if (!splitPacket(packet, src, addresses, info)) return owners;
+        const auto indexes = usedIndexes(packet, addresses, regionalAliases);
+        for (size_t i = 0; i < tuples.size(); i++) {
+            auto owner = std::find(indexes.begin(), indexes.end(), tuples[i].index);
+            if (owner != indexes.end()) owners[i] = static_cast<int>(owner - indexes.begin());
+        }
+        return owners;
+    }
+
+    std::string rawTuples(const std::string& packet, const std::vector<RxtTuple>& tuples) {
+        std::string src, info, content;
+        std::vector<std::string> addresses;
+        if (!splitPacket(packet, src, addresses, info)) return {};
+        for (const auto& tuple : tuples) {
+            if (static_cast<size_t>(tuple.index) + 1 >= addresses.size()) return {};
+            content += RXT_Protocol::fingerprint(addresses[tuple.index + 1]);
+            content.append(tuple.tuple, 4);
+        }
+        return content;
+    }
+
+    bool samePacketContent(const std::string& first, const std::string& second) {
+        std::string src, info, otherSrc, otherInfo;
+        std::vector<std::string> addresses, otherAddresses;
+        return splitPacket(first, src, addresses, info) &&
+               splitPacket(second, otherSrc, otherAddresses, otherInfo) &&
+               src == otherSrc && info == otherInfo && addresses[0] == otherAddresses[0];
+    }
+
+    bool remapRxt(const RxtState& state, const std::string& packet,
+                  const std::string& regionalAliases, std::vector<RxtTuple>& tuples) {
+        tuples.clear();
+        std::string src, info, oldSrc, oldInfo;
+        std::vector<std::string> addresses, oldAddresses;
+        if (!state.native || !splitPacket(packet, src, addresses, info) ||
+            !splitPacket(state.packet, oldSrc, oldAddresses, oldInfo) ||
+            src != oldSrc || info != oldInfo || addresses[0] != oldAddresses[0]) return false;
+        const auto oldNodes = RXT_Protocol::usedPathNodes(state.packet, regionalAliases);
+        const auto nodes = RXT_Protocol::usedPathNodes(packet, regionalAliases);
+        const auto owners = tupleOwners(state.packet, state.tuples, regionalAliases);
+        const auto indexes = usedIndexes(packet, addresses, regionalAliases);
+        std::vector<RxtTuple> remapped;
+        for (size_t i = 0; i < state.tuples.size(); i++) {
+            if (owners[i] < 0) continue;
+            const auto& call = oldNodes[owners[i]];
+            const size_t count = std::count(nodes.begin(), nodes.end(), call);
+            if (count == 0) continue;
+            if (count != static_cast<size_t>(std::count(oldNodes.begin(), oldNodes.end(), call))) return false;
+            const size_t occurrence = std::count(oldNodes.begin(), oldNodes.begin() + owners[i], call);
+            size_t seen = 0;
+            for (size_t j = 0; j < nodes.size(); j++) {
+                if (nodes[j] != call || seen++ != occurrence) continue;
+                if (indexes[j] >= static_cast<int>(MAX_RXT)) return false;
+                RxtTuple tuple = state.tuples[i];
+                tuple.index = static_cast<uint8_t>(indexes[j]);
+                remapped.push_back(tuple);
+                break;
+            }
+        }
+        tuples.swap(remapped);
+        return true;
+    }
+
+    bool appendRelayTuple(const std::string& packet, const std::string& callsign,
+                          const std::string& values, const std::string& regionalAliases,
+                          std::vector<RxtTuple>& tuples) {
+        std::string src, info;
+        std::vector<std::string> addresses;
+        const auto nodes = RXT_Protocol::usedPathNodes(packet, regionalAliases);
+        if (values.size() != 4 || nodes.empty() || nodes.back() != callsign ||
+            !splitPacket(packet, src, addresses, info)) return false;
+        const auto indexes = usedIndexes(packet, addresses, regionalAliases);
+        if (indexes.empty() || indexes.back() >= static_cast<int>(MAX_RXT)) return false;
+        RxtTuple tuple;
+        tuple.index = static_cast<uint8_t>(indexes.back());
+        for (const auto& existing : tuples) if (existing.index == tuple.index) return false;
+        std::copy(values.begin(), values.end(), tuple.tuple);
+        tuples.push_back(tuple);
+        return true;
+    }
+
     bool fromText(const std::string& text, const std::string& regionalAliases,
                   std::string& tnc2, std::vector<RxtTuple>& rxt) {
         rxt.clear();
@@ -502,6 +610,13 @@ namespace NATIVE_APRS {
         std::string src, info;
         std::vector<std::string> addrs;
         if (!splitPacket(tnc2, src, addrs, info)) return false;
+        // A tuple that several relays can have produced has no known place in
+        // the mask: the packet stays in text form, where the ID says no more
+        // than what is known.
+        for (const std::vector<int>& candidates : RXT_Protocol::tupleCandidates(
+                 content, RXT_Protocol::usedPathNodes(tnc2, regionalAliases))) {
+            if (candidates.size() > 1) return false;
+        }
         size_t next = 1;                                    // addrs[0] is the destination
         for (size_t i = 0; i + RXT_Protocol::TUPLE_BYTES <= content.size(); i += RXT_Protocol::TUPLE_BYTES) {
             while (next < addrs.size() && RXT_Protocol::fingerprint(addrs[next]) != content[i]) next++;

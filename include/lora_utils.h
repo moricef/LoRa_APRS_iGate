@@ -21,6 +21,7 @@
 
 #include <Arduino.h>
 #include <vector>
+#include "native_aprs.h"
 
 
 namespace LoRa_Utils {
@@ -31,6 +32,7 @@ namespace LoRa_Utils {
         float snr;
         int fo;
         unsigned long completedAt;
+        NATIVE_APRS::RxtState nativeRxt;
     };
 
     struct RxtHopMetric {

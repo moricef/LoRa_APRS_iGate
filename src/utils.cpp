@@ -19,6 +19,7 @@
 #include <APRSPacketLib.h>
 #include <TinyGPS++.h>
 #include "telemetry_utils.h"
+#include "telemetry_report.h"
 #include "configuration.h"
 #include "network_manager.h"
 #include "station_utils.h"
@@ -177,7 +178,6 @@ namespace Utils {
             TELEMETRY_Utils::checkEUPInterval();
             if (sendEUP &&
                 Config.battery.sendVoltageAsTelemetry &&
-                !Config.wxsensor.active &&
                 (Config.battery.sendInternalVoltage || Config.battery.sendExternalVoltage) &&
                 (lastBeaconTx > 0)) {
                 TELEMETRY_Utils::sendEquationsUnitsParameters();
@@ -277,10 +277,16 @@ namespace Utils {
                 }
             #endif
 
-            if (Config.battery.sendVoltageAsTelemetry && !Config.wxsensor.active && (Config.battery.sendInternalVoltage || Config.battery.sendExternalVoltage)){
-                String encodedTelemetry = TELEMETRY_Utils::generateEncodedTelemetry();
-                beaconPacket += encodedTelemetry;
-                secondaryBeaconPacket += encodedTelemetry;
+            String separateTelemetry;
+            if (Config.battery.sendVoltageAsTelemetry && (Config.battery.sendInternalVoltage || Config.battery.sendExternalVoltage)){
+                const bool separate = TelemetryReport::needsSeparateReport(Config.wxsensor.active, Config.beacon.symbol.charAt(0));
+                String encodedTelemetry = TELEMETRY_Utils::generateEncodedTelemetry(separate);
+                if (separate) {
+                    separateTelemetry = TelemetryReport::fromBase91(encodedTelemetry.c_str()).c_str();
+                } else {
+                    beaconPacket += encodedTelemetry;
+                    secondaryBeaconPacket += encodedTelemetry;
+                }
             }
 
             if (Config.beacon.sendViaAPRSIS && Config.aprs_is.active && passcodeValid && !backupDigiMode) {
@@ -293,6 +299,15 @@ namespace Utils {
                     APRS_IS_Utils::upload(beaconPacket);
                 #endif
                 if (Config.syslog.logBeaconOverTCPIP) SYSLOG_Utils::logAPRSISTx(beaconPacket);
+                if (!separateTelemetry.isEmpty()) {
+                    String packet = beaconPacket.substring(0, beaconPacket.indexOf(':') + 1) + separateTelemetry;
+                    #ifdef HAS_A7670
+                        A7670_Utils::uploadToAPRSIS(packet);
+                    #else
+                        APRS_IS_Utils::upload(packet);
+                    #endif
+                    if (Config.syslog.logBeaconOverTCPIP) SYSLOG_Utils::logAPRSISTx(packet);
+                }
             }
 
             if (Config.beacon.sendViaRF || backupDigiMode) {
@@ -300,6 +315,10 @@ namespace Utils {
                 displayShow(firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, "SENDING DIGI BEACON", 0);
                 seventhLine = "     listening...";
                 STATION_Utils::addToOutputPacketBuffer(secondaryBeaconPacket, true);
+                if (!separateTelemetry.isEmpty()) {
+                    String packet = secondaryBeaconPacket.substring(0, secondaryBeaconPacket.indexOf(':') + 1) + separateTelemetry;
+                    STATION_Utils::addToOutputPacketBuffer(packet, true);
+                }
             }
 
             lastBeaconTx = millis();

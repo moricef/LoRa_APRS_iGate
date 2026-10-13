@@ -145,12 +145,26 @@ autre implémentation doit les reproduire exactement.
 
 ## Support dans le firmware
 
-L'iGate reçoit les trames natives : il les décode en TNC2 et transforme le
-bloc RXT en trailer v2, si bien qu'APRS-IS, le digipeater, le TNC, le JSON et
-le journal SD fonctionnent sans changement. `lora.txFormat` choisit ce qu'il
-émet : 0 texte (par défaut), 1 natif, 2 texte puis natif. En émission native,
-le trailer v2 du paquet passe dans le bloc RXT, et un paquet impossible à
-encoder part en texte.
+L'iGate décode les trames natives en TNC2 sans RXT et conserve leurs mesures
+indexées séparément dans le contexte de réception, y compris pour les relais
+en attente. L'attribution des sauts TNC et JSON utilise directement ces index.
+Lorsque le chemin change, les mesures suivent les indicatifs complets, sans
+passer par les empreintes ; un relais retiré perd sa mesure. Un indicatif
+répété est associé par son rang seulement si son nombre d'occurrences reste
+identique.
+
+`lora.txFormat` choisit l'émission : 0 texte (par défaut), 1 natif, 2 texte puis
+natif. Une réception native suivie d'une émission native conserve l'identité
+par position. L'émission texte exporte un trailer v2 dans le bloc caché ; le
+récepteur texte suivant peut donc rencontrer une ambiguïté d'empreinte. Pour
+une réception texte, le trailer v2 n'est converti en natif que si ses relais
+peuvent être déterminés. Un paquet impossible à encoder part en texte.
+
+Les builds publiés le 13 octobre 2026 conservent le contexte indexé.
+Le précédent build du 30 septembre convertissait le RXT natif reçu en trailer
+v2 à l'intérieur. Le format sur l'air ne change pas.
+
+Voir le [compte rendu des essais RF du 13 octobre](VALIDATION_RXT_NATIVE_RF_20261013_fr.md).
 
 Essai RF du 29 septembre 2026, F4MLV-2 et F4MLV-15 (`ttgo-lora32-v21_SD`) :
 
@@ -168,8 +182,8 @@ Essai RF du 29 septembre 2026, F4MLV-2 et F4MLV-15 (`ttgo-lora32-v21_SD`) :
   environ 12 % du temps d'antenne chez F4MLV-10 et 17 % sur le flux N7UV.
 - L'état du relais est le chemin TNC2, avec ses marques `*`. Un état de relais
   natif (demandé, utilisé, restant) n'est pas encore défini.
-- Une trame native est relayée en passant par le texte : la logique de relais
-  travaille sur le chemin TNC2.
+- La logique de relais travaille encore sur le chemin TNC2 ; les mesures RXT
+  natives restent séparées du texte pendant la réécriture du chemin.
 - Le tracker traite les trames natives sur la branche `feature/native-frames`
   de `moricef/LoRa_APRS_Tracker` (commit `4ced9cc7`), avec une copie de ce
   codec. Essai avec le T-Deck F4MLV-7 et F4MLV-2 le 29 septembre 2026 : une

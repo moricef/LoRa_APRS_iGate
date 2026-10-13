@@ -35,9 +35,16 @@ namespace RXT_Protocol {
     // Shape-only removal for an information field without path (duplicate
     // keys only; never used for data sent to APRS-IS).
     std::string stripTrailerShape(const std::string& information);
-    // For each tuple of content, the index in usedNodes of the relay that
-    // produced it, or -1 when its ID matches no remaining node. Tuples are
-    // matched in path order, since digis append them in relay order.
+    // For each tuple of content, the indexes in usedNodes of the relays that
+    // can have produced it. Tuples are matched in path order, since digis
+    // append them in relay order. One index: the tuple is attributed. None:
+    // its ID matches no remaining node. Several: relays of the path share
+    // that fingerprint and fewer tuples carry it, so path order cannot tell
+    // which of them produced the tuple.
+    std::vector<std::vector<int>> tupleCandidates(const std::string& content,
+                                                  const std::vector<std::string>& usedNodes);
+    // The single candidate of each tuple, or -1 when it has none or several:
+    // an ambiguous tuple is never attributed by guessing.
     std::vector<int> attributeTuples(const std::string& content,
                                      const std::vector<std::string>& usedNodes);
     std::vector<std::string> usedPathNodes(

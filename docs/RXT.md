@@ -40,6 +40,13 @@ Inside the firmware the block is handled as the trailer described below:
 SOURCE>DEST,PATH:payload{IRFSH}
 ```
 
+Native frame reception is different: the APRS text and the indexed native
+measurements stay separate, including in the queued RF context. Hop displays
+use these indexes and native retransmission remaps them by full callsign after
+path rewriting. Derived five-character tuples are only a log or text-export
+representation. A native-to-text transmission necessarily returns to the v2
+fingerprint attribution rules.
+
 A received hidden block is turned back into that trailer only if it passes the
 path check; a received visible trailer from older firmware is still read. When
 a text frame is sent, a trailer that passes the check is moved into the hidden
@@ -105,6 +112,17 @@ trailer:
 Tuples are attributed in path order: each tuple goes to the next used entry
 whose fingerprint matches its ID, so two relays sharing a fingerprint are
 separated by their order. No whitelist of RXT-capable digipeaters is needed.
+
+When relays of the path share a fingerprint and fewer tuples carry it than
+there are such relays, path order cannot tell which of them produced the
+tuple. The tuple is then not attributed. It is reported under the names of
+all the relays that can have produced it, as `CALL1|CALL2<--UNKNOWN`, and the
+hops of those relays stay `NA` in the chain. In the JSON stream the hop has
+`identity_status` set to `unresolved`. A tuple of another relay placed between
+them restores the order: the tuple before it belongs to the earlier relay, the
+tuple after it to the later one. A packet holding an ambiguous tuple is sent
+as text even when native transmission is selected, since the native block
+needs a definite position for each tuple.
 
 Legacy digipeaters may appear in the physical path but do not add a tuple.
 TNC2 output reports these hops as `NA`.
