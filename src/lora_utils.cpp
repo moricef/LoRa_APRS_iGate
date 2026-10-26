@@ -30,6 +30,7 @@
 #include "sd_utils.h"
 #include "rxt_protocol.h"
 #include "native_aprs.h"
+#include "AprsCompress.h"
 #include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
@@ -726,6 +727,21 @@ namespace LoRa_Utils {
             lastRxtField = NATIVE_APRS::rawTuples(tnc2, rxt).c_str();
             Utils::println("[NATIVE] " + String(length) + " bytes -> " + String(tnc2.size()) + " bytes of text");
             return String(tnc2.c_str());
+        }
+        // Experimental APRS-PPM full frame (K6ATV): expand it and handle the
+        // text like a received text frame. Primed frames (C1) are not decoded,
+        // their reference check can accept a wrong reference.
+        if (AprsCompress::isCompressedHeader(data, length)) {
+            uint8_t expanded[AprsCompress::MAX_TEXT + 1];
+            size_t n = AprsCompress::decodeFrame(data, length, expanded, AprsCompress::MAX_TEXT);
+            if (n == 0 || memchr(expanded, 0, n) != nullptr) {
+                Utils::println("[APRS-PPM] Undecodable frame (" + String(length) + " bytes)");
+                return "";
+            }
+            Utils::println("[APRS-PPM] " + String(length) + " bytes -> " + String(n) + " bytes of text");
+            std::string text = RXT_Protocol::fromExtensionPayload(
+                std::string(reinterpret_cast<const char*>(expanded), n), Config.digi.regionalAliases.c_str());
+            return String(("\x3c\xff\x01" + text).c_str());
         }
         // Text frame: read up to the first zero byte, as readData(String&)
         // did, but turn a hidden RXT extension back into a trailer.
