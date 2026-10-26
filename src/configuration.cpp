@@ -185,6 +185,7 @@ bool Configuration::writeFile() {
 
         data["ntp"]["server"]                       = ntp.server;
         data["ntp"]["gmtCorrection"]                = ntp.gmtCorrection;
+        data["ntp"]["timezone"]                     = ntp.timezone;
 
         data["other"]["rebootMode"]                 = rebootMode;
         data["other"]["rebootModeTime"]             = rebootModeTime;
@@ -446,9 +447,12 @@ bool Configuration::readFile() {
         remoteManagement.authController.toUpperCase();
 
         if (data["ntp"]["server"].isNull() ||
-            data["ntp"]["gmtCorrection"].isNull()) needsRewrite = true;
+            data["ntp"]["gmtCorrection"].isNull() ||
+            data["ntp"]["timezone"].isNull()) needsRewrite = true;
         ntp.server                      = data["ntp"]["server"] | "pool.ntp.org";
         ntp.gmtCorrection               = data["ntp"]["gmtCorrection"] | 0.0;
+        ntp.timezone                    = data["ntp"]["timezone"] | "";
+        ntp.timezone.trim();
 
         if (data["other"]["rebootMode"].isNull() ||
             data["other"]["rebootModeTime"].isNull()) needsRewrite = true;
@@ -604,6 +608,7 @@ void Configuration::setDefaultValues() {
 
     ntp.server                      = "pool.ntp.org";
     ntp.gmtCorrection               = 0.0;
+    ntp.timezone                    = "";
 
     rebootMode                      = false;
     rebootModeTime                  = 0;

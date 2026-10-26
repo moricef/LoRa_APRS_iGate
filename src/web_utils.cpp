@@ -531,6 +531,8 @@ namespace WEB_Utils {
 
         Config.ntp.server                   = getParamStringSafe("ntp.server", Config.ntp.server);
         Config.ntp.gmtCorrection            = getParamFloatSafe("ntp.gmtCorrection", Config.ntp.gmtCorrection);
+        Config.ntp.timezone                 = getParamStringSafe("ntp.timezone", Config.ntp.timezone);
+        Config.ntp.timezone.trim();
 
         Config.rememberStationTime          = getParamIntSafe("other.rememberStationTime", Config.rememberStationTime);
 

@@ -155,6 +155,7 @@ class NTP {
 public:
     String  server;
     float   gmtCorrection;
+    String  timezone;       // POSIX TZ rule; when set, replaces gmtCorrection and follows daylight saving time
 };
 
 class REMOTE_MANAGEMENT {

@@ -287,6 +287,12 @@ function loadSettings(settings) {
     // NTP
     document.getElementById("ntp.server").value                         = settings.ntp.server;
     document.getElementById("ntp.gmtCorrection").value                  = settings.ntp.gmtCorrection;
+    const timezoneSelect = document.getElementById("ntp.timezone");
+    const timezone = settings.ntp.timezone || "";
+    if (timezone && ![...timezoneSelect.options].some((o) => o.value === timezone)) {
+        timezoneSelect.add(new Option(timezone, timezone));     // rule set outside this list
+    }
+    timezoneSelect.value = timezone;
 
     clampOutOfRangeInputs();
 

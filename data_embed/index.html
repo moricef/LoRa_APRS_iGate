@@ -831,7 +831,7 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                     NTP
                                 </h5>
                                 <small
-                                    >Set your GMT Time Zone.
+                                    >Set your GMT Time Zone, or a time zone rule that follows daylight saving time.
                                 </small>
                             </div>
                             <div class="col-lg-9 col-sm-12">
@@ -872,6 +872,38 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                                 >hours</span
                                             >
                                         </div>
+                                    </div>
+                                    <div class="col-12 mt-3">
+                                        <label
+                                            for="ntp.timezone"
+                                            class="form-label"
+                                            >Time Zone (follows daylight saving time)</label
+                                        >
+                                        <select
+                                            name="ntp.timezone"
+                                            id="ntp.timezone"
+                                            class="form-select"
+                                        >
+                                            <option value="">Fixed offset (GMT Time Correction above)</option>
+                                            <option value="UTC0">UTC</option>
+                                            <option value="GMT0BST,M3.5.0/1,M10.5.0">Europe/London, Lisbon, Dublin</option>
+                                            <option value="CET-1CEST,M3.5.0,M10.5.0/3">Europe/Paris, Berlin, Madrid, Rome, Warsaw</option>
+                                            <option value="EET-2EEST,M3.5.0/3,M10.5.0/4">Europe/Athens, Helsinki, Bucharest, Kyiv</option>
+                                            <option value="MSK-3">Europe/Moscow</option>
+                                            <option value="EST5EDT,M3.2.0,M11.1.0">America/New_York (Eastern)</option>
+                                            <option value="CST6CDT,M3.2.0,M11.1.0">America/Chicago (Central)</option>
+                                            <option value="MST7MDT,M3.2.0,M11.1.0">America/Denver (Mountain)</option>
+                                            <option value="MST7">America/Phoenix (Arizona, no DST)</option>
+                                            <option value="PST8PDT,M3.2.0,M11.1.0">America/Los_Angeles (Pacific)</option>
+                                            <option value="AKST9AKDT,M3.2.0,M11.1.0">America/Anchorage</option>
+                                            <option value="HST10">Pacific/Honolulu</option>
+                                            <option value="&lt;-03&gt;3">America/Sao_Paulo, Buenos_Aires</option>
+                                            <option value="&lt;-04&gt;4&lt;-03&gt;,M9.1.6/24,M4.1.6/24">America/Santiago</option>
+                                            <option value="AEST-10AEDT,M10.1.0,M4.1.0/3">Australia/Sydney, Melbourne</option>
+                                            <option value="NZST-12NZDT,M9.5.0,M4.1.0/3">Pacific/Auckland</option>
+                                            <option value="JST-9">Asia/Tokyo</option>
+                                        </select>
+                                        <small class="form-text">When a zone is selected, it replaces the offset above.</small>
                                     </div>
                                 </div>
                             </div>

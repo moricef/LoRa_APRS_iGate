@@ -33,10 +33,16 @@ namespace NTP_Utils {
 
     bool setup() {
         if (networkManager->isConnected() && Config.digi.ecoMode == 0 && Config.callsign != "NOCALL-10") {
-            long gmt = Config.ntp.gmtCorrection * 3600;
-            Serial.println("[NTP] Setting up, TZ offset: " + String(gmt) + " Server: " +  Config.ntp.server);
             sntp_set_sync_interval(3 * 60 * 60 * 1000);         // Update interval 3 hours (ESP32 internal clock drift is negligible in that time)
-            configTime(gmt, 0, Config.ntp.server.c_str());      // SNTP runs in background (DNS + retries) and never blocks the loop
+            // SNTP runs in background (DNS + retries) and never blocks the loop
+            if (Config.ntp.timezone.length() > 0) {
+                Serial.println("[NTP] Setting up, TZ rule: " + Config.ntp.timezone + " Server: " + Config.ntp.server);
+                configTzTime(Config.ntp.timezone.c_str(), Config.ntp.server.c_str());
+            } else {
+                long gmt = Config.ntp.gmtCorrection * 3600;
+                Serial.println("[NTP] Setting up, TZ offset: " + String(gmt) + " Server: " +  Config.ntp.server);
+                configTime(gmt, 0, Config.ntp.server.c_str());
+            }
             ntpStarted = true;
             return true;
         }
