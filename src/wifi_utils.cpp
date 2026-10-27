@@ -132,7 +132,8 @@ namespace WIFI_Utils {
 
     void setup() {
         if (Config.digi.ecoMode == 0) startWiFi();
-        btStop();
+        // Bluetooth is never started here. Calling btStop() would pull in
+        // its controller and prevent Arduino from releasing unused BT RAM.
     }
 
 }
