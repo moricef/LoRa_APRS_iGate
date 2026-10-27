@@ -498,7 +498,23 @@ namespace LoRa_Utils {
         radio.setBandwidth(signalBandwidth);
     }
 
-    bool doCAD() {      
+    // A CAD scan takes the radio out of receive mode and drops a frame
+    // being received. Report a frame whose header is decoded but not its
+    // end, or one received but not read yet, so the caller can delay its
+    // transmission. The guard covers the longest SF12 frame.
+    bool isReceiving() {
+        static unsigned long busySince = 0;
+        bool busy = !transmitFlag &&
+            (operationDone || radio.checkIrq(RADIOLIB_IRQ_HEADER_VALID) == 1);
+        if (!busy) {
+            busySince = 0;
+            return false;
+        }
+        if (busySince == 0) busySince = millis();
+        return millis() - busySince < 10000;
+    }
+
+    bool doCAD() {
         return radio.scanChannel() != RADIOLIB_CHANNEL_FREE;    
     }
 
@@ -524,6 +540,17 @@ namespace LoRa_Utils {
                 backoffCounter--;
             }
         }
+    }
+
+    // One DIFS and backoff attempt that gives up at the first busy slot,
+    // so the radio can go back to receiving the frame on the channel
+    // instead of scanning until it is free.
+    bool tryChannelAccess() {
+        if (!doDIFS()) return false;
+        for (int slots = random(1, backoffMax + 1); slots > 0; slots--) {
+            if (doCAD()) return false;
+        }
+        return true;
     }
 
     RxtRxContext captureRxtRxContext() {
@@ -566,8 +593,10 @@ namespace LoRa_Utils {
         return frame;
     }
 
-    void sendNewPacket(const String& rawPacket, const RxtRxContext* rxtContext) {
-        if (!Config.loramodule.txActive) return;
+    // Returns false only when deferIfBusy is set and the channel was busy:
+    // the packet was not sent and stays with the caller.
+    bool sendNewPacket(const String& rawPacket, const RxtRxContext* rxtContext, bool deferIfBusy) {
+        if (!Config.loramodule.txActive) return true;
         // Text is an export for legacy peers. Native transmission below uses
         // the queued snapshot directly, including colliding fingerprints.
         String relayPacket = rawPacket;
@@ -586,7 +615,7 @@ namespace LoRa_Utils {
         if (!RXT_Protocol::fitsLoRaPayload(relayPacket.length())) {
             Utils::println("[TX] Packet rejected: " + String(relayPacket.length()) +
                            " APRS bytes exceed 252 (255 including LoRa prefix)");
-            return;
+            return true;
         }
 
         unsigned long dwellTimeMs = 0;
@@ -606,8 +635,22 @@ namespace LoRa_Utils {
 
         unsigned long cadStart = millis();
         if (Config.loramodule.cadActive) {
-            waitForDIFS();  
-            doBEB();        
+            if (!deferIfBusy) {
+                waitForDIFS();
+                doBEB();
+            } else if (!tryChannelAccess()) {
+                // Listen to the frame occupying the channel; the caller
+                // keeps this packet for a later attempt.
+                Utils::println("[TX] Channel busy, transmission deferred");
+                #ifdef INTERNAL_LED_PIN
+                    if (Config.digi.ecoMode != 1) digitalWrite(INTERNAL_LED_PIN, LOW);
+                #endif
+                if (Config.loramodule.txFreq != Config.loramodule.rxFreq) changeFreqRx();
+                operationDone = false;
+                transmitFlag = false;
+                radio.startReceive();
+                return false;
+            }
         }
         unsigned long channelWaitMs = millis() - cadStart;
         unsigned long totalDwellAndChannelMs = dwellTimeMs + channelWaitMs;
@@ -705,7 +748,7 @@ namespace LoRa_Utils {
                 changeFreqRx();
             }
         }
-
+        return true;
     }
 
     // Native RXT stays in a separate, indexed snapshot; only APRS text is

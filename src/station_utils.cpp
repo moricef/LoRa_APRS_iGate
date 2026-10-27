@@ -295,13 +295,13 @@ namespace STATION_Utils {
     }
 
     void processOutputPacketBuffer() {
-        if (outputPacketBuffer.size() > 0) {
+        if (outputPacketBuffer.size() > 0 && !LoRa_Utils::isReceiving()) {
             if (outputPacketBuffer[0].isBeacon) packetIsBeacon = true;
             const LoRa_Utils::RxtRxContext* rxtContext = outputPacketBuffer[0].rxtContext.valid
                 ? &outputPacketBuffer[0].rxtContext : nullptr;
-            LoRa_Utils::sendNewPacket(outputPacketBuffer[0].packet, rxtContext);
+            bool done = LoRa_Utils::sendNewPacket(outputPacketBuffer[0].packet, rxtContext, true);
             if (outputPacketBuffer[0].isBeacon) packetIsBeacon = false;
-            outputPacketBuffer.erase(outputPacketBuffer.begin());
+            if (done) outputPacketBuffer.erase(outputPacketBuffer.begin());
         }
         if (shouldSleepLowVoltage) {
             while (outputPacketBuffer.size() > 0) {
