@@ -20,6 +20,12 @@ and spreading factor.
 
 ## RF format
 
+Receivers decode their supported binary formats before handling text. A
+reserved `3C FF` prefix with an unsupported or missing type is discarded,
+rather than passed to the text, JSON or relay pipeline. The RXT build supports
+text type `01` and native type `02`; experimental builds may explicitly add
+other decoders. Unprefixed legacy text remains accepted.
+
 This is RXT v2 (proposal: `docs/RXT_V2.md`). An RXT-capable digipeater
 adds one five-character tuple to a relayed APRS packet. On air, the tuples
 travel in a hidden block after the text packet:

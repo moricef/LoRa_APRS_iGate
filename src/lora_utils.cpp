@@ -30,6 +30,7 @@
 #include "sd_utils.h"
 #include "rxt_protocol.h"
 #include "native_aprs.h"
+#include "lora_frame_type.h"
 #include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
@@ -726,6 +727,10 @@ namespace LoRa_Utils {
             lastRxtField = NATIVE_APRS::rawTuples(tnc2, rxt).c_str();
             Utils::println("[NATIVE] " + String(length) + " bytes -> " + String(tnc2.size()) + " bytes of text");
             return String(tnc2.c_str());
+        }
+        if (!LORA_FRAME::mayReadAsText(data, length)) {
+            Utils::println("[LoRa] Unsupported or incomplete frame type ignored");
+            return "";
         }
         // Text frame: read up to the first zero byte, as readData(String&)
         // did, but turn a hidden RXT extension back into a trailer.
