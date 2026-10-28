@@ -50,6 +50,10 @@ namespace NATIVE_APRS {
 
     // Header byte: path count (bits 7-4), RXT block (bit 3),
     // Huffman text (bit 2), information kind (bits 1-0).
+#ifdef NATIVE_TEXT_PPM_BENCH
+    extern int textMode;      // host benchmark only, see native_aprs.cpp
+    extern bool lastTextPpm;
+#endif
     constexpr uint8_t RXT_FLAG     = 0x08;
     constexpr uint8_t TEXT_HUFFMAN = 0x04;
     constexpr uint8_t KIND_MASK    = 0x03;

@@ -1,4 +1,34 @@
 #include "native_aprs.h"
+#ifdef NATIVE_TEXT_PPM_BENCH
+// Host benchmark only (tools/native_text_ppm_bench): lets the free text be
+// coded with APRS-PPM instead of Huffman. Not part of the firmware build and
+// not a defined radio format: the coder chosen for a packet is not written
+// into the frame; the decoder reads it from lastTextPpm, set by the encoder.
+#include <cstring>
+#include "AprsCompress.h"
+namespace NATIVE_APRS { int textMode = 0; bool lastTextPpm = false; }
+namespace {
+    // PPM frame without its 4-byte header (prefix, version, text length).
+    std::vector<uint8_t> ppmText(const std::string& text) {
+        uint8_t frame[260];
+        size_t n = AprsCompress::encodeFrame(reinterpret_cast<const uint8_t*>(text.data()), text.size(), frame, sizeof frame);
+        if (n <= 4) return {};
+        return std::vector<uint8_t>(frame + 4, frame + n);
+    }
+    bool ppmTextDecode(const uint8_t* data, size_t size, size_t count, std::string& text) {
+        uint8_t frame[260], out[260];
+        if (size + 4 > sizeof frame || count == 0) return false;
+        frame[0] = AprsCompress::HEADER_0; frame[1] = AprsCompress::HEADER_1;
+        frame[2] = AprsCompress::VERSION_FLAG | AprsCompress::modelVersion();
+        frame[3] = static_cast<uint8_t>(count);
+        memcpy(frame + 4, data, size);
+        size_t n = AprsCompress::decodeFrame(frame, size + 4, out, sizeof out);
+        if (n != count) return false;
+        text.assign(reinterpret_cast<const char*>(out), n);
+        return true;
+    }
+}
+#endif
 #include "native_aprs_huffman_table.h"
 #include "rxt_protocol.h"
 
@@ -349,8 +379,22 @@ namespace {
     bool encText(const std::string& text, uint8_t& flag, std::vector<uint8_t>& out) {
         flag = 0;
         if (!text.empty() && text.size() <= 255) {
+#ifdef NATIVE_TEXT_PPM_BENCH
+            // textMode: 0 Huffman, 1 APRS-PPM, 2 shorter of both.
+            std::vector<uint8_t> coded;
+            bool ppm = false;
+            std::vector<uint8_t> huff = NATIVE_APRS::huffmanEncode(text);
+            std::vector<uint8_t> pc = ppmText(text);
+            if (NATIVE_APRS::textMode == 0) coded = huff;
+            else if (NATIVE_APRS::textMode == 1) { coded = pc; ppm = true; }
+            else if (!pc.empty() && pc.size() < huff.size()) { coded = pc; ppm = true; }
+            else coded = huff;
+            if (NATIVE_APRS::textMode == 2) NATIVE_APRS::lastTextPpm = ppm;
+            if (!coded.empty() && coded.size() + 1 < text.size()) {
+#else
             std::vector<uint8_t> coded = NATIVE_APRS::huffmanEncode(text);
             if (coded.size() + 1 < text.size()) {
+#endif
                 flag = NATIVE_APRS::TEXT_HUFFMAN;
                 out.push_back(static_cast<uint8_t>(text.size()));
                 out.insert(out.end(), coded.begin(), coded.end());
@@ -703,7 +747,13 @@ namespace NATIVE_APRS {
         if (header & TEXT_HUFFMAN) {
             if (i >= size) return false;
             size_t count = b[i];
+#ifdef NATIVE_TEXT_PPM_BENCH
+            bool ppm = NATIVE_APRS::textMode == 1 || (NATIVE_APRS::textMode == 2 && NATIVE_APRS::lastTextPpm);
+            if (ppm ? !ppmTextDecode(b + i + 1, size - i - 1, count, text)
+                    : !huffmanDecode(b + i + 1, size - i - 1, count, text)) return false;
+#else
             if (!huffmanDecode(b + i + 1, size - i - 1, count, text)) return false;
+#endif
         } else {
             text.assign(reinterpret_cast<const char*>(b + i), size - i);
         }
