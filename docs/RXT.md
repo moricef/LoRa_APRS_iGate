@@ -26,7 +26,7 @@ rather than passed to the text, JSON or relay pipeline. The RXT build supports
 text type `01` and native type `02`; experimental builds may explicitly add
 other decoders. Unprefixed legacy text remains accepted.
 
-This is RXT v2 (proposal: `docs/RXT_V2.md`). An RXT-capable digipeater
+This is RXT v2 (proposal: `docs/archives/proposals/RXT_V2.md`). An RXT-capable digipeater
 adds one five-character tuple to a relayed APRS packet. On air, the tuples
 travel in a hidden block after the text packet:
 
@@ -74,7 +74,7 @@ CAD/DIFS/backoff waiting and the transmitted packet's time on air.
 
 The fingerprint is the 32-bit FNV-1a hash of the callsign in upper case,
 without `*`, SSID included (the tactical callsign when one is configured),
-taken modulo 89 plus 33. Test vectors are listed in `docs/RXT_V2.md`.
+taken modulo 89 plus 33. Test vectors are listed in `docs/archives/proposals/RXT_V2.md`.
 
 Each subsequent RXT-capable digipeater appends its tuple inside the same
 braces, but only if the existing trailer passes the path check below. The

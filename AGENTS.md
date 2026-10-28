@@ -51,6 +51,32 @@ remise en état, les essais exploratoires remplacés par des essais concluants e
 les observations sans valeur probante doivent être exclus. Toute conclusion
 doit rester strictement limitée à ce que les observations démontrent.
 
+## Organisation documentaire
+
+Consulter `docs/README.md` avant de créer un document. Maintenir une référence
+par sujet et la compléter au lieu de multiplier les notes équivalentes.
+
+- Les références publiques existantes conservent leur chemin à la racine de
+  `docs/`. Après déplacement d’un document public, conserver un renvoi à son
+  ancienne adresse et mettre à jour les liens internes.
+- Les propositions non arrêtées vont dans `docs/proposals/`.
+- Les comptes rendus vont dans `docs/tests/AAAA-MM-JJ/`, avec leurs versions,
+  observations et limites. Ils ne remplacent pas une spécification.
+- Les présentations et leurs exports restent ensemble dans
+  `docs/presentations/`. Les anciens échanges et propositions remplacées vont
+  dans `docs/archives/`, avec leur statut explicite.
+- Les reprises et investigations locales vont dans `docs/local/`, ignoré par
+  Git. Une conclusion abandonnée doit être signalée dans la note concernée.
+  L’inventaire reste à `docs/DEPLOYMENTS_fr.md`, sans déplacement.
+- Les captures et sauvegardes restent dans `logs/`. La procédure du flasher
+  est dans `docs/flasher/README.md` ; ses manifestes et binaires restent à
+  leurs chemins actuels.
+
+Mettre à jour l’index dans le même changement. Ne pas publier `docs/local/`,
+l’inventaire, les secrets ni les sauvegardes de configuration. Une copie de
+publication doit sélectionner le contenu destiné à être public ; elle ne
+doit pas recopier tout l’arbre de travail `docs/` sans filtrage.
+
 ## Fichiers TODO et de reprise
 
 Quand l'utilisateur demande de créer un TODO, un plan de reprise ou un document

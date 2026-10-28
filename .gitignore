@@ -36,3 +36,6 @@ installer/*.bin
 
 # Private deployment inventory (management addresses, tunnels)
 /docs/DEPLOYMENTS_fr.md
+
+# Local investigations, handoff notes and unrelated machine diagnostics
+/docs/local/

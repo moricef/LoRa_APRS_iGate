@@ -158,7 +158,7 @@ Builds published on 13 October 2026 preserve the indexed reception context.
 The earlier 30 September build converted received native RXT to a v2 trailer
 internally. The wire format is unchanged.
 
-See the [13 October RF test report](VALIDATION_RXT_NATIVE_RF_20261013.md).
+See the [13 October RF test report](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013.md).
 
 RF test on 29 September 2026, F4MLV-2 and F4MLV-15 (`ttgo-lora32-v21_SD`):
 

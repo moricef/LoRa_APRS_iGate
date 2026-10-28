@@ -164,7 +164,7 @@ Les builds publiés le 13 octobre 2026 conservent le contexte indexé.
 Le précédent build du 30 septembre convertissait le RXT natif reçu en trailer
 v2 à l'intérieur. Le format sur l'air ne change pas.
 
-Voir le [compte rendu des essais RF du 13 octobre](VALIDATION_RXT_NATIVE_RF_20261013_fr.md).
+Voir le [compte rendu des essais RF du 13 octobre](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013_fr.md).
 
 Essai RF du 29 septembre 2026, F4MLV-2 et F4MLV-15 (`ttgo-lora32-v21_SD`) :
 
