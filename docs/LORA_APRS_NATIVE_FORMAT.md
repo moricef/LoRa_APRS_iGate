@@ -1,104 +1,168 @@
 # A native frame format for LoRa APRS
 
-## Why
+LoRa APRS currently carries APRS packets as text. This representation supports
+interconnection with APRS-IS but retains constraints inherited from AX.25
+addressing and APRS syntax. A native LoRa format can use explicit fields and
+compact encodings while preserving translation to standard APRS.
 
-LoRa APRS carries plain APRS text, inherited from a protocol designed for
-1200 bd VHF more than 25 years ago. Two things follow from that.
+This document describes the target architecture. The implemented draft-0
+layout is documented in [LORA_APRS_NATIVE_FRAME_DRAFT0.md](LORA_APRS_NATIVE_FRAME_DRAFT0.md);
+it does not yet implement a separate binary layout for every packet type
+listed below.
 
-The format is ambiguous. A comment can be read as altitude (`/A=`), as PHG,
-as course/speed, or, since RXT, as relay measurements. Mic-E even hides data
-in the destination field. Every decoder guesses a little differently.
+## Limitations of the current representation
 
-The format is verbose. Positions are sent as ASCII text, the path as full
-callsigns, and at SF12 every byte costs airtime on a channel shared by the
-whole network.
+APRS combines structured data with comment text. Markers such as /A= and
+PHG, and the rules for course and speed, require interpretation of the
+information field. Mic-E also uses the destination field to encode data.
+Implementations can interpret the same bytes differently.
 
-LoRa APRS is young, its firmwares are open source and reflashable, and a few
-projects cover most of the installed base. It is a much better place than VHF
-to fix this.
+RXT v1 introduced an additional ambiguity by appending receiver measurements
+to the comment. A user comment ending in the same pattern can be mistaken
+for RXT.
 
-## Principle
+Text also consumes airtime. Source, destination, path and information fields
+are transmitted on each packet; long comments and paths increase channel
+occupancy, especially at SF12.
 
-Keep standard APRS where it is shared, change it where it is not.
+## RF encoding and frame version
 
-- On air, LoRa stations use a native format: typed, delimited fields, compact
-  encoding, no guessing.
-- Towards APRS-IS, the iGate translates each frame into standard APRS text.
-  APRS-IS, aprs.fi and VHF users see nothing new.
-- From APRS-IS to RF (messages, objects), the iGate translates the other way.
+The proposed format separates addresses, relay state, application data,
+free text and RXT measurements. Position, course, speed, altitude, weather,
+telemetry and messages should have defined representations. Free text should
+have an explicit boundary rather than supply additional fields inferred
+from comment markers.
 
-Current LoRa APRS frames start with the header `<\xFF\x01`. The native format
-would use `<\xFF\x02`. Existing firmwares ignore it, and new ones decode both.
+Native addressing should support longer callsigns and alphanumeric SSIDs
+such as -MC and -GS, without inheriting the AX.25 address-field limits.
+The native specification must define maximum lengths. Gateways must handle
+the separate limits of APRS-IS and AX.25 explicitly: an identity accepted on
+LoRa is not necessarily representable on those interfaces.
 
-## What it brings
+The current text prefix is 3C FF 01. Draft 0 uses 3C FF 02. Receivers must
+dispatch packets by frame type and discard unsupported types before text
+parsing. Equipment without a native decoder cannot receive or relay native
+traffic.
 
-- A strict grammar: the free comment is explicitly delimited and never parsed
-  for hidden data.
-- Shorter frames, so less airtime per packet and a less loaded channel.
-- Room for native extensions such as RXT, instead of appending them to the
-  comment.
-- Callsigns of any length, including alphanumeric SSIDs (`-MC`, `-GS`).
+## Translation to and from APRS-IS
 
-## The one hard constraint
+The iGate translates supported native packets into standard APRS text before
+uploading them to APRS-IS. For downlink messages and objects, it translates
+APRS text into the RF format selected for transmission.
 
-The translation to APRS-IS must be fully deterministic. Two iGates receiving
-the same frame must produce exactly the same text, byte for byte. Otherwise
-APRS-IS no longer recognizes duplicates, and aprs.fi shows the same packet
-twice, which is what RXT v1 trailers already cause today.
+APRS-IS and existing APRS applications continue to receive standard packets.
+Native identities or fields that cannot be represented require an explicit
+gateway policy; they must not be silently truncated or mapped by individual
+implementations.
 
-## What has to change
+## Deterministic translation
 
-**Specification.** Header and versioning; encoding of every useful type
-(position with course, speed and altitude, status, message, ack and
-reply-ack, telemetry, weather, object and item, queries, third-party frames);
-addressing and relay path (WIDEn-N equivalent, used-hop marker); native
-extensions (RXT, delimited free comment); the deterministic translation to
-APRS and the reverse translation; test vectors and a reference corpus.
+Given the same native packet, independent decoders must recover identical
+APRS source, destination and information bytes. APRS-IS uses these fields
+for duplicate detection; the outer transport path may differ between iGates.
 
-**Shared codec library.** Encoding, decoding and translation both ways, in
-embeddable C++ with host tests, used by both the iGate and the tracker.
-Graywolf (Go) either ports it or relies on the same test vectors.
+RXT is RF metadata and must remain separate from the APRS information field
+sent to APRS-IS. Visible RXT trailers demonstrate why this matters: a
+trailer retained by one iGate and removed by another produces different
+information fields.
 
-**iGate/digi firmware.** Receive both headers; relay using the native path
-and RXT directly; deduplicate on the decoded frame; translate towards
-APRS-IS (q-construct, RFONLY and NOGATE included) and from APRS-IS to RF
-(messages, objects, learned return path, reply-ack); local replies (`?`
-queries, acks, `!RC1` commands); own beacons and telemetry; every output
-(KISS/TNC2 as translated text, MQTT, syslog, JSON stream, SD log, received
-packets page, RXT table); a setting for the transmit format (legacy, native,
-both).
+The specification must define exact translation rules and reference vectors
+for encoding, decoding and gateway output.
 
-**Tracker firmware.** Beacons and messages in the native format, reception of
-both; conversations, acks and reply-ack, raw frames screen; application
-bridges (Bluetooth/KISS TNC to APRSdroid) as translated APRS text; built-in
-digipeater if enabled; a transmit-format setting.
+## Application data and relay state
 
-**Graywolf.** Its LoRa TNC2 transport either decodes the native format itself
-or receives frames already translated by the iGate; native encoding if it
-transmits to LoRa directly.
+The target scope includes:
 
-**Transition and tools.** Dual-format handling for as long as legacy
-equipment is on the air; web flashers and documentation for the three
-projects; a command-line decoder, and capture tools comparing received frames
-with their APRS translation.
+- position, course, speed and altitude;
+- status;
+- messages, ACK and reply-ACK;
+- telemetry;
+- weather;
+- objects and items;
+- queries;
+- third-party frames;
+- relay paths and RXT measurements.
 
-**Outside our control.** Upstream CA2RXU firmware, which equips most of the
-LoRa APRS installed base, and the other LoRa APRS firmwares in circulation:
-without them, the native format stays limited to the networks that adopt it.
+Relay state should distinguish requested relays, consumed hops and remaining
+hops explicitly. Relays should be able to update this state without
+reconstructing it from textual WIDEn-N rewrites.
 
-## How it could spread
+## Shared codec and conformance tests
 
-A working pilot network convinces more than a specification. Jon's network in
-Arizona already runs this fork and started RXT, so it is a natural place to
-try. For it to spread, three things have to hold:
+An embeddable C++ codec can serve both the tracker and the iGate.
+Independent implementations, including Go code where needed, must pass the
+same reference vectors.
 
-- nothing visible for anyone else: identical, standard APRS on APRS-IS, no
-  duplicates or rejected packets on aprs.fi;
-- measured and published gains: airtime saved, RXT attribution without a
-  whitelist, no truncated comments, with figures from the real network;
-- a risk-free upgrade: a new iGate reads both formats from day one, so it can
-  be deployed without breaking trackers already in service.
+Tests must cover exact round trips, malformed input, unsupported versions,
+address limits, path updates and the association of RXT measurements with
+their relays. A corpus of captured frames provides additional compatibility
+cases.
 
-RXT v2 is a reasonable first step in that direction: limited in scope, tested
-on our two networks, and a way to check the method before proposing a full
-format.
+## iGate and digipeater integration
+
+The iGate and digipeater firmware must:
+
+- receive legacy text and supported native frame types;
+- update relay state and retain each RXT measurement's association;
+- deduplicate using the decoded APRS content;
+- translate traffic to and from APRS-IS, preserving RFONLY and NOGATE policy;
+- preserve messaging, ACK, reply-ACK and learned return-path behaviour;
+- preserve local queries and authenticated remote commands;
+- support locally generated beacons and telemetry;
+- provide compatible TNC2, KISS, MQTT, syslog, JSON, SD-log and WebUI output.
+
+KISS clients expecting AX.25 require AX.25 frames; TNC2 clients require
+text. Neither interface can represent every proposed native identity.
+Those limits must be documented and enforced at conversion boundaries.
+
+Transmission settings must distinguish legacy, native and dual-format
+operation. Sending both formats increases channel occupancy and is a
+transition or test mode rather than an airtime-saving mode.
+
+## Tracker integration
+
+The tracker must receive both formats and support native beacons and
+messages while preserving conversation handling, ACK and reply-ACK.
+
+Interfaces to applications such as APRSdroid must continue to supply the
+representation expected by that interface. If the tracker's digipeater is
+enabled, it must also update relay state and preserve RXT associations.
+
+## Graywolf integration
+
+When an iGate supplies translated TNC2 or JSON, Graywolf does not need the
+RF codec. A direct RF implementation would require native encoding and
+decoding.
+
+The interface specification must distinguish the APRS packet, local receiver
+measurements and measurements reported by remote relays.
+
+## Compatibility and deployment
+
+Legacy and native formats must coexist during deployment. Receiving legacy
+traffic must remain possible after a firmware update, but native
+transmission requires compatible receivers and relays along the RF path.
+
+Adoption depends on upstream firmware and other implementations outside this
+fork. Tests must include mixed networks and verify that gateways produce
+consistent standard APRS output.
+
+## Pilot validation
+
+The local network and Jon N7UV's Arizona RXT network provide potential
+test environments. Native support and deployment must be established for
+each participating station rather than inferred from RXT support.
+
+Pilot measurements should cover:
+
+- frame sizes and airtime by radio profile;
+- delivery, relay behaviour and messaging;
+- RXT attribution, including missing measurements and fingerprint collisions
+  when converting to text;
+- preservation of comment bytes;
+- identical gateway output from independent receivers;
+- coexistence with legacy equipment;
+- processing time and memory use on the target boards.
+
+The specification, test vectors, capture tools and firmware instructions
+must identify the format revision tested.
