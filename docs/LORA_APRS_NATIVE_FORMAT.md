@@ -130,6 +130,10 @@ enabled, it must also update relay state and preserve RXT associations.
 
 ## Graywolf integration
 
+Graywolf is APRS software with a web interface for mapping and messaging.
+We also use it to display receiver and relay measurements supplied by the
+iGate.
+
 When an iGate supplies translated TNC2 or JSON, Graywolf does not need the
 RF codec. A direct RF implementation would require native encoding and
 decoding.

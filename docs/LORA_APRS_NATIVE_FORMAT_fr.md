@@ -140,6 +140,10 @@ associations RXT.
 
 ## Intégration dans Graywolf
 
+Graywolf est un logiciel APRS avec une interface web de cartographie et de
+messagerie. Nous l'utilisons aussi pour afficher les mesures des récepteurs
+et des relais transmises par l'iGate.
+
 Lorsque l'iGate fournit du TNC2 ou du JSON déjà traduit, Graywolf n'a pas
 besoin du codec radio. Une implémentation accédant directement à la radio
 LoRa aurait besoin de l'encodage et du décodage natifs.
