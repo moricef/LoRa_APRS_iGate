@@ -1,6 +1,6 @@
 # Un format de trame natif pour LoRa APRS
 
-LoRa APRS transporte aujourd'hui de l'APRS texte presque tel quel sur la liaison LoRa. Ça fonctionne et ça donne immédiatement la compatibilité avec APRS-IS, mais on hérite aussi de contraintes qui ont beaucoup moins de sens sur une liaison numérique native.
+LoRa APRS transporte aujourd'hui les paquets APRS sous forme de texte. Ce format assure la compatibilité avec APRS-IS, mais conserve des contraintes héritées d'AX.25 et de la syntaxe APRS. Certaines ne sont plus nécessaires sur une liaison LoRa native.
 
 ## Limites du texte APRS sur LoRa
 
