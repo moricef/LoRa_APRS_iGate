@@ -1,88 +1,84 @@
 # Un format de trame natif pour LoRa APRS
 
-LoRa APRS transporte aujourd'hui les paquets APRS sous forme de texte. Ce format assure la compatibilité avec APRS-IS, mais conserve des contraintes héritées d'AX.25 et de la syntaxe APRS. Certaines ne sont plus nécessaires sur une liaison LoRa native.
+LoRa APRS transporte aujourd'hui les paquets APRS sous forme de texte.
+Cette représentation permet l'interconnexion avec APRS-IS, mais conserve
+des contraintes héritées de l'adressage AX.25 et de la syntaxe APRS.
+Un format natif LoRa peut utiliser des champs explicites et des codages
+compacts tout en conservant la traduction vers l'APRS standard.
 
-## Limites du texte APRS sur LoRa
+Ce document décrit l'architecture visée. Le format du brouillon 0,
+déjà implémenté, est décrit dans
+[LORA_APRS_NATIVE_FRAME_DRAFT0_fr.md](LORA_APRS_NATIVE_FRAME_DRAFT0_fr.md).
+Il ne définit pas encore une structure binaire distincte pour chacun
+des types de paquet énumérés ci-dessous.
 
-Le premier problème est l'ambiguïté.
+## Limites de la représentation actuelle
 
-Un commentaire peut contenir `/A=`, du PHG, du cap/vitesse ou d'autres informations que tous les décodeurs n'interprètent pas forcément de la même manière. Mic-E stocke même des données dans le champ destination. RXT v1 a ajouté à son tour un trailer particulier qui peut être confondu avec du texte utilisateur.
+APRS mêle données structurées et commentaire. Les marqueurs /A= et PHG,
+ainsi que les règles de codage du cap et de la vitesse, nécessitent une
+interprétation du champ d'information. Mic-E utilise également le champ
+destination pour coder des données. Les implémentations peuvent interpréter
+les mêmes octets différemment.
 
-Le deuxième problème est le temps d'antenne.
+RXT v1 a introduit une ambiguïté supplémentaire en ajoutant les mesures
+des récepteurs à la fin du commentaire. Un commentaire utilisateur qui se
+termine par le même motif peut être pris pour du RXT.
 
-Les positions sont envoyées en ASCII, les chemins utilisent les indicatifs complets et, en SF12, chaque octet supplémentaire coûte du temps sur un canal partagé. LoRa permet de faire plus propre et plus compact sans avoir besoin de modifier APRS-IS.
+Le texte occupe aussi du temps d'antenne. La source, la destination, le
+chemin et le champ d'information sont transmis dans chaque paquet.
+Les commentaires et chemins longs augmentent l'occupation du canal,
+particulièrement en SF12.
 
-## Natif sur la RF, APRS standard aux frontières
+## Codage radio et version de trame
 
-Conserver l'APRS standard aux frontières, mais utiliser une trame native sur la partie RF LoRa.
+Le format proposé sépare les adresses, l'état du relayage, les données
+applicatives, le texte libre et les mesures RXT. Position, cap, vitesse,
+altitude, météo, télémétrie et messages doivent avoir des représentations
+définies. Le texte libre doit être explicitement délimité ; ses marqueurs
+ne doivent plus servir à en déduire des champs supplémentaires.
 
-Les trames LoRa APRS actuelles utilisent :
+L'adressage natif doit accepter des indicatifs de longueur étendue et des
+SSID alphanumériques tels que -MC et -GS, sans reprendre les limites du
+champ d'adresse AX.25. La spécification doit fixer les longueurs maximales.
+Les passerelles doivent traiter explicitement les limites propres à
+APRS-IS et à AX.25 : une identité acceptée sur LoRa n'est pas nécessairement
+représentable sur ces interfaces.
 
-```text
-<\xFF\x01
-```
+Le préfixe texte actuel est 3C FF 01. Le brouillon 0 utilise 3C FF 02.
+Les récepteurs doivent sélectionner le décodeur selon le type de trame et
+rejeter les types inconnus avant toute analyse textuelle. Un équipement
+sans décodeur natif ne peut ni recevoir ni relayer le trafic natif.
 
-Un format natif pourrait utiliser :
+## Traduction vers et depuis APRS-IS
 
-```text
-<\xFF\x02
-```
+L'iGate traduit les paquets natifs pris en charge en APRS texte standard
+avant leur transmission à APRS-IS. Pour les messages et objets descendants,
+il traduit l'APRS texte dans le format radio sélectionné pour l'émission.
 
-Les nouveaux firmwares accepteraient les deux. Les anciens ignoreraient simplement le nouveau format.
-
-La trame native contiendrait des champs explicites au lieu de déduire leur sens du contexte. Position, vitesse, altitude, météo, télémétrie, messages, informations de relais et RXT auraient chacun une représentation définie.
-
-L'adressage natif permettrait des indicatifs de longueur étendue et des SSID alphanumériques (`-MC`, `-GS`), sans reprendre les limites du champ d'adresse AX.25. Les longueurs maximales seraient définies par le format natif. Les limites propres à APRS-IS et aux interfaces AX.25 resteraient à traiter explicitement aux passerelles ; une identité acceptée sur la liaison LoRa ne serait pas nécessairement représentable sur ces interfaces.
-
-Le commentaire resterait du texte libre. Il ne serait plus parcouru pour y rechercher des champs cachés.
-
-## Traduction au niveau de l'iGate
-
-L'iGate devient la frontière de compatibilité.
-
-Côté RF :
-
-```text
-trame LoRa native
-```
-
-Vers APRS-IS :
-
-```text
-APRS texte standard
-```
-
-Dans l'autre sens, par exemple pour un message ou un objet :
-
-```text
-APRS-IS
-   ↓
-traduction iGate
-   ↓
-trame LoRa native
-```
-
-Pour APRS-IS, aprs.fi ou un utilisateur VHF, rien ne doit changer.
-
-Le but n'est donc pas de remplacer APRS-IS.
+APRS-IS et les applications APRS existantes continuent de recevoir des
+paquets standard. Les identités ou champs natifs non représentables
+nécessitent une règle explicite de passerelle ; chaque implémentation
+ne doit pas inventer sa propre correspondance ou les tronquer silencieusement.
 
 ## Traduction déterministe
 
-La traduction vers l'APRS texte doit être déterministe.
+Pour un même paquet natif, des décodeurs indépendants doivent restituer
+des octets identiques pour la source, la destination APRS et le champ
+d'information. APRS-IS compare ces champs pour détecter les doublons ;
+le chemin de transport extérieur peut différer selon l'iGate.
 
-Si deux iGates reçoivent exactement la même trame RF native, ils doivent produire exactement le même paquet APRS, octet pour octet.
+RXT est une métadonnée radio et doit rester séparé du champ d'information
+envoyé à APRS-IS. Les anciens trailers visibles illustrent le problème :
+si un iGate conserve le trailer et qu'un autre le retire, les champs
+d'information deviennent différents.
 
-Sinon APRS-IS peut voir deux paquets différents au lieu d'un doublon.
+La spécification doit fixer les règles exactes de traduction et fournir
+des vecteurs de référence pour l'encodage, le décodage et la sortie
+des passerelles.
 
-On a déjà un petit exemple de ce type de problème avec RXT v1 : une information uniquement RF peut modifier ce qu'un iGate retire ou conserve avant l'upload.
+## Données applicatives et état du relayage
 
-Les règles de traduction ne peuvent donc pas dépendre de l'implémentation. Il faut des vecteurs de test avec une sortie attendue exacte.
-
-## Périmètre minimal utile
-
-Il n'est pas nécessaire de traiter immédiatement tous les cas exotiques d'APRS.
-
-Il faut par contre assez de fonctions pour faire tourner un vrai réseau :
+Le périmètre visé comprend :
 
 - position, cap, vitesse et altitude ;
 - statut ;
@@ -92,83 +88,93 @@ Il faut par contre assez de fonctions pour faire tourner un vrai réseau :
 - objets et items ;
 - requêtes ;
 - trames tierces ;
-- chemins de relais ;
-- un mécanisme propre d'extension pour RXT.
+- chemins de relais et mesures RXT.
 
-L'état du relais devrait lui aussi être représenté directement dans la trame. Il faut savoir quels relais étaient demandés, lesquels ont déjà été utilisés et ce qu'il reste à faire, sans reconstruire tout ça à partir des réécritures textuelles de `WIDEn-N`.
+L'état du relayage doit distinguer explicitement les relais demandés,
+les sauts consommés et les sauts restants. Les relais doivent pouvoir
+mettre cet état à jour sans le reconstruire à partir des réécritures
+textuelles de WIDEn-N.
 
-## Codec commun et vecteurs de référence
+## Codec commun et tests de conformité
 
-Le tracker et l'iGate devraient utiliser les mêmes règles de codec.
+Une bibliothèque C++ embarquable peut servir au Tracker et à l'iGate.
+Les implémentations indépendantes, notamment en Go si nécessaire, doivent
+passer les mêmes vecteurs de référence.
 
-Une petite bibliothèque C++ embarquable avec des tests hôte suffit pour les deux.
+Les tests doivent couvrir la restitution exacte, les entrées mal formées,
+les versions inconnues, les limites d'adressage, les modifications du chemin
+et le rattachement des mesures RXT à leurs relais. Un corpus de trames
+capturées complète les cas de compatibilité.
 
-Graywolf peut soit porter les mêmes règles en Go, soit vérifier son implémentation à partir des mêmes vecteurs de test.
+## Intégration dans l'iGate et le digipeater
 
-Le point important n'est pas le langage. C'est d'éviter trois implémentations qui finissent par interpréter le format différemment.
+Le firmware de l'iGate et du digipeater doit :
 
-## Modifications iGate et digipeater
+- recevoir le texte historique et les types natifs pris en charge ;
+- mettre à jour l'état du relayage et conserver l'association de chaque mesure RXT ;
+- dédupliquer sur le contenu APRS décodé ;
+- traduire vers et depuis APRS-IS en respectant RFONLY et NOGATE ;
+- conserver la messagerie, les ACK, reply-ACK et le routage retour appris ;
+- conserver les requêtes locales et les commandes distantes authentifiées ;
+- gérer les balises et la télémétrie produites localement ;
+- fournir des sorties compatibles TNC2, KISS, MQTT, syslog, JSON, journal SD et WebUI.
 
-Supporter le nouveau format ne consiste pas seulement à le décoder.
+Un client KISS qui attend de l'AX.25 doit recevoir des trames AX.25 ;
+un client TNC2 attend du texte. Ces interfaces ne permettent pas de
+représenter toutes les identités natives envisagées. Leurs limites doivent
+être documentées et appliquées aux conversions.
 
-L'iGate/digi doit aussi :
+Le réglage d'émission doit distinguer les modes historique, natif et double
+émission. Émettre dans les deux formats augmente l'occupation du canal :
+c'est un mode de transition ou de test, pas un mode d'économie d'antenne.
 
-- recevoir les anciennes et les nouvelles trames ;
-- relayer correctement le chemin natif ;
-- transporter RXT sans le cacher dans le commentaire ;
-- dédupliquer sur le paquet décodé ;
-- traduire vers et depuis APRS-IS ;
-- conserver les requêtes, les ACK et les commandes distantes authentifiées ;
-- continuer à alimenter correctement TNC2/KISS, MQTT, syslog, JSON, le journal SD et la WebUI.
+## Intégration dans le Tracker
 
-Pendant la transition, il faudra probablement un choix d'émission du genre :
+Le Tracker doit recevoir les deux formats et permettre les balises et
+messages natifs en conservant les conversations, ACK et reply-ACK.
 
-```text
-historique
-natif
-les deux
-```
+Les interfaces vers des applications telles qu'APRSdroid doivent fournir
+la représentation qu'elles attendent. Si le digipeater du Tracker est
+activé, il doit aussi mettre à jour l'état du relayage et conserver les
+associations RXT.
 
-## Modifications tracker
+## Intégration dans Graywolf
 
-Le tracker a le même problème de compatibilité.
+Lorsque l'iGate fournit du TNC2 ou du JSON déjà traduit, Graywolf n'a pas
+besoin du codec radio. Une implémentation accédant directement à la radio
+LoRa aurait besoin de l'encodage et du décodage natifs.
 
-Il doit recevoir les deux formats, émettre ses balises et ses messages en natif, garder ACK et reply-ACK fonctionnels, et continuer à fournir de l'APRS texte normal aux applications externes comme APRSdroid lorsque c'est ce que l'interface attend.
+La spécification de l'interface doit distinguer le paquet APRS, les mesures
+du récepteur local et les mesures rapportées par les relais distants.
 
-Si le digipeater intégré est activé, il doit également comprendre directement l'état de relais natif.
+## Compatibilité et déploiement
 
-## Graywolf
+Les formats historique et natif doivent coexister pendant le déploiement.
+Une mise à jour doit conserver la réception du trafic historique ;
+l'émission native nécessite des récepteurs et relais compatibles sur le
+trajet radio.
 
-Graywolf est plus simple s'il reçoit déjà du TNC2 ou du JSON traduit par l'iGate.
+L'adoption dépend aussi du firmware upstream et d'implémentations extérieures
+à ce fork. Les essais doivent couvrir les réseaux mixtes et vérifier que les
+passerelles produisent une sortie APRS standard cohérente.
 
-Dans ce cas, il n'a pas besoin de connaître le format RF.
+## Validation sur réseau pilote
 
-Il n'a besoin du codec natif que s'il émet directement vers la LoRa.
+Le réseau local et le réseau RXT de Jon N7UV en Arizona constituent des
+terrains d'essai possibles. La prise en charge du natif et son déploiement
+doivent être vérifiés pour chaque station participante ; la présence de RXT
+ne suffit pas à les établir.
 
-## Coexistence avec le format actuel
+Les mesures du pilote doivent porter sur :
 
-La vraie difficulté n'est pas d'écrire le format. C'est de le déployer sans casser le réseau existant.
+- la taille des trames et le temps d'antenne selon le profil radio ;
+- la livraison des paquets, le relayage et la messagerie ;
+- l'attribution RXT, y compris les mesures manquantes et les collisions
+  d'empreintes lors d'une conversion en texte ;
+- la conservation des octets du commentaire ;
+- l'identité des traductions produites par des récepteurs indépendants ;
+- la coexistence avec les équipements historiques ;
+- le temps de traitement et la mémoire sur les cartes cibles.
 
-Le firmware CA2RXU et les autres implémentations LoRa APRS ne sont pas sous notre contrôle. Il faudra donc faire cohabiter l'ancien et le nouveau format pendant un certain temps.
-
-Un réseau mixte doit malgré tout continuer à produire de l'APRS normal sur APRS-IS.
-
-C'est le test de compatibilité le plus important.
-
-## Déploiement pilote
-
-Un réseau pilote apportera plus qu'une longue spécification théorique.
-
-Le réseau de Jon en Arizona utilise déjà ce fork et RXT, et notre propre réseau fournit un deuxième terrain d'essai.
-
-Les mesures utiles sont assez concrètes :
-
-- temps d'antenne gagné ;
-- attribution RXT sans liste blanche ;
-- commentaires jamais abîmés ou tronqués ;
-- traduction APRS identique entre plusieurs iGates recevant la même trame ;
-- comportement d'un réseau mélangeant ancien et nouveau format.
-
-RXT v2 est un bon premier essai parce qu'il ne modifie qu'une petite partie du système.
-
-Si cette transition fonctionne proprement sur les deux réseaux, alors un format de trame natif complet devient une suite beaucoup moins spéculative.
+La spécification, les vecteurs de test, les outils de capture et les
+instructions du firmware doivent identifier la révision du format testée.
