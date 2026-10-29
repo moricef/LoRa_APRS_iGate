@@ -756,9 +756,21 @@ namespace LoRa_Utils {
     // Native RXT stays in a separate, indexed snapshot; only APRS text is
     // returned to the application. A text frame keeps the
     // behaviour of readData(String&), which stops at the first zero byte.
+    static bool otaFastProfile=false;
+    bool setOtaFastProfile(bool fast) {
+        radio.standby();
+        bool ok=radio.setFrequency(fast?434.5f:float(Config.loramodule.rxFreq)/1000000.0f)==RADIOLIB_ERR_NONE;
+        ok=(radio.setBandwidth(fast?500.0f:float(Config.loramodule.rxSignalBandwidth)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
+        ok=(radio.setSpreadingFactor(fast?7:Config.loramodule.rxSpreadingFactor)==RADIOLIB_ERR_NONE) && ok;
+        ok=(radio.setCodingRate(fast?5:Config.loramodule.rxCodingRate4)==RADIOLIB_ERR_NONE) && ok;
+        operationDone=false;transmitFlag=false;otaFastProfile=fast;
+        return (radio.startReceive()==RADIOLIB_ERR_NONE) && ok;
+    }
     bool sendOtaFrame(const uint8_t* frame,size_t size) {
         if (!Config.loramodule.txActive || size>255) return false;
+        if (!otaFastProfile) changeFreqTx();
         int result=radio.transmit(const_cast<uint8_t*>(frame),size);
+        if (!otaFastProfile) changeFreqRx();
         operationDone=false;
         transmitFlag=false;
         radio.startReceive();

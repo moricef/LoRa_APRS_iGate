@@ -65,6 +65,7 @@ namespace LoRa_Utils {
     bool    takeCrcError(RxtRxContext& context);
     String  formatCrcError(const RxtRxContext& context);
     bool    isReceiving();
+    bool    setOtaFastProfile(bool fast);
     bool    sendOtaFrame(const uint8_t* frame,size_t size);
     bool    sendNewPacket(const String& newPacket, const RxtRxContext* rxtContext = nullptr, bool deferIfBusy = false);
     String  receivePacketFromSleep();

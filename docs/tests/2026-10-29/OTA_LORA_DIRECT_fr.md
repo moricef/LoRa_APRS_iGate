@@ -119,7 +119,7 @@ pendant le transfert et les validations de démarrage.
 | Observation | Résultat |
 | --- | --- |
 | Image iGate OTA-B | 1 743 216 octets |
-| Blocs distincts | 8 545, au plus 204 octets chacun |
+| Nombre de blocs nécessaires pour l’image | 8 546, au plus 204 octets chacun |
 | Premier bloc acquitté | 19:46:42 UTC |
 | Image complète vérifiée | 20:15:44 UTC |
 | Intervalle entre ces deux observations | 1 741,71 s, environ 29 min 2 s |
@@ -127,6 +127,10 @@ pendant le transfert et les validations de démarrage.
 | Reprises après arrêt du client émetteur | 2, aux offsets 161 364 et 486 948, sans recommencer l'écriture |
 | Relances DATA dans les trois segments | 193, dont trois acquittements ignorés volontairement |
 | État après FINISH, avant activation | OTA-A ; application active et démarrage sélectionné dans `app0` |
+
+Les journaux consignent 8 545 acquittements de blocs distincts ; le dernier
+bloc reçu juste avant la seconde reprise est établi par l’offset annoncé
+à cette reprise, sans événement de bloc correspondant dans le client arrêté.
 
 Le débit inclut les interruptions du client et les reprises. Les relances
 ne constituent pas un décompte d'erreurs radio : une absence d'acquittement
@@ -217,3 +221,114 @@ Les journaux de cette étape sont conservés localement sous
 `radio-update-final.jsonl` ; ils décrivent une même réception poursuivie
 sur le récepteur. Les durées de segments ne doivent pas être prises pour
 la durée du transfert complet.
+
+## Troisième étape : changement de profil temporaire
+
+Cette étape utilise de nouvelles images iGate OTA-A et OTA-B, intégrant
+la sélection de profil décrite dans le [protocole expérimental](../../proposals/LORA_OTA_BENCH_fr.md).
+Les cartes et radios restent celles des deux premières étapes.
+
+- Profil initial du banc : 434,100 MHz, BW125, SF12, CR4/5, 2 dBm.
+- Profil rapide : 434,500 MHz, BW500, SF7, CR4/5, même puissance.
+- Changement demandé par radio authentifiée ; acquittement sur le profil
+  initial puis attente de deux secondes avant changement. Une réponse
+  STATUS authentifiée vérifie le lien rapide.
+- Retour explicite acquitté sur le profil rapide, changement 500 ms plus
+  tard, puis réponse STATUS sur le profil initial.
+- Bail d'inactivité de 15 secondes pour les essais d'abandon ci-dessous.
+  Les changements temporaires ne réécrivent pas Config.
+
+### Défauts provoqués et observations
+
+Les contrôles de `check_profiles.py` passent sur les cartes :
+
+- Un numéro de profil inconnu et un bail trop court sont refusés ; la
+  commande STATUS reste reçue sur le profil initial.
+- L'acquittement PREPARE_FAST est volontairement ignoré par le client.
+  Le lien est néanmoins retrouvé et vérifié sur le profil rapide, puis
+  le retour explicite est vérifié sur le profil initial.
+- Le contrôleur cesse tout échange valide sur le profil rapide. Après
+  17 secondes d'attente, une nouvelle session trouve OTA-A sur le profil
+  initial, sans image en attente de confirmation.
+- Après START et un bloc de 204 octets, le contrôleur cesse les échanges.
+  Après expiration, une nouvelle session retrouve OTA-A sur le profil
+  initial, offset zéro : le transfert partiel est abandonné.
+- Après START et un bloc, un reset du récepteur est demandé par une
+  commande de diagnostic authentifiée. La réponse radio suivante retrouve
+  OTA-A sur le profil initial, offset zéro, sans confirmation en attente.
+  Il s'agit d'un reset logiciel ; aucune coupure électrique n'est provoquée.
+- L'acquittement RETURN_NORMAL est volontairement ignoré par le client.
+  Le retour est néanmoins vérifié par STATUS sur le profil initial.
+
+Le test hôte `test_profile.cpp` vérifie les bornes du bail, le renouvellement,
+les répétitions qui ne repoussent pas le changement, les retours explicites
+et automatiques, ainsi que le rebouclage de millis. Il passe sous ASan/UBSan.
+La variante ordinaire sans OTA radio compile également.
+
+Une lecture HTTP pendant le transfert rapide restitue exactement la
+configuration sauvegardée avant le transfert : le changement temporaire
+ne modifie pas les paramètres enregistrés.
+
+Ces essais valident le comportement de récupération sur le banc local,
+pas la portée du profil rapide. Le SX1278 ne propose pas SF5 : le profil
+BW500/SF5/CR4/5 à 62,5 kbit/s envisagé par Jon reste à essayer sur une radio
+compatible. Le profil rapide de ce banc atteint 21,875 kbit/s nominaux.
+
+Les images figées, captures et configurations privées de cette troisième
+étape sont dans `logs/lora-ota-profile-20261029/`. Les événements des défauts
+provoqués sont dans `profile-checks.jsonl`.
+
+### Transfert complet avec changement de profil
+
+Le transfert complet retenu est celui de `radio-update-restarted.jsonl`,
+exécuté par un service utilisateur détaché de la session de travail.
+Les chiffres ci-dessous concernent exclusivement ce transfert complet.
+
+| Observation | Résultat |
+| --- | --- |
+| Image iGate OTA-B | 1 744 160 octets |
+| Blocs distincts acquittés et consignés | 8 550 |
+| Premier bloc acquitté | 20:49:15 UTC |
+| Image complète vérifiée | 21:15:32 UTC |
+| Durée données + vérification, chronométrée par le client | 1 577,47 s, soit 26 min 17 s |
+| Débit utile sur cet intervalle | environ 1 106 octets/s, soit 8,85 kbit/s |
+| Relances DATA | 93, dont un acquittement volontairement ignoré |
+| Après vérification, avant activation | OTA-A ; application et démarrage sélectionné dans `app0` |
+| Retour après transfert | STATUS authentifié reçu sur le profil initial BW125/SF12 |
+
+Le chronométrage données + vérification commence juste avant l'émission
+du premier bloc ; il n'inclut ni la négociation du profil, ni l'activation.
+Les relances ne permettent pas de distinguer une perte de donnée d'une
+perte d'acquittement ou d'un retard de traitement.
+
+SHA-256 de l'image OTA-B :
+
+```text
+4e0618109fdee90123c307f119ed9b5472e2fcd76f574f4ce20d4eab4d703d69
+```
+
+Après le retour explicite au profil initial, l'image OTA-B est activée.
+Une nouvelle session radio la retrouve dans `app1`, en attente de
+confirmation. Deux commandes CONFIRM successives sont acceptées sur
+ce même profil ; la dernière réponse identifie OTA-B, `app1`, sans
+confirmation en attente. Le client se termine avec succès.
+
+La configuration HTTP après le transfert et le nouveau démarrage est
+identique à celle sauvegardée juste avant le transfert.
+
+La lecture indépendante de `app1` par esptool restitue exactement les
+1 744 160 octets de l'image envoyée. Après le reset entraîné par cette
+lecture, un nouveau HELLO sur le profil initial retrouve OTA-B dans
+`app1`, sans confirmation en attente, avec le même SHA-256.
+
+Les contrôles d'authentification après mise à jour passent aussi sur le
+profil initial : répétition du HELLO actif acceptée, ancien compteur
+après fermeture refusé, mauvaise clé refusée, nonce de session précédente
+refusé sans avancer l'écriture. Les événements sont conservés dans
+`auth-checks.json` et le journal de contrôle correspondant.
+
+Enfin, `format-checks.json` consigne la réception en TNC2 des trois trames
+texte, native et PPM autonome, sur le profil initial. La trame native
+conserve l'association RXT synthétique `F4MLV-2<--F4MLV-9`. Ce contrôle
+fonctionnel utilise une fenêtre d'observation de huit secondes par trame
+en SF12 ; il vérifie la présence des décodeurs et non un taux de réception.

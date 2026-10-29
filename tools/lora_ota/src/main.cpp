@@ -97,8 +97,19 @@ void reply(const uint8_t* request,Status status) {
     uint8_t tag[32];mac(frame,41,tag);memcpy(frame+41,tag,16);
     radio.transmit(frame,sizeof frame); receiveMode();
 }
+bool bridgeProfile(bool fast) {
+    radio.standby();
+    bool ok=radio.setFrequency(fast?434.5:434.1)==RADIOLIB_ERR_NONE;
+    ok=(radio.setBandwidth(fast?500.0:125.0)==RADIOLIB_ERR_NONE) && ok;
+    ok=(radio.setSpreadingFactor(fast?7:12)==RADIOLIB_ERR_NONE) && ok;
+    ok=(radio.setCodingRate(5)==RADIOLIB_ERR_NONE) && ok;
+    receiveMode();return ok;
+}
 void serialCommand(char* line) {
-    if(!strcmp(line,"INFO")) {
+    if(!OTA_RECEIVER && (!strcmp(line,"PROFILE 0") || !strcmp(line,"PROFILE 1"))) {
+        bool fast=line[8]=='1';bool ok=bridgeProfile(fast);
+        Serial.printf("PROFILE %u %s\n",unsigned(fast),ok?"OK":"ERROR");
+    } else if(!strcmp(line,"INFO")) {
         const auto* running=esp_ota_get_running_partition();
         const auto* boot=esp_ota_get_boot_partition();
         Serial.printf("INFO build=%s running=%s boot=%s capacity=%lu state=%d offset=%lu\n",OTA_LABEL,

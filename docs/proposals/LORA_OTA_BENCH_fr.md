@@ -234,3 +234,54 @@ cohérente. Les options `--exercise-*` sont des essais destructifs de session
 réservés au banc : elles provoquent des redémarrages et un retour arrière.
 L'observation après mise à jour est effectuée par `check_integrated.py`,
 avec des trames produites par les vrais codecs (`regression_frames.cpp`).
+
+## Profil rapide temporaire
+
+L'armement et la confirmation utilisent le profil enregistré dans l'iGate.
+La commande authentifiée PREPARE_FAST (11) demande le profil temporaire
+numéro 1 et un bail d'inactivité : corps de trois octets, `01` suivi d'un
+entier big-endian de 15 à 60 secondes. Les autres profils sont refusés.
+Ce profil de banc est 434,500 MHz, BW500, SF7, CR4/5. Un profil SF5
+éventuel devra avoir un autre identifiant, sans changer le sens du profil 1.
+Il ne constitue pas
+une allocation de fréquence ou un profil universel pour un réseau déployé.
+
+L'acquittement part sur le profil initial. Deux secondes après la fin de
+son émission, le récepteur passe au profil rapide ; le contrôleur change
+son propre profil et vérifie le lien par une commande STATUS authentifiée.
+Si l'acquittement initial manque, le contrôleur peut quand même essayer
+STATUS sur le profil rapide. Une répétition de PREPARE_FAST pendant
+l'attente ne repousse pas la date de changement.
+
+Chaque commande authentifiée de la session renouvelle le bail rapide.
+À son expiration, le récepteur abandonne le transfert et recharge les
+paramètres radio de Config. La configuration n'est pas réécrite lors
+d'un changement temporaire. Un reset redémarre donc directement sur le
+profil configuré, même si le PC ou la radio de contrôle ne répondent plus.
+
+RETURN_NORMAL (12), sans corps, est acquitté sur le profil rapide ; le
+retour intervient 500 ms après cet acquittement. La session reste active,
+ce qui permet l'activation après réception complète et sa confirmation
+sur le profil initial. Le client vérifie ce retour par STATUS. Une perte
+de cet acquittement n'empêche pas de retrouver le récepteur sur le profil
+initial. ABORT et l'expiration globale de session rétablissent aussi Config.
+
+Le client `send_integrated.py --negotiate-profile` effectue ce cycle. Le
+pont possède deux commandes locales, PROFILE 0 et PROFILE 1. Pour les
+seuls essais décrits ici, PROFILE 0 est 434,100 MHz BW125 SF12 CR4/5 ;
+le récepteur utilise les mêmes paramètres provisoires enregistrés avant
+l'essai. Après l'essai, les configurations précédentes sont remises.
+Cette convention du pont devra être remplacée par une configuration
+explicite pour un usage sur d'autres profils réseau.
+
+La commande TEST_REBOOT (13) est réservée aux variantes de diagnostic :
+elle provoque un reset sans sélectionner l'image en cours de réception.
+`check_profiles.py` l'emploie pour vérifier le retour au profil initial.
+Le bail et les délais sont testés séparément sur hôte, y compris au
+rebouclage du compteur millis. La reprise persistante après reset reste
+hors du prototype.
+
+Les TTGO du banc portent un SX1278. BW500/SF7/CR4/5 donne un débit nominal
+de 21 875 bit/s. Le profil BW500/SF5/CR4/5 proposé par Jon donne 62 500
+bit/s mais nécessite une radio prenant en charge SF5, comme le SX1262 ;
+il n'est pas validé par cet essai matériel.

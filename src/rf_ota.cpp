@@ -10,6 +10,7 @@
 #include "remote_auth.h"
 #include "lora_utils.h"
 #include "flash_store.h"
+#include "profile_lease.h"
 
 extern Configuration Config;
 extern String versionNumber;
@@ -20,7 +21,7 @@ extern "C" bool verifyRollbackLater() { return true; }
 
 namespace {
 using namespace labota;
-constexpr uint8_t HELLO=6,CONFIRM=7,GET_STATUS=8,TEST_FAIL_ONCE=9,REACTIVATE=10;
+constexpr uint8_t HELLO=6,CONFIRM=7,GET_STATUS=8,TEST_FAIL_ONCE=9,REACTIVATE=10,PREPARE_FAST=11,RETURN_NORMAL=12,TEST_REBOOT=13;
 std::atomic<bool> pending{false},armed{false};
 bool radioReady=false,watchdog=false;
 uint32_t bootAt=0,armedAt=0,lastPacket=0,rebootAt=0,helloCounter=0;
@@ -43,6 +44,7 @@ public:
     }
 } storage;
 Session session(storage);
+ProfileLease profile;
 
 bool equalTag(const uint8_t* f,size_t n) {
     uint8_t digest[32];if(!REMOTE_AUTH::otaTag(f,n-16,digest))return false;
@@ -82,7 +84,11 @@ void reply(const uint8_t* request,Status result) {
     uint8_t digest[32];if(!REMOTE_AUTH::otaTag(frame,len,digest))return;
     memcpy(frame+len,digest,16);LoRa_Utils::sendOtaFrame(frame,len+16);
 }
-void cancel() { session.cancel();armed=false;memset(nonce,0,8); }
+void cancel() {
+    session.cancel();armed=false;memset(nonce,0,8);
+    if(profile.mode!=ProfileLease::NORMAL)LoRa_Utils::setOtaFastProfile(false);
+    profile.reset();
+}
 void rollback() {
     Serial.println("[RFOTA] Unconfirmed application: rollback");Serial.flush();
     esp_ota_mark_app_invalid_rollback_and_reboot();
@@ -111,6 +117,13 @@ void diagnostics() {
                 Config.loramodule.rxCodingRate4=Config.loramodule.txCodingRate4=5;
                 Config.loramodule.power=2;Config.digi.ecoMode=0;
                 Serial.println(Config.writeFile()?"OTAPROFILE_SAVED":"OTAPROFILE_ERROR");
+            } else if(!strcmp(serialInput,"OTABASEPROFILE")) {
+                Config.loramodule.rxFreq=Config.loramodule.txFreq=434100000;
+                Config.loramodule.rxSignalBandwidth=Config.loramodule.txSignalBandwidth=125000;
+                Config.loramodule.rxSpreadingFactor=Config.loramodule.txSpreadingFactor=12;
+                Config.loramodule.rxCodingRate4=Config.loramodule.txCodingRate4=5;
+                Config.loramodule.power=2;Config.digi.ecoMode=0;
+                Serial.println(Config.writeFile()?"OTABASE_SAVED":"OTABASE_ERROR");
             } else if(!strcmp(serialInput,"OTARESET")) {
                 Serial.flush();ESP.restart();
             }
@@ -150,6 +163,16 @@ void tick() {
     if(armed && (uint32_t(millis()-armedAt)>2700000U || uint32_t(millis()-lastPacket)>60000U)) {
         Serial.println("[RFOTA] Session expired");cancel();
     }
+    auto previous=profile.mode;
+    auto transition=profile.poll(millis());
+    if(transition==ProfileLease::ENTER_FAST) {
+        if(!LoRa_Utils::setOtaFastProfile(true))cancel();
+        Serial.println("[RFOTA] Temporary fast profile");
+    } else if(transition==ProfileLease::RESTORE_NORMAL) {
+        LoRa_Utils::setOtaFastProfile(false);
+        if(previous==ProfileLease::FAST)cancel(); // inactivity abandons the session
+        Serial.println("[RFOTA] Configured radio profile restored");
+    }
     diagnostics();
 }
 bool handle(const uint8_t* f,size_t n) {
@@ -174,8 +197,19 @@ bool handle(const uint8_t* f,size_t n) {
         Serial.println("[RFOTA] Authenticated session armed");return true;
     }
     if(!armed||memcmp(f+5,nonce,8)||memcmp(peer,f+19,8))return true;
-    lastPacket=millis();Status result=FORMAT;
-    if(op==GET_STATUS)result=body?FORMAT:labota::OK;
+    lastPacket=millis();profile.activity(lastPacket);Status result=FORMAT;
+    if(op==PREPARE_FAST) {
+        if(pending || session.state!=IDLE || body!=3 || f[35]!=1)result=FORMAT;
+        else {
+            uint16_t lease=(uint16_t(f[36])<<8)|f[37];
+            // Schedule only after the ACK has finished transmitting below.
+            result=lease>=15 && lease<=60 &&
+                (profile.mode==ProfileLease::NORMAL ||
+                 (profile.mode==ProfileLease::WAIT_FAST && profile.seconds==lease))?labota::OK:ORDER;
+        }
+    }
+    else if(op==RETURN_NORMAL)result=body?FORMAT:labota::OK;
+    else if(op==GET_STATUS)result=body?FORMAT:labota::OK;
     else if(op==CONFIRM) {
         uint8_t expected[32],actual[32];uint32_t bytes=0;
         if(!radioReady || body!=32)result=ORDER;
@@ -188,6 +222,7 @@ bool handle(const uint8_t* f,size_t n) {
         }
     }
 #ifdef RFOTA_DIAGNOSTICS
+    else if(op==TEST_REBOOT && !pending && body==0) {result=labota::OK;rebootAt=millis()+400;}
     else if(op==TEST_FAIL_ONCE && !pending && session.state==READY && body==0) {
         Preferences p;
         if(p.begin("rf-ota",false)) {result=p.putBool("fail-once",true)==1?labota::OK:STORAGE;p.end();}
@@ -207,6 +242,8 @@ bool handle(const uint8_t* f,size_t n) {
     else if(pending)result=labota::BUSY;
     else result=session.accept(op,offset,f+35,body);
     reply(f,result);
+    if(result==labota::OK && op==PREPARE_FAST)profile.prepare(millis(),(uint16_t(f[36])<<8)|f[37]);
+    if(result==labota::OK && op==RETURN_NORMAL)profile.requestReturn(millis());
     if(result==labota::OK && op==ACTIVATE)rebootAt=millis()+400;
     if(result==labota::OK && op==ABORT)cancel();
     if(op!=DATA || result!=labota::OK)Serial.printf("[RFOTA] op=%u status=%u offset=%lu\n",op,result,(unsigned long)session.written);
