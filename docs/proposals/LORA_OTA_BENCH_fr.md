@@ -1,5 +1,9 @@
 # Banc OTA LoRa direct — prototype du 29 octobre 2026
 
+Deux étapes sont conservées dans ce document : le banc autonome v1,
+décrit d'abord, puis [l'intégration v2 dans l'iGate](#intégration-v2-dans-ligate).
+Les deux protocoles expérimentaux ne sont pas interchangeables.
+
 Ce programme expérimental transfère une image d'application ESP32 par
 radio vers une partition OTA inactive. Il est autonome et ne remplace
 pas une implémentation OTA dans le firmware iGate. Il n'est pas destiné
@@ -103,3 +107,130 @@ dans le dossier local de l'essai sous `logs/`, jamais dans une publication.
 Les résultats sur carte doivent être présentés séparément du protocole
 et restent limités à la liaison, aux images et aux défauts effectivement
 essayés.
+
+## Intégration v2 dans l'iGate
+
+Les variantes `ttgo-lora32-v21-ota-a` et `-ota-b` sont des firmwares iGate
+complets, comprenant RXT, le format natif et le décodeur PPM autonome.
+`ENABLE_RF_OTA` y active l'OTA radio ; les autres variantes n'activent
+pas ce service. Ces variantes sont expérimentales et ne sont pas
+publiées sur le flasher.
+
+### Armement et authentification
+
+Le préfixe devient `3c ff 7e 02`. Les champs binaires restent ceux du
+banc, avec une source et un destinataire de huit octets. Le destinataire
+est le champ **Callsign-SSID** de l'équipement ; la source est le
+contrôleur authentifié configuré. Ces identités sont indépendantes du
+nom tactique utilisé par les balises APRS. La limite expérimentale de
+huit caractères exclut encore certaines identités APRS de neuf caractères ;
+elle devra être levée avant un usage général sur les stations de Jon.
+
+La clé est celle de REMOTE_AUTH, déjà provisionnée. Le HMAC-SHA256
+tronqué à 16 octets couvre la chaîne ASCII `LORA-APRS-OTA2`, suivie de
+tous les octets de la trame avant le tag. Ce domaine est distinct de
+celui des commandes RC1 et du banc v1. La clé n'est pas transmise sur
+la radio et n'est pas compilée dans l'image de firmware.
+
+L'opération HELLO porte un nonce nul, un compteur strictement croissant
+dans le champ offset et un corps vide. Le compteur est enregistré en
+NVS avant acceptation. Le récepteur répond avec un nonce aléatoire de
+huit octets, que les échanges suivants doivent porter. Une répétition
+du HELLO accepté pendant la même session restitue le nonce sans
+recommencer le transfert ; après fermeture ou redémarrage, le compteur
+ancien est rejeté. Un nouveau HELLO est nécessaire après chaque boot.
+
+L'outil `send_integrated.py` n'ouvre que le port USB du pont émetteur.
+Il conserve le compteur de contrôle sur le PC. L'initialisation des
+clés reste une opération préalable ; le transfert lui-même ne demande
+ni commande USB, ni action HTTP sur le récepteur.
+
+### Validation du démarrage
+
+Le hook Arduino `verifyRollbackLater` est remplacé dans ces variantes
+pour empêcher la validation automatique trop précoce. Une image en
+état PENDING_VERIFY n'est confirmée qu'après réception de CONFIRM,
+authentifié, portant son SHA-256 attendu. Le firmware relit et hache
+sa partition avant `esp_ota_mark_app_valid_cancel_rollback`.
+
+Un watchdog de 60 secondes protège l'exécution du démarrage en attente.
+La boucle de service attend la confirmation radio au plus 180 secondes
+depuis le début du setup, puis demande le rollback. La preuve apportée
+par CONFIRM est le fonctionnement de la boucle et des deux sens radio,
+ainsi que la concordance de l'image ; ce n'est pas un autotest exhaustif
+des capteurs, décodeurs et services de l'iGate.
+
+Cela suppose un bootloader et une disposition des partitions qui
+prennent en charge le retour à une application précédente. Le banc
+amorce cette disposition en USB. Aucun changement de bootloader ou
+de table de partitions n'est effectué par le transfert radio.
+
+### Opérations supplémentaires et acquittements
+
+| Code | Opération | Fonction |
+| --- | --- | --- |
+| 6 | HELLO | Armement radio et nouveau nonce |
+| 7 | CONFIRM | Validation radio du nouveau démarrage ; corps SHA-256 de 32 octets |
+| 8 | STATUS | État, version et partition courante |
+| 9 | TEST_FAIL_ONCE | Diagnostic uniquement : provoque un reset au prochain boot non confirmé |
+| 10 | REACTIVATE | Rehash et resélection de la dernière image inactive vérifiée, sans retransmission |
+
+START, DATA, FINISH, ACTIVATE et ABORT conservent leur code de v1.
+REACTIVATE ne choisit ni une adresse arbitraire, ni une image inconnue :
+la partition inactive, sa longueur et son SHA doivent correspondre au
+manifeste enregistré lors de l'activation précédente. L'API ESP32
+vérifie aussi l'image avant de la sélectionner.
+
+Le corps d'un ACK DATA contient l'opération, le statut et l'offset
+suivant, soit six octets. Pour les autres ACK, il ajoute le drapeau
+pending, les adresses de partition active et sélectionnée, la longueur
+et le texte de version, puis le SHA-256 du manifeste associé à l'image
+active, ou des zéros si aucun manifeste ne lui est associé. Le statut
+ne constitue pas une attestation de sécurité du code exécuté.
+
+### Transfert et coexistence
+
+Pendant une session, les émissions APRS, le traitement de relais,
+l'écran et les capteurs sont suspendus ; la radio et le réseau restent
+actifs. Les GET d'observation HTTP restent disponibles, les POST et
+les routes `/ota/*` sont refusés en 409 pour éviter une seconde écriture
+ou une reconfiguration pendant le transfert. Une fermeture de session
+ou son expiration rétablit le traitement normal.
+
+Le profil reste fixé pour l'essai à 434,500 MHz BW500 SF7 CR4/5. Aucun
+basculement négocié vers un profil rapide, relayage multibond ou patch
+différentiel n'est implémenté.
+
+L'émetteur peut reprendre une session encore active avec `--resume-log` :
+il retrouve son nonce, vérifie l'identité de l'image et demande l'offset
+au récepteur. START identique est idempotent et n'efface pas le début
+déjà reçu. Un redémarrage du récepteur annule encore la session ; la
+reprise persistante après ce redémarrage n'est pas implémentée.
+
+Les commandes USB de `RFOTA_DIAGNOSTICS` servent uniquement à préparer
+le banc et n'ont pas vocation à être activées sur les sites distants.
+Le code 9 est également réservé à ces variantes de diagnostic. Les
+tests de l'image complète et du retour arrière sont consignés dans
+le compte rendu, indépendamment de cette description du protocole.
+
+### Reproduire l'essai intégré
+
+```sh
+pio run -e ttgo-lora32-v21-ota-a -e ttgo-lora32-v21-ota-b
+pio run -d tools/lora_ota -e bridge_fast
+python3 tools/lora_ota/test_integrated.py
+python3 tools/lora_ota/send_integrated.py \
+  --bridge /dev/serial/by-id/PORT_EMETTEUR \
+  --key-file CHEMIN_PRIVE/secret.base64 \
+  --counter-file CHEMIN_PRIVE/compteur \
+  --image .pio/build/ttgo-lora32-v21-ota-b/firmware.bin \
+  --log CHEMIN_PRIVE/transfert.jsonl \
+  --fault-checks --exercise-rollback --exercise-confirm-timeout
+```
+
+Ces commandes supposent le pont et OTA-A préalablement installés, le même
+profil radio aux deux extrémités et une clé/configuration de contrôleur
+cohérente. Les options `--exercise-*` sont des essais destructifs de session
+réservés au banc : elles provoquent des redémarrages et un retour arrière.
+L'observation après mise à jour est effectuée par `check_integrated.py`,
+avec des trames produites par les vrais codecs (`regression_frames.cpp`).

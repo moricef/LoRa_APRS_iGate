@@ -32,6 +32,7 @@
 #include "native_aprs.h"
 #include "lora_frame_type.h"
 #include "AprsCompress.h"
+#include "rf_ota.h"
 #include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
@@ -755,7 +756,17 @@ namespace LoRa_Utils {
     // Native RXT stays in a separate, indexed snapshot; only APRS text is
     // returned to the application. A text frame keeps the
     // behaviour of readData(String&), which stops at the first zero byte.
+    bool sendOtaFrame(const uint8_t* frame,size_t size) {
+        if (!Config.loramodule.txActive || size>255) return false;
+        int result=radio.transmit(const_cast<uint8_t*>(frame),size);
+        operationDone=false;
+        transmitFlag=false;
+        radio.startReceive();
+        return result==RADIOLIB_ERR_NONE;
+    }
+
     String packetFromRadio(uint8_t* data, size_t length) {
+        if (RF_OTA::handle(data,length)) return "";
         if (NATIVE_APRS::isNativeFrame(data, length)) {
             std::string tnc2;
             std::vector<NATIVE_APRS::RxtTuple> rxt;

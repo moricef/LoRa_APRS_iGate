@@ -183,6 +183,20 @@ bool constantTimeEqual(const String& left, const String& right) {
 
 namespace REMOTE_AUTH {
 
+bool otaTag(const uint8_t* frame,size_t size,uint8_t digest[32]) {
+    if (size>239) return false;
+    const std::lock_guard<std::mutex> lock(authMutex);
+    uint8_t secret[32], message[260];
+    constexpr char domain[]="LORA-APRS-OTA2";
+    if (!loadSecret(secret)) return false;
+    memcpy(message,domain,sizeof(domain)-1);
+    memcpy(message+sizeof(domain)-1,frame,size);
+    bool ok=mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
+        secret,sizeof secret,message,sizeof(domain)-1+size,digest)==0;
+    secureZero(secret,sizeof secret);
+    return ok;
+}
+
 bool configured() {
     Preferences preferences;
     if (!preferences.begin(kNamespace, true)) return false;

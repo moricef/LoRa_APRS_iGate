@@ -1,4 +1,4 @@
-# Premier transfert de firmware par LoRa entre deux ESP32
+# Transfert de firmware par LoRa entre deux ESP32
 
 Essai du 29 octobre 2026, sur un banc autonome issu de la base iGate
 `c28bd87`, branche locale `experiment/lora-ota`. Protocole et sources :
@@ -75,7 +75,10 @@ couvrent aussi une erreur d'écriture simulée et le refus d'une activation
 avant vérification. Ces deux derniers points ne sont pas des pannes
 physiquement provoquées sur les cartes.
 
-## Portée de la conclusion
+## Portée de la conclusion du premier banc
+
+Les limites ci-dessous concernent la première étape autonome ; la seconde
+étape intégrée est décrite ensuite.
 
 Ce banc démontre **le transfert radio d'une application complète, sa
 vérification dans la flash et son démarrage sur l'autre partition** sur
@@ -98,3 +101,119 @@ ces deux cartes. Il ne démontre pas un OTA prêt à déployer à distance :
 Les images exactes, événements JSONL et résultat de la lecture flash sont
 conservés localement sous `logs/lora-ota-20261029/` dans le worktree
 principal. Les clés et sauvegardes de configuration ne sont pas publiables.
+
+## Deuxième étape : firmware iGate complet et contrôle par radio
+
+Cette étape reprend la même base matérielle et le même profil fixe. La
+branche `experiment/lora-ota` inclut désormais le décodeur PPM autonome
+ainsi que RXT et le format natif. Les variantes d'essai sont
+`ttgo-lora32-v21-ota-a` et `ttgo-lora32-v21-ota-b`, versions
+`4.0.2RXT-OTA-A` et `4.0.2RXT-OTA-B`.
+
+Le récepteur exécute le vrai iGate dans `app0`. L'armement, le transfert,
+l'activation et la confirmation sont commandés par radio authentifiée ;
+le programme de transfert n'ouvre que l'USB de l'émetteur. La clé est
+provisionnée avant l'essai. Aucun accès USB au récepteur n'intervient
+pendant le transfert et les validations de démarrage.
+
+| Observation | Résultat |
+| --- | --- |
+| Image iGate OTA-B | 1 743 216 octets |
+| Blocs distincts | 8 545, au plus 204 octets chacun |
+| Premier bloc acquitté | 19:46:42 UTC |
+| Image complète vérifiée | 20:15:44 UTC |
+| Intervalle entre ces deux observations | 1 741,71 s, environ 29 min 2 s |
+| Débit utile sur cet intervalle | environ 1 001 octets/s, soit 8,01 kbit/s |
+| Reprises après arrêt du client émetteur | 2, aux offsets 161 364 et 486 948, sans recommencer l'écriture |
+| Relances DATA dans les trois segments | 193, dont trois acquittements ignorés volontairement |
+| État après FINISH, avant activation | OTA-A ; application active et démarrage sélectionné dans `app0` |
+
+Le débit inclut les interruptions du client et les reprises. Les relances
+ne constituent pas un décompte d'erreurs radio : une absence d'acquittement
+ne localise pas la perte, et trois sont provoquées. Le pont USB utilise
+ici 921 600 bit/s ; le débit nominal radio reste 21 875 bit/s.
+
+Le SHA-256 attendu, contrôlé en relisant la partition reçue, est :
+
+```text
+61ff21e9e2f04ef27c69f934c561c7d726b1a92cd30b9e85e1cc6beed6587797
+```
+
+La lecture indépendante de `app1` avec esptool, après confirmation,
+restitue exactement les 1 743 216 octets de l'image envoyée. Cette lecture
+redémarre la carte ; la vérification suivante porte donc aussi sur la
+persistance de la sélection après reset.
+
+### Contrôles intégrés
+
+- FINISH avant réception complète et DATA hors ordre ont été refusés.
+  Les retransmissions après perte d'acquittement n'ont pas écrit le même
+  bloc une deuxième fois.
+- L'accès HTTP `/ota/start?mode=firmware` pendant la session radio a reçu
+  le statut 409 : une mise à jour HTTP concurrente est bloquée.
+- Un défaut ponctuel, demandé par une commande de diagnostic authentifiée,
+  provoque un reset au premier démarrage d'OTA-B, avant sa confirmation.
+  Après ce défaut, la réponse radio identifie OTA-A dans `app0`, sans
+  validation en attente : le retour à l'ancienne application est observé.
+- La même image déjà reçue est ensuite réactivée, sans retransmission.
+  La réponse radio identifie OTA-B dans `app1`, en attente de confirmation,
+  avec le SHA-256 annoncé.
+
+- La confirmation est volontairement omise pendant 190 secondes après
+  observation du démarrage d'OTA-B. La réponse radio suivante identifie
+  OTA-A dans `app0`, sans confirmation en attente : le retour automatique
+  après expiration du délai est observé.
+- Après une nouvelle activation de la même image, CONFIRM signé est
+  accepté ; OTA-B reste dans `app1`, sans confirmation en attente. La
+  même demande de confirmation est répétée et reste acceptée.
+
+### Réception après mise à jour
+
+Après la lecture flash et son reset, un nouvel échange radio retrouve
+OTA-B dans `app1`, sans confirmation en attente. Les essais suivants
+passent sur cette application :
+
+- Répéter le HELLO actif restitue le même nonce ; réutiliser son compteur
+  après fermeture de session ne fournit pas de réponse authentifiée.
+- Une demande signée avec une mauvaise clé ne fournit pas de réponse
+  authentifiée. Une DATA signée avec le nonce de la session précédente
+  est ignorée ; l'offset d'écriture courant reste zéro.
+- Trois trames sont émises par MLV-2, produites par les vrais codecs :
+  texte, natif et PPM autonome. Les trois contenus attendus sont retrouvés
+  dans la sortie TNC2 du récepteur.
+- La trame native porte une mesure RXT synthétique à l'index du relais
+  F4MLV-2. La sortie conserve l'association `F4MLV-2<--F4MLV-9`.
+  Ce contrôle vérifie l'association, pas la justesse d'une mesure RF.
+
+Les tests hôtes de la machine d'état passent sous ASan/UBSan ; les tests
+Python couvrent la taille maximale et le décodage des réponses signées.
+Les variantes intégrées A/B et la variante ordinaire sans OTA radio
+compilent. Le hook de confirmation différée est fort dans A/B et conserve
+le comportement faible d'origine dans la variante ordinaire.
+
+### Limites de l'intégration
+
+Cette étape valide un firmware iGate complet sur deux cartes proches,
+avec profil fixé avant essai. Elle ne valide pas encore :
+
+- Le basculement négocié entre le profil APRS et un profil de transfert,
+  ni le rétablissement de ce profil après une interruption.
+- Le transfert à travers des relais, les mises à jour différentielles et
+  la reprise persistante après reset du récepteur.
+- Une coupure d'alimentation pendant l'écriture ou des migrations de
+  configuration incompatibles entre ancienne et nouvelle applications.
+- Les autres modèles ESP32, les bootloaders déjà installés à distance
+  et les identités APRS de neuf caractères : l'adresse de ce prototype
+  est encore limitée à huit caractères.
+- Le fonctionnement normal de tous les services pendant le transfert :
+  les émissions APRS, capteurs et écran sont suspendus pendant la session.
+  Le test de réception après mise à jour ne remplace pas un essai prolongé.
+
+### Traces
+
+Les journaux de cette étape sont conservés localement sous
+`logs/lora-ota-integrated-20261029/`. Le transfert utilise les segments
+`radio-update-validated.jsonl`, `radio-update-resumed.jsonl` et
+`radio-update-final.jsonl` ; ils décrivent une même réception poursuivie
+sur le récepteur. Les durées de segments ne doivent pas être prises pour
+la durée du transfert complet.

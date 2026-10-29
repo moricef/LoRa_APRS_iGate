@@ -36,6 +36,9 @@ namespace REMOTE_AUTH {
     uint64_t acceptedCounter();
     bool setSecret(const String& base64UrlSecret);
     bool clearSecret();
+    // Domain-separated authentication for the experimental binary OTA protocol.
+    // The key itself never leaves this module.
+    bool otaTag(const uint8_t* frame,size_t size,uint8_t digest[32]);
     Result verifyAndConsume(const String& envelope, const String& controller,
                             const String& expectedController, const String& target);
     const char* statusText(Status status);

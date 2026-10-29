@@ -26,9 +26,9 @@ Ce travail compare les formats et le coût des codecs. Il ne constitue pas
 une décision de format ni une validation de la chaîne complète de relayage.
 Les tailles avec RXT sont des estimations distinctes des essais de codec.
 
-[Banc expérimental OTA LoRa direct](proposals/LORA_OTA_BENCH_fr.md) :
-transfert par blocs vers une partition inactive, vérification et activation
-séparées ; prototype autonome, sans garantie de déploiement distant.
+[OTA LoRa expérimental](proposals/LORA_OTA_BENCH_fr.md) : banc autonome,
+puis intégration iGate avec armement radio et confirmation du démarrage ;
+prototypes sur liaison directe, sans garantie de déploiement distant.
 
 ## Comptes rendus d’essais
 
@@ -44,7 +44,7 @@ spécification actuelle.
 | 13 octobre 2026 | [RXT natif sur l’air](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013_fr.md) · [English](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013.md) |
 | 26 octobre 2026 | [Filtre des types de trame et Bluetooth](tests/2026-10-26/VALIDATION_LORA_FRAME_BT_20261026_fr.md) : comparaison à la compilation, antérieure aux mesures de tas sur carte |
 | 27 octobre 2026 | [Collisions entre relais](tests/2026-10-27/RELAY_COLLISIONS_20261027_fr.md) : expérimentation mise de côté ; branche d’archive indiquée dans le rapport |
-| 29 octobre 2026 | [OTA LoRa direct entre deux ESP32](tests/2026-10-29/OTA_LORA_DIRECT_fr.md) : image de banc reçue, vérifiée en flash et démarrée sur la partition inactive ; armement USB, profil fixe |
+| 29 octobre 2026 | [OTA LoRa direct entre deux ESP32](tests/2026-10-29/OTA_LORA_DIRECT_fr.md) : banc autonome puis intégration dans le firmware iGate complet ; armement radio, partition inactive et retour arrière, sur profil fixe |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans

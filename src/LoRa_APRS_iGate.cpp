@@ -67,6 +67,7 @@ ___________________________________________________________________*/
 #include "wx_utils.h"
 #include "display.h"
 #include "utils.h"
+#include "rf_ota.h"
 #ifdef HAS_A7670
     #include "A7670_utils.h"
 #endif
@@ -75,7 +76,11 @@ ___________________________________________________________________*/
 extern unsigned long rxCompletedMillis;
 
 String              versionDate             = "2026-09-29";
+#ifdef RFOTA_LABEL
+String              versionNumber           = "4.0.2RXT-" RFOTA_LABEL;
+#else
 String              versionNumber           = "4.0.2RXT";
+#endif
 Configuration       Config;
 WiFiClient          aprsIsClient;
 WiFiClient          mqttClient;
@@ -108,6 +113,7 @@ String firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seven
 
 void setup() {
     Serial.begin(115200);
+    RF_OTA::earlyBoot();
     Config.setup();
     APRS_Telemetry_Persistence::load(aprsTelemetryStore);
     networkManager = new NetworkManager();
@@ -139,12 +145,14 @@ void setup() {
     Utils::checkRebootMode();
     APRS_IS_Utils::firstConnection();
     SLEEP_Utils::checkSerial();
+    RF_OTA::begin();
 }
 
 void loop() {
+    RF_OTA::tick();
     if (Config.digi.ecoMode == 1) {
         SLEEP_Utils::checkWakeUpFlag();
-        Utils::checkBeaconInterval();
+        if (!RF_OTA::busy()) Utils::checkBeaconInterval();
         STATION_Utils::processOutputPacketBufferUltraEcoMode();
         Utils::checkSleepByLowBatteryVoltage(1);
         SLEEP_Utils::startSleeping();
@@ -154,6 +162,14 @@ void loop() {
         if (isUpdatingOTA) {
             ElegantOTA.loop();
             return; // Don't process IGate and Digi during OTA update
+        }
+
+        if (RF_OTA::busy()) {
+            // Keep the radio and network alive, but avoid APRS transmissions
+            // and display/sensor work between stop-and-wait OTA blocks.
+            LoRa_Utils::receivePacket();
+            RF_OTA::tick();
+            return;
         }
 
         #ifdef HAS_GPS
@@ -193,7 +209,7 @@ void loop() {
         MQTT_Utils::loop();
 
         Utils::checkDisplayInterval();
-        Utils::checkBeaconInterval();
+        if (!RF_OTA::busy()) Utils::checkBeaconInterval();
 
         APRS_IS_Utils::updateWiFiAPRSISDisplayInfo();   // WiFi / APRS-IS status line (wakes display only on status change)
 
@@ -283,7 +299,7 @@ void loop() {
 
         if (Config.aprs_is.active) APRS_IS_Utils::listenAPRSIS();          // listen received packet from APRSIS
 
-        STATION_Utils::processOutputPacketBuffer();
+        if (!RF_OTA::busy()) STATION_Utils::processOutputPacketBuffer();
 
         #ifdef HAS_EPAPER   // Only consider updating every 10 seconds (when data to show is different from before)
             if(lastEpaperTime == 0 || millis() - lastEpaperTime > 10000) {

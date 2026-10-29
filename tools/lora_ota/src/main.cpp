@@ -115,16 +115,29 @@ void serialCommand(char* line) {
         Serial.println("RESETTING");Serial.flush();ESP.restart();
     } else if(!strcmp(line,"DISARM")) {
         session.cancel();armed=false;memset(secret,0,32);Serial.println("DISARMED");
+    } else if(!OTA_RECEIVER && !strncmp(line,"TXRAW ",6)) {
+        uint8_t frame[255];size_t n=fromHex(line+6,frame,sizeof frame);
+        if(n>=3 && frame[0]==0x3c && frame[1]==0xff && (frame[2]==1 || frame[2]==2 || frame[2]==0x81)) {
+            int status=radio.transmit(frame,n);receiveMode();Serial.printf("TXDONE %d\n",status);
+        } else Serial.println("ERROR frame");
     } else if(!OTA_RECEIVER && !strncmp(line,"TX ",3)) {
         uint8_t frame[255];size_t n=fromHex(line+3,frame,sizeof frame);
         // Bridge only carries this bench's private frame type.
-        if(n>=51 && !memcmp(frame,"\x3c\xff\x7e\x01",4)) {
+        if(n>=51 && !memcmp(frame,"\x3c\xff\x7e",3) && (frame[3]==1 || frame[3]==2)) {
             int status=radio.transmit(frame,n);receiveMode();Serial.printf("TXDONE %d\n",status);
         } else Serial.println("ERROR frame");
     }
 }
 void setup() {
-    Serial.begin(115200); delay(400);
+    // A maximum frame is a 514-byte hexadecimal USB command. At 921600
+    // baud it must fit while the loop is servicing the radio interrupt.
+    Serial.setRxBufferSize(2048);
+#ifdef OTA_BRIDGE_BAUD
+    Serial.begin(OTA_BRIDGE_BAUD);
+#else
+    Serial.begin(115200);
+#endif
+    delay(400);
     SPI.begin(5,19,27,18);
     int status=radio.begin(434.5,500.0,7,5,0x12,2,8,0);
     if(status!=RADIOLIB_ERR_NONE) {Serial.printf("RADIO_ERROR %d\n",status);while(true) delay(1000);}
