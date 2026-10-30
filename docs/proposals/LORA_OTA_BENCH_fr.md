@@ -1,8 +1,9 @@
-# Banc OTA LoRa direct — prototype du 29 octobre 2026
+# Banc OTA LoRa expérimental
 
-Deux étapes sont conservées dans ce document : le banc autonome v1,
-décrit d'abord, puis [l'intégration v2 dans l'iGate](#intégration-v2-dans-ligate).
-Les deux protocoles expérimentaux ne sont pas interchangeables.
+Ce document conserve le banc autonome v1 puis les extensions intégrées à
+l’iGate : armement radio, profil temporaire, relayage et transfert groupé
+avec reprise persistante. Les protocoles expérimentaux v1 et v2 ne sont
+pas interchangeables. Les résultats sont dans les comptes rendus datés.
 
 Ce programme expérimental transfère une image d'application ESP32 par
 radio vers une partition OTA inactive. Il est autonome et ne remplace

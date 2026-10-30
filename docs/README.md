@@ -30,9 +30,8 @@ Les tailles avec RXT sont des estimations distinctes des essais de codec.
 puis intégration iGate avec armement radio, confirmation du démarrage
 et retour automatique après changement de profil. Le transfert complet
 par un relais est validé en laboratoire. L'envoi groupé, le cache du relais
-et la reprise persistante sont implémentés et testés sur hôte ; les premières
-réparations et la reprise après reset ont aussi réussi sur radio, et le
-transfert groupé complet est en cours. Aucun de ces prototypes ne constitue
+et la reprise persistante ont aussi été validés lors d'un transfert complet
+par un relais, avec reset de la cible pendant le transfert. Aucun de ces prototypes ne constitue
 une garantie de déploiement distant.
 
 ## Comptes rendus d’essais

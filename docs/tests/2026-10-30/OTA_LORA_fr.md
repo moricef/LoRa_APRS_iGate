@@ -123,34 +123,63 @@ transfert après reset, ni les conditions d'un site distant. Le Wi-Fi
 du relais est resté actif pour la gestion ; le transport du firmware
 et les commandes de la cible sont passés par la radio.
 
-## Envoi groupé et reprise persistante — essai complet en cours
+## Envoi groupé et reprise persistante
 
-Une nouvelle version, développée au-dessus de `445c861`, ajoute les groupes
-de 32 blocs de 128 octets, un cache de groupe sur le relais, les bilans par
-bitmap et un journal de progression par page de 4 096 octets sur la cible.
-Les douze tests Python et les quatre bancs C++ (session, profils, enveloppe
-de relayage et groupes) passent, ces derniers sous ASan/UBSan. Les trois
-firmwares expérimentaux compilent.
+La version `8241529` ajoute les groupes de 32 blocs de 128 octets, un cache
+sur le relais, les bilans par bitmap et un journal de progression par page
+sur la cible. Douze tests Python et quatre bancs C++ (session, profils,
+enveloppe de relayage et groupes) passent, ces derniers sous ASan/UBSan.
+Les trois firmwares expérimentaux compilent.
 
-Le nouvel essai radio utilise MLV-2 → MLV-10 → MLV-15, avec le même profil
-rapide et la cible sans Wi-Fi. Les premières observations établissent :
+Le transfert complet MLV-2 → MLV-10 → MLV-15 s'est terminé avec le code zéro,
+avec le même profil rapide et la cible sans Wi-Fi.
 
-- deux pages complètes, soit 8 192 octets, enregistrées avant le reset ;
-- une demi-page supplémentaire, soit 2 048 octets, présente seulement en RAM ;
-- un redémarrage demandé par une commande radio de diagnostic ;
-- une nouvelle session authentifiée, avec reprise à 8 192 octets ;
-- la poursuite du transfert à partir de cette progression conservée ;
-- une réparation locale comptée par le relais après la perte volontaire
-  d'un bloc sur sa liaison vers la cible. Les trous restant côté contrôleur
-  ont été réparés par retransmission sélective.
+| Mesure | Observation |
+|---|---|
+| Image OTA-B | 1 764 720 octets, 431 pages de 4 096 octets au maximum |
+| Transfert et vérification | 53 min 24 s, dont 73,24 s pour la récupération volontaire après reset |
+| Débit utile sur cette durée | 551 octets/s environ |
+| Cache du relais | Compteur de 94 réparations locales de blocs |
+| Réparations demandées au contrôleur | 17 retransmissions de blocs |
+| Reprise après reset | Nouvelle session, offset durable retrouvé à 8 192 octets |
+| Nouveau firmware | OTA-B démarré et confirmé par radio |
+| Réseau de la cible | Wi-Fi OFF et aucune interface active avant et après mise à jour |
+| Retour arrière | Réussi après reset avant confirmation, puis après confirmation absente |
+| Lecture indépendante | Partition app1 identique octet pour octet au fichier envoyé |
 
-L'image de cet essai fait 1 764 720 octets, SHA-256
+SHA-256 de l'image :
 `ba729503c10820b950faf93262dd957f2e8107ab7ef734489cc2b778a80ca0b2`.
-Le journal est conservé dans
-`logs/lora-ota-window-20261030/radio-update-validated.jsonl`, avec les
-compteurs du relais après les premières pages.
 
-Le transfert complet et la mesure de son gain restent en cours. Ces premières
-observations ne valident ni son intégrité finale, ni une coupure électrique
-pendant l'écriture de flash ou du journal NVS. Les interruptions à ces deux
-endroits ont uniquement été simulées dans le banc C++.
+Le test a enregistré deux pages complètes (8 192 octets), puis fait recevoir
+une demi-page supplémentaire (2 048 octets) uniquement en RAM. Une commande
+radio de diagnostic a redémarré la cible. Après le retour autonome au profil
+initial, une nouvelle session authentifiée a retrouvé les 8 192 octets
+conservés et le transfert a repris à cet endroit. La demi-page volatile a
+été retransmise, sans renvoyer les pages enregistrées.
+
+Une perte ponctuelle a été provoquée sur chaque liaison. La première
+réparation locale a été observée dans le compteur du relais ; les trous
+restants ont été signalés au contrôleur et réparés sélectivement.
+Les 94 réparations locales comptées sur l'ensemble de l'essai ne sont pas
+un taux de pertes RF : le compteur décrit les blocs programmés pour une
+réparation depuis le cache. Le relais ne déclare aucune erreur d'émission.
+
+Par rapport au mode bloc par bloc du même montage, la durée observée passe
+de 1 h 08 min 18 s à 53 min 24 s, soit environ 22 % de moins. Le débit utile
+passe de 430 à 551 octets/s, soit environ 28 % de plus. La durée du nouvel
+essai inclut les 73,24 s de récupération provoquée pendant le transfert.
+Les images ont des tailles voisines mais différentes ; cette comparaison
+porte sur deux essais successifs en laboratoire, pas sur un gain garanti
+pour toutes les liaisons. L'activation et les essais de retour arrière
+après réception restent exclus de ces durées.
+
+Les preuves sont dans `logs/lora-ota-window-20261030/` : journal
+`radio-update-validated.jsonl`, synthèse, compteurs du relais, images figées
+et comparaison de la lecture flash. Les clés et configurations sont privées.
+
+Cet essai valide les groupes, la réparation par cache et la reprise après
+reset de la cible sur un chemin avec un seul relais. Il ne valide pas une
+coupure électrique pendant l'écriture de flash ou du journal NVS : ces deux
+interruptions ont uniquement été simulées dans le banc C++. Le redémarrage
+du relais pendant le transfert, les chemins alternatifs, plusieurs relais
+successifs et plusieurs cibles restent à tester ou à développer.
