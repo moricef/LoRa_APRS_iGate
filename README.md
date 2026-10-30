@@ -1,5 +1,20 @@
 # CA2RXU LoRa APRS iGate/Digipeater
 
+## Experimental LoRa OTA
+
+Branch `experiment/lora-ota` contains the RF firmware-update prototype tested
+on TTGO LoRa32 V2.1 boards, including transfer through one relay, grouped
+blocks, local repairs, persistent resume after target reset, and RF boot
+confirmation with rollback. It remains experimental.
+
+- Presentation: [English](docs/presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon.md)
+  · [PDF](docs/presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon.pdf)
+  · [Français](docs/presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon_fr.md)
+  · [PDF français](docs/presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon_fr.pdf).
+- [Protocol and build notes](docs/proposals/LORA_OTA_BENCH_fr.md),
+  [test results](docs/tests/2026-10-30/OTA_LORA_fr.md),
+  and [bench tools](tools/lora_ota/).
+
 This firmware is for using ESP32 based boards with LoRa Modules and GPS to live in the APRS world.
 
 ![Screenshot](https://github.com/richonguzman/LoRa_APRS_iGate/raw/main/images/iGateOledScreen.jpeg)
