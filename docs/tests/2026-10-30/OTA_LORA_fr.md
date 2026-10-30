@@ -122,3 +122,35 @@ laboratoire. Il ne valide ni les chemins multiples, ni la reprise du
 transfert après reset, ni les conditions d'un site distant. Le Wi-Fi
 du relais est resté actif pour la gestion ; le transport du firmware
 et les commandes de la cible sont passés par la radio.
+
+## Envoi groupé et reprise persistante — essai complet en cours
+
+Une nouvelle version, développée au-dessus de `445c861`, ajoute les groupes
+de 32 blocs de 128 octets, un cache de groupe sur le relais, les bilans par
+bitmap et un journal de progression par page de 4 096 octets sur la cible.
+Les douze tests Python et les quatre bancs C++ (session, profils, enveloppe
+de relayage et groupes) passent, ces derniers sous ASan/UBSan. Les trois
+firmwares expérimentaux compilent.
+
+Le nouvel essai radio utilise MLV-2 → MLV-10 → MLV-15, avec le même profil
+rapide et la cible sans Wi-Fi. Les premières observations établissent :
+
+- deux pages complètes, soit 8 192 octets, enregistrées avant le reset ;
+- une demi-page supplémentaire, soit 2 048 octets, présente seulement en RAM ;
+- un redémarrage demandé par une commande radio de diagnostic ;
+- une nouvelle session authentifiée, avec reprise à 8 192 octets ;
+- la poursuite du transfert à partir de cette progression conservée ;
+- une réparation locale comptée par le relais après la perte volontaire
+  d'un bloc sur sa liaison vers la cible. Les trous restant côté contrôleur
+  ont été réparés par retransmission sélective.
+
+L'image de cet essai fait 1 764 720 octets, SHA-256
+`ba729503c10820b950faf93262dd957f2e8107ab7ef734489cc2b778a80ca0b2`.
+Le journal est conservé dans
+`logs/lora-ota-window-20261030/radio-update-validated.jsonl`, avec les
+compteurs du relais après les premières pages.
+
+Le transfert complet et la mesure de son gain restent en cours. Ces premières
+observations ne valident ni son intégrité finale, ni une coupure électrique
+pendant l'écriture de flash ou du journal NVS. Les interruptions à ces deux
+endroits ont uniquement été simulées dans le banc C++.

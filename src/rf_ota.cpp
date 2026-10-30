@@ -14,6 +14,7 @@
 #include "lora_utils.h"
 #include "flash_store.h"
 #include "profile_lease.h"
+#include "window_flash_store.h"
 
 extern Configuration Config;
 extern NetworkManager* networkManager;
@@ -48,6 +49,11 @@ public:
     }
 } storage;
 Session session(storage);
+WindowFlashStore pageStorage;
+WindowSession pages(pageStorage);
+#ifdef RFOTA_DIAGNOSTICS
+uint32_t dropWindowOnce=0;
+#endif
 ProfileLease profile;
 
 bool equalTag(const uint8_t* f,size_t n) {
@@ -70,7 +76,15 @@ void reply(const uint8_t* request,Status result) {
     uint8_t frame[160]{};memcpy(frame,"\x3c\xff\x7e\x02",4);frame[4]=ACK;
     memcpy(frame+5,nonce,8);memcpy(frame+13,request+13,4);
     memcpy(frame+19,Config.callsign.c_str(),Config.callsign.length());memcpy(frame+27,request+19,8);
-    frame[35]=request[4];frame[36]=result;put32(frame+37,session.written);
+    bool windowOp=request[4]>=WINDOW_START && request[4]<=WINDOW_ACTIVATE;
+    frame[35]=request[4];frame[36]=result;put32(frame+37,windowOp?pages.written:session.written);
+    if(request[4]==WINDOW_START || request[4]==WINDOW_QUERY) {
+        put32(frame+41,pages.bitmap(get32(request+13)));frame[18]=10;uint8_t digest[32];
+        if(REMOTE_AUTH::otaTag(frame,45,digest)) {
+            memcpy(frame+45,digest,16);LoRa_Utils::sendOtaFrame(frame,61);
+        }
+        return;
+    }
     if(request[4]==NETWORK_STATUS) {
         frame[41]=uint8_t(WiFi.getMode());frame[42]=networkManager->isConnected()?1:0;
         frame[43]=networkManager->hasActiveInterface()?1:0;frame[18]=9;
@@ -99,6 +113,7 @@ void reply(const uint8_t* request,Status result) {
 }
 void cancel() {
     session.cancel();armed=false;memset(nonce,0,8);
+    pages.suspend(); // retain the durable checkpoint for a fresh authenticated session
     if(profile.mode!=ProfileLease::NORMAL)LoRa_Utils::setOtaFastProfile(false);
     profile.reset();
 }
@@ -243,8 +258,9 @@ bool handle(const uint8_t* f,size_t n) {
         }
     }
 #ifdef RFOTA_DIAGNOSTICS
+    else if(op==20 && !pending && body==4) {dropWindowOnce=get32(f+35);result=labota::OK;}
     else if(op==TEST_REBOOT && !pending && body==0) {result=labota::OK;rebootAt=millis()+400;}
-    else if(op==TEST_FAIL_ONCE && !pending && session.state==READY && body==0) {
+    else if(op==TEST_FAIL_ONCE && !pending && (session.state==READY || pages.state==READY) && body==0) {
         Preferences p;
         if(p.begin("rf-ota",false)) {result=p.putBool("fail-once",true)==1?labota::OK:STORAGE;p.end();}
         else result=STORAGE;
@@ -261,11 +277,32 @@ bool handle(const uint8_t* f,size_t n) {
         else {result=labota::OK;rebootAt=millis()+400;}
     }
     else if(pending)result=labota::BUSY;
+    else if(op==WINDOW_START)result=offset || session.state!=IDLE?ORDER:pages.start(f+35,body);
+    else if(op==WINDOW_DATA) {
+#ifdef RFOTA_DIAGNOSTICS
+        uint32_t bit=uint32_t(1)<<((offset%PAGE_BYTES)/WINDOW_CHUNK);
+        if(dropWindowOnce&bit) {dropWindowOnce&=~bit;return true;}
+#endif
+        result=pages.data(offset,f+35,body);
+    }
+    else if(op==WINDOW_QUERY) {
+        result=body==4 && pages.state!=IDLE && offset%PAGE_BYTES==0 && offset<pages.manifest.size &&
+            get32(f+35)==WindowSession::mask(pages.pageSize(offset))?labota::OK:FORMAT;
+    }
+    else if(op==WINDOW_FINISH)result=body || offset!=pages.manifest.size?FORMAT:pages.finish();
+    else if(op==WINDOW_ACTIVATE)result=body || offset!=pages.manifest.size?FORMAT:pages.activate();
+    else if(op==START) {
+        WindowManifest saved;uint32_t committed;
+        result=pages.state!=IDLE || pageStorage.load(saved,committed)?labota::BUSY:session.accept(op,offset,f+35,body);
+    }
+    else if(op==ABORT && !body)result=pages.discard();
     else result=session.accept(op,offset,f+35,body);
+    // A burst carries no per-block ACK. Its bitmap query reports all holes.
+    if(op==WINDOW_DATA)return true;
     reply(f,result);
     if(result==labota::OK && op==PREPARE_FAST)profile.prepare(millis(),(uint16_t(f[36])<<8)|f[37]);
     if(result==labota::OK && op==RETURN_NORMAL)profile.requestReturn(millis());
-    if(result==labota::OK && op==ACTIVATE)rebootAt=millis()+400;
+    if(result==labota::OK && (op==ACTIVATE || op==WINDOW_ACTIVATE))rebootAt=millis()+400;
     if(result==labota::OK && op==ABORT)cancel();
     if(op!=DATA || result!=labota::OK)Serial.printf("[RFOTA] op=%u status=%u offset=%lu\n",op,result,(unsigned long)session.written);
     return true;

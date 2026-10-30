@@ -15,6 +15,7 @@
 #include "profile_lease.h"
 #include "session.h"
 #include "route_frame.h"
+#include "page_cache.h"
 extern Configuration Config;
 namespace {
 constexpr uint8_t ROLE_OFF=0,ROLE_RELAY=1,ROLE_TARGET=2;
@@ -25,6 +26,14 @@ uint32_t started=0,lastPacket=0;bool replyContext=false;
 labota::ProfileLease profile;
 uint8_t expectedNonce[8]{};uint32_t expectedOffset=0;uint8_t expectedOp=0;
 uint16_t proposedLease=0;
+labota::PageCache cache;
+uint32_t queuedBlocks=0,queryMask=0;
+uint8_t queuedQuery[55]{};size_t queuedQuerySize=0;
+uint8_t repairRound=0;
+uint32_t knownBase=0,knownBits=0,nextCacheSend=0;
+uint8_t knownNonce[8]{};
+std::atomic<uint32_t> cacheHits{0},cachedBlocks{0};
+std::atomic<uint32_t> localRepairBlocks{0};
 std::atomic<uint32_t> requests{0},responses{0},badTags{0},wrongPhase{0},txErrors{0};
 bool address(const uint8_t* p,const char* s) {
     uint8_t b[8]{};size_t n=strlen(s);if(!n||n>8)return false;memcpy(b,s,n);return !memcmp(b,p,8);
@@ -57,6 +66,8 @@ void stop() {
     active=false;
     if(profile.mode!=labota::ProfileLease::NORMAL)LoRa_Utils::setOtaFastProfile(false);
     profile.reset();reportedProfile=0;expectedOp=0;
+    queuedBlocks=0;queuedQuerySize=0;cache.clear();
+    knownBits=0;memset(knownNonce,0,8);
 }
 bool save(uint8_t mode,const char* src,const char* dst,const char* relay,const char* encoded) {
     if(!src||!dst||!relay||!strlen(src)||!strlen(dst)||!strlen(relay)||strlen(src)>8||strlen(dst)>8||strlen(relay)>8)return false;
@@ -109,6 +120,22 @@ void tick() {
         if(previous==labota::ProfileLease::FAST)stop();
     }
     reportedProfile=int(profile.mode);
+    // Controller uploads a burst while this relay only listens. Once queried,
+    // the relay owns the channel, forwards cached blocks, then asks for a bitmap.
+    if(active && queuedQuerySize && int32_t(now-nextCacheSend)>=0) {
+        uint8_t out[255];size_t count=0;
+        if(queuedBlocks) {
+            unsigned index=__builtin_ctz(queuedBlocks);queuedBlocks&=~(uint32_t(1)<<index);
+            count=encode(routeota::RELAY_TARGET,cache.frames[index],cache.lengths[index],out);
+            ++cacheHits;
+        } else {
+            count=encode(routeota::RELAY_TARGET,queuedQuery,queuedQuerySize,out);
+            queuedQuerySize=0;
+        }
+        if(!count||!LoRa_Utils::sendOtaFrame(out,count))++txErrors;else ++requests;
+        lastPacket=millis();profile.activity(lastPacket);
+        nextCacheSend=millis()+(queuedBlocks?5:80); // allow the target's page commit before the query
+    }
 }
 bool handle(const uint8_t* f,size_t n) {
     if(n<3||memcmp(f,"\x3c\xff\x7d",3))return false;
@@ -125,6 +152,21 @@ bool handle(const uint8_t* f,size_t n) {
         if(!active) {active=true;started=millis();}
         lastPacket=millis();profile.activity(lastPacket);
         expectedOp=inner[4];expectedOffset=labota::get32(inner+13);memcpy(expectedNonce,inner+5,8);
+        if(expectedOp==6 || expectedOp==labota::WINDOW_START)cache.clear();
+        if(expectedOp==labota::WINDOW_DATA) {
+            if(cache.put(inner,v.size))++cachedBlocks;else ++wrongPhase;
+            return true;
+        }
+        if(expectedOp==labota::WINDOW_QUERY && v.size==55) {
+            queryMask=labota::get32(inner+35);repairRound=0;
+            if(knownBase!=expectedOffset || memcmp(knownNonce,expectedNonce,8)) {
+                knownBase=expectedOffset;memcpy(knownNonce,expectedNonce,8);knownBits=0;
+            }
+            memcpy(queuedQuery,inner,v.size);queuedQuerySize=v.size;
+            queuedBlocks=cache.available(expectedOffset,expectedNonce)&queryMask&~knownBits;
+            nextCacheSend=millis()+10;
+            return true;
+        }
         if(expectedOp==11 && v.size==54 && inner[35]==1)proposedLease=(uint16_t(inner[36])<<8)|inner[37];
         uint8_t out[255];size_t count=encode(routeota::RELAY_TARGET,inner,v.size,out);
         if(!count||!LoRa_Utils::sendOtaFrame(out,count))++txErrors;else ++requests;
@@ -132,6 +174,16 @@ bool handle(const uint8_t* f,size_t n) {
               inner[4]==128 && v.size>=57 && inner[35]==expectedOp && labota::get32(inner+13)==expectedOffset &&
               (expectedOp==6 || !memcmp(inner+5,expectedNonce,8))) {
         lastPacket=millis();profile.activity(lastPacket);
+        if(expectedOp==labota::WINDOW_QUERY && v.size==61 && inner[36]==0) {
+            knownBits=labota::get32(inner+41);
+            uint32_t missing=queryMask&~knownBits;
+            uint32_t local=missing&cache.available(expectedOffset,expectedNonce);
+            if(local && repairRound<3) {
+                localRepairBlocks+=__builtin_popcount(local);
+                ++repairRound;queuedBlocks=local;queuedQuerySize=55;nextCacheSend=millis()+10;
+                return true; // repair locally before involving the controller
+            }
+        }
         uint8_t out[255];size_t count=encode(routeota::RELAY_CONTROLLER,inner,v.size,out);
         bool sent=count && LoRa_Utils::sendOtaFrame(out,count);if(!sent)++txErrors;else ++responses;
         if(sent && inner[36]==0) {
@@ -149,6 +201,8 @@ void setupWeb(AsyncWebServer* server) {
         JsonDocument d;d["role"]=role;d["active"]=active.load();d["controller"]=controller;d["target"]=target;d["via"]=via;
         d["requests_forwarded"]=requests.load();d["responses_forwarded"]=responses.load();d["bad_tags"]=badTags.load();
         d["wrong_phase"]=wrongPhase.load();d["tx_errors"]=txErrors.load();d["profile"]=reportedProfile.load();d["paused"]=paused.load();
+        d["cached_blocks"]=cachedBlocks.load();d["cache_sends"]=cacheHits.load();
+        d["local_repair_blocks"]=localRepairBlocks.load();
         esp_app_desc_t desc;
         if(esp_ota_get_partition_description(esp_ota_get_running_partition(),&desc)==ESP_OK) {
             char hex[65]{};for(int i=0;i<32;i++)snprintf(hex+2*i,3,"%02x",desc.app_elf_sha256[i]);

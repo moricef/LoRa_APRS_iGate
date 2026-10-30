@@ -279,9 +279,77 @@ elle provoque un reset sans sélectionner l'image en cours de réception.
 `check_profiles.py` l'emploie pour vérifier le retour au profil initial.
 Le bail et les délais sont testés séparément sur hôte, y compris au
 rebouclage du compteur millis. La reprise persistante après reset reste
-hors du prototype.
+hors de ce premier mode d'envoi bloc par bloc. Le mode groupé décrit
+ci-dessous ajoute cette fonction.
 
 Les TTGO du banc portent un SX1278. BW500/SF7/CR4/5 donne un débit nominal
 de 21 875 bit/s. Le profil BW500/SF5/CR4/5 proposé par Jon donne 62 500
 bit/s mais nécessite une radio prenant en charge SF5, comme le SX1262 ;
 il n'est pas validé par cet essai matériel.
+
+## Groupes de blocs, cache du relais et reprise persistante
+
+Cette extension expérimentale conserve le mode précédent. Elle est activée
+par `send_integrated.py --windowed --via INDICATIF_RELAIS` ; les trois
+équipements doivent porter un firmware compatible. Les validations sur
+ordinateur et les résultats sur cartes sont distingués dans les comptes
+rendus d'essai.
+
+Une page de flash de 4 096 octets forme un groupe de 32 blocs de 128 octets.
+La dernière page peut être plus courte. Le contrôleur transmet les blocs
+au relais sans attendre d'acquittement individuel. Le relais les conserve
+en RAM et reste en réception pendant cette phase. À la demande de bilan,
+il transmet les blocs à la cible, puis lui demande son bitmap de réception.
+Cette alternance évite que le contrôleur et le relais émettent le groupe
+simultanément avec leurs radios uniques.
+
+| Opération | Corps | Effet |
+|---|---|---|
+| WINDOW_START (15) | Taille, SHA-256 et carte, comme START | Ouvre ou reprend la même image et indique la progression durable |
+| WINDOW_DATA (16) | 1 à 128 octets, offset multiple de 128 | Remplit le groupe courant, sans ACK par bloc |
+| WINDOW_QUERY (17) | Masque attendu de 32 bits | Renvoie les blocs présents et la progression durable |
+| WINDOW_FINISH (18) | Vide | Vérifie l'image complète, sans la sélectionner au démarrage |
+| WINDOW_ACTIVATE (19) | Vide | Sélectionne séparément l'image vérifiée |
+
+Les réponses de WINDOW_START et WINDOW_QUERY contiennent l'opération,
+le statut, l'offset durable (4 octets) et le bitmap (4 octets), tous couverts
+par le HMAC de la cible. Les requêtes et réponses utilisent les mêmes
+adresses, nonce, compteur d'armement et authentification que l'OTA v2.
+L'enveloppe de relayage conserve les trames signées de bout en bout.
+
+Le relais répare les trous à partir des trames signées gardées en cache,
+avec trois tours locaux au maximum avant de remettre le bilan au contrôleur.
+Le contrôleur renvoie alors seulement les blocs qui manquent encore.
+Le cache contient un groupe, reste en RAM et disparaît après un reset ;
+il ne stocke pas une image complète. Les bitmaps ne sont pas persistants.
+
+Sur la cible, les blocs peuvent arriver dans le désordre au sein du groupe.
+Une page complète est écrite dans la partition inactive, puis un journal
+atomique NVS enregistre la taille, le SHA-256, la partition et le nouvel
+offset durable. Une coupure avant ce dernier enregistrement fait retransmettre
+la page entière. Les pages déjà enregistrées ne sont pas effacées à la reprise.
+Le journal est écrit par page, pas par bloc. Un autre manifeste est refusé
+tant que le contrôleur n'a pas explicitement annulé l'image en cours.
+
+Après une coupure, la nouvelle session doit être réauthentifiée. Le client
+attend le retour autonome aux profils initiaux, réarme la cible, repasse
+au profil rapide et demande son offset durable. Les tentatives automatiques
+de récupération sont bornées. Un redémarrage du client peut aussi reprendre
+à partir du journal de la cible avec le même fichier, sans journal de session
+précédent. Un ABORT explicite efface la reprise ; une expiration de session
+la conserve.
+
+WINDOW_FINISH recalcule SHA-256 en relisant la partition et vérifie le format
+de l'image ESP32. WINDOW_ACTIVATE vérifie à nouveau l'image avant sélection.
+La confirmation radio et le retour arrière du firmware restent ceux du mode
+précédent. Une progression persistante ne rend jamais une image incomplète
+démarrable.
+
+Les diagnostics de banc ajoutent une perte ponctuelle sur la cible
+(opération 20, masque de 32 bits). `--fault-checks` provoque une perte sur
+chaque liaison ; `--exercise-resume` provoque un reset après deux pages
+durables et une demi-page volatile. Ces diagnostics n'établissent pas à eux
+seuls la résistance aux coupures électriques pendant une écriture réelle.
+
+Les chemins alternatifs, plusieurs relais successifs, plusieurs cibles,
+les profils différents par liaison et SF5 restent hors de cette extension.

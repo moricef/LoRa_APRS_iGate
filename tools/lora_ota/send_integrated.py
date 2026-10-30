@@ -20,6 +20,7 @@ DOMAIN=b'LORA-APRS-OTA2'
 START,DATA,FINISH,ACTIVATE,ABORT,HELLO,CONFIRM,STATUS,TEST_FAIL_ONCE,REACTIVATE=range(1,11)
 PREPARE_FAST,RETURN_NORMAL=11,12
 NETWORK_STATUS=14
+WINDOW_START,WINDOW_DATA,WINDOW_QUERY,WINDOW_FINISH,WINDOW_ACTIVATE=range(15,20)
 ACK=128
 CHUNK=204
 BOARD=0x54474732
@@ -36,6 +37,9 @@ def decode_reply(key,source,target,raw):
     if not hmac.compare_digest(raw[-16:],hmac.digest(key,DOMAIN+raw[:-16],'sha256')[:16]):return None
     p=raw[35:-16]
     result=dict(nonce=raw[5:13],offset=offset,op=p[0],status=p[1],written=struct.unpack('>I',p[2:6])[0])
+    if p[0] in (WINDOW_START,WINDOW_QUERY):
+        if len(p)!=10:return None
+        result['bitmap']=int.from_bytes(p[6:10],'big');return result
     if p[0]==NETWORK_STATUS:
         if len(p)!=9 or p[6]>3 or p[7]>1 or p[8]>1:return None
         result.update(wifi_mode=p[6],connected=bool(p[7]),active_interface=bool(p[8]));return result
@@ -83,13 +87,34 @@ class Client:
                 return r
             self.retries+=1;self.event('retry',op=op,offset=offset,attempt=attempt+1)
         raise TimeoutError(f'op={op} offset={offset}')
-    def hello(self):
+    def hello(self,attempts=80):
         previous=int(self.counter_file.read_text()) if self.counter_file.exists() else 0
         counter=max(int(time.time()),previous+1)
         if counter>0xffffffff:raise ValueError('counter exhausted')
         self.counter_file.write_text(str(counter)+'\n')
-        response=self.request(HELLO,counter,attempts=80,timeout=self.normal_timeout if self.negotiated else 3)
+        response=self.request(HELLO,counter,attempts=attempts,timeout=self.normal_timeout if self.negotiated else 3)
         self.event('hello',**printable(response));return response
+
+    def recover_fast_session(self):
+        # No final RF command is assumed to reach a failed relay or target.
+        # Both have a 30-second inactivity lease in this client configuration.
+        self.bridge_profile(False)
+        self.event('waiting_for_profile_recovery',seconds=35)
+        time.sleep(35)
+        self.hello(attempts=3)
+        self.enter_fast()
+
+    def send_unacknowledged(self,op,offset,payload):
+        raw=make_frame(self.key,self.source,self.target,self.nonce,op,offset,payload)
+        if self.route:raw=self.route.encode(raw)
+        self.serial.write(b'TX '+raw.hex().encode()+b'\n')
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            line=self.serial.readline().strip()
+            if line==b'TXDONE 0':
+                time.sleep(.005);return
+            if line.startswith((b'TXDONE ',b'ERROR')):raise RuntimeError('bridge burst transmission failed')
+        raise TimeoutError('bridge burst transmission')
 
     def bridge_profile(self,fast):
         command=b'PROFILE '+(b'1' if fast else b'0')+b'\n'
@@ -139,9 +164,13 @@ def main():
     ap.add_argument('--via',help='Relay identity for the test log; requires a configured relay and target')
     ap.add_argument('--route-key-file',type=Path,help='Separate transport key for the controller, relay and target')
     ap.add_argument('--require-offline',action='store_true',help='Require radio-reported Wi-Fi off and no active IP interface before and after updating')
+    ap.add_argument('--windowed',action='store_true',help='Use page bursts, relay repair cache, and persistent page checkpoints')
+    ap.add_argument('--exercise-resume',action='store_true',help='Reboot after two pages plus a volatile half-page, then resume')
     args=ap.parse_args();image=args.image.read_bytes();sha=hashlib.sha256(image).digest()
     if args.negotiate_profile and args.resume_log:raise ValueError('profile resume not supported by this client')
     if args.via and (not args.route_key_file or not args.negotiate_profile):raise ValueError('relay requires route key and profile negotiation')
+    if args.windowed and (not args.via or args.resume_log):raise ValueError('window mode requires a relay and uses durable target progress, not --resume-log')
+    if args.exercise_resume and not args.windowed:raise ValueError('resume test requires window mode')
     key=base64.urlsafe_b64decode(args.key_file.read_text().strip()+'=')
     if len(key)!=32 or image[:1]!=b'\xe9':raise ValueError('key/image')
     args.log.parent.mkdir(parents=True,exist_ok=True)
@@ -173,25 +202,15 @@ def main():
             if args.negotiate_profile:c.enter_fast()
             event('image',bytes=len(image),sha256=sha.hex(),initial=printable(before))
             manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',BOARD)
-            resume_offset=c.request(START,0,manifest,timeout=12)['written']
-            assert resume_offset<=len(image) and (resume_offset==len(image) or resume_offset%c.chunk==0)
-            if args.resume_log:event('resumed',offset=resume_offset,previous_log=str(args.resume_log))
-            else:assert resume_offset==0
-            if args.fault_checks and resume_offset==0:
-                c.request(FINISH,len(image),expected=2)
-                c.request(DATA,c.chunk,image[c.chunk:2*c.chunk],expected=2)
-            started=time.monotonic()
-            for offset in range(resume_offset,len(image),c.chunk):
-                block=image[offset:offset+c.chunk]
-                r=c.request(DATA,offset,block,drop_ack=args.fault_checks and offset==resume_offset)
-                assert r['written']==offset+len(block)
-                event('block',offset=offset,written=r['written'])
-                if offset//c.chunk%500==0:print(f'{r["written"]}/{len(image)} bytes',flush=True)
-            r=c.request(FINISH,len(image));assert r['running']==before['running'] and r['boot']==before['boot']
-            event('verified',elapsed_s=time.monotonic()-started,start_offset=resume_offset,retries=c.retries,reply=printable(r))
+            if args.windowed:
+                from window_transfer import transfer
+                r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume)
+                assert r['running']==before['running'] and r['boot']==before['boot']
+            else:
+                r=transfer_stop_and_wait(c,args,image,manifest,before,event)
             if args.negotiate_profile:c.return_normal()
             if args.exercise_rollback:c.request(TEST_FAIL_ONCE)
-            try:c.request(ACTIVATE,len(image),attempts=3,timeout=c.normal_timeout if c.negotiated else 3)
+            try:c.request(WINDOW_ACTIVATE if args.windowed else ACTIVATE,len(image),attempts=3,timeout=c.normal_timeout if c.negotiated else 3)
             except TimeoutError:event('activation_ack_missing')
             time.sleep(5)
             new=c.hello()
@@ -218,8 +237,7 @@ def main():
                 assert new['pending'] and new['running']!=before['running'] and new['image_sha']==sha.hex()
                 event('boot_pending_confirmation',reply=printable(new))
             r=c.request(CONFIRM,0,sha);assert not r['pending']
-            # Retry the same confirmation deliberately: an ACK loss must not
-            # turn an already successful confirmation into an error.
+            # A lost confirmation ACK must remain safely retryable.
             r=c.request(CONFIRM,0,sha);assert not r['pending']
             event('radio_confirmed',reply=printable(r))
             if args.require_offline:
@@ -228,5 +246,25 @@ def main():
             c.request(ABORT)
         finally:
             c.close()
+
+def transfer_stop_and_wait(c,args,image,manifest,before,event):
+    resume_offset=c.request(START,0,manifest,timeout=12)['written']
+    assert resume_offset<=len(image) and (resume_offset==len(image) or resume_offset%c.chunk==0)
+    if args.resume_log:event('resumed',offset=resume_offset,previous_log=str(args.resume_log))
+    else:assert resume_offset==0
+    if args.fault_checks and resume_offset==0:
+        c.request(FINISH,len(image),expected=2)
+        c.request(DATA,c.chunk,image[c.chunk:2*c.chunk],expected=2)
+    started=time.monotonic()
+    for offset in range(resume_offset,len(image),c.chunk):
+        block=image[offset:offset+c.chunk]
+        r=c.request(DATA,offset,block,drop_ack=args.fault_checks and offset==resume_offset)
+        assert r['written']==offset+len(block)
+        event('block',offset=offset,written=r['written'])
+        if offset//c.chunk%500==0:print(f'{r["written"]}/{len(image)} bytes',flush=True)
+    r=c.request(FINISH,len(image));assert r['running']==before['running'] and r['boot']==before['boot']
+    event('verified',elapsed_s=time.monotonic()-started,start_offset=resume_offset,retries=c.retries,reply=printable(r))
+    return r
+
 
 if __name__=='__main__':main()

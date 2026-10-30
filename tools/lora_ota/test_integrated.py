@@ -17,6 +17,13 @@ class WireTests(unittest.TestCase):
         self.assertFalse(r['connected']);self.assertFalse(r['active_interface'])
         self.assertIsNone(self.decode(self.reply(p[:-1])))
         self.assertIsNone(self.decode(self.reply(p[:-3]+bytes([4,0,0]))))
+    def test_window_bitmap_reply(self):
+        for op in (WINDOW_START,WINDOW_QUERY):
+            p=bytes([op,0])+struct.pack('>II',4096,0x80000001)
+            r=self.decode(self.reply(p));self.assertEqual(r['bitmap'],0x80000001)
+            self.assertEqual(r['written'],4096)
+            self.assertIsNone(self.decode(self.reply(p[:-1])))
+            self.assertIsNone(self.decode(self.reply(p+b'x')))
     def test_route_transport(self):
         transport=RouteTransport(bytes(range(32)))
         raw=make_frame(self.key,self.source,self.target,self.nonce,DATA,0,bytes(175))
