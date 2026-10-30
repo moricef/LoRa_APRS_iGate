@@ -20,6 +20,7 @@
 #include "network_manager.h"
 #include "configuration.h"
 #include "rf_ota.h"
+#include "rf_route.h"
 #include "remote_auth.h"
 #include "aprs_json_utils.h"
 #include "ota_utils.h"
@@ -618,7 +619,7 @@ namespace WEB_Utils {
     void setup() {
         if (Config.digi.ecoMode == 0 && networkManager->hasActiveInterface()) {  // no WiFi STA/AP or Ethernet started = no TCP/IP stack
             server.addMiddleware([](AsyncWebServerRequest* request,ArMiddlewareNext next) {
-                if (RF_OTA::busy() &&
+                if ((RF_OTA::busy() || RF_ROUTE::busy()) &&
                     (request->url().startsWith("/ota/") ||
                      request->method()==HTTP_POST)) {
                     request->send(409,"text/plain","Radio OTA session active");
@@ -626,6 +627,7 @@ namespace WEB_Utils {
                 }
                 next();
             });
+            RF_ROUTE::setupWeb(&server);
             server.on("/", HTTP_GET, handleHome);
             server.on("/status", HTTP_GET, handleStatus);
             server.on("/received-packets.json", HTTP_GET, handleReceivedPackets);

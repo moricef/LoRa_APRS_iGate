@@ -33,6 +33,7 @@
 #include "lora_frame_type.h"
 #include "AprsCompress.h"
 #include "rf_ota.h"
+#include "rf_route.h"
 #include "telemetry_utils.h"
 #include "display.h"
 #include "utils.h"
@@ -767,6 +768,11 @@ namespace LoRa_Utils {
         return (radio.startReceive()==RADIOLIB_ERR_NONE) && ok;
     }
     bool sendOtaFrame(const uint8_t* frame,size_t size) {
+        uint8_t routed[255];
+        if(RF_ROUTE::routedReply()) {
+            size_t count=RF_ROUTE::wrapReply(frame,size,routed);if(!count)return false;
+            frame=routed;size=count;
+        }
         if (!Config.loramodule.txActive || size>255) return false;
         if (!otaFastProfile) changeFreqTx();
         int result=radio.transmit(const_cast<uint8_t*>(frame),size);
@@ -778,6 +784,8 @@ namespace LoRa_Utils {
     }
 
     String packetFromRadio(uint8_t* data, size_t length) {
+        if (RF_ROUTE::handle(data,length)) return "";
+        if (RF_ROUTE::requiresRelay() && length>=3 && !memcmp(data,"\x3c\xff\x7e",3)) return "";
         if (RF_OTA::handle(data,length)) return "";
         if (NATIVE_APRS::isNativeFrame(data, length)) {
             std::string tnc2;

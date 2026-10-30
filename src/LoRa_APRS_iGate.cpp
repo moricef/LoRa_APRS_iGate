@@ -68,6 +68,7 @@ ___________________________________________________________________*/
 #include "display.h"
 #include "utils.h"
 #include "rf_ota.h"
+#include "rf_route.h"
 #ifdef HAS_A7670
     #include "A7670_utils.h"
 #endif
@@ -114,6 +115,7 @@ String firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seven
 void setup() {
     Serial.begin(115200);
     RF_OTA::earlyBoot();
+    RF_ROUTE::recoverConfiguration();
     Config.setup();
     APRS_Telemetry_Persistence::load(aprsTelemetryStore);
     networkManager = new NetworkManager();
@@ -145,11 +147,12 @@ void setup() {
     Utils::checkRebootMode();
     APRS_IS_Utils::firstConnection();
     SLEEP_Utils::checkSerial();
+    RF_ROUTE::begin();
     RF_OTA::begin();
 }
 
 void loop() {
-    RF_OTA::tick();
+    RF_OTA::tick();RF_ROUTE::tick();
     if (Config.digi.ecoMode == 1) {
         SLEEP_Utils::checkWakeUpFlag();
         if (!RF_OTA::busy()) Utils::checkBeaconInterval();
@@ -164,11 +167,11 @@ void loop() {
             return; // Don't process IGate and Digi during OTA update
         }
 
-        if (RF_OTA::busy()) {
+        if (RF_OTA::busy() || RF_ROUTE::busy()) {
             // Keep the radio and network alive, but avoid APRS transmissions
             // and display/sensor work between stop-and-wait OTA blocks.
             LoRa_Utils::receivePacket();
-            RF_OTA::tick();
+            RF_OTA::tick();RF_ROUTE::tick();
             return;
         }
 

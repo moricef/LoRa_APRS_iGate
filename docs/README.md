@@ -46,6 +46,7 @@ spécification actuelle.
 | 26 octobre 2026 | [Filtre des types de trame et Bluetooth](tests/2026-10-26/VALIDATION_LORA_FRAME_BT_20261026_fr.md) : comparaison à la compilation, antérieure aux mesures de tas sur carte |
 | 27 octobre 2026 | [Collisions entre relais](tests/2026-10-27/RELAY_COLLISIONS_20261027_fr.md) : expérimentation mise de côté ; branche d’archive indiquée dans le rapport |
 | 29 octobre 2026 | [OTA LoRa direct entre deux ESP32](tests/2026-10-29/OTA_LORA_DIRECT_fr.md) : banc autonome puis intégration dans le firmware iGate complet ; armement radio, partition inactive, retour arrière et récupération du profil radio initial |
+| 30 octobre 2026 | [OTA LoRa avec la cible sans Wi-Fi](tests/2026-10-30/OTA_LORA_fr.md) : image complète, confirmation radio et retours arrière en direct puis par F4MLV-10 |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans

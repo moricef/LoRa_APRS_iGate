@@ -1,7 +1,10 @@
 #include "rf_ota.h"
+#include "rf_route.h"
 #ifdef ENABLE_RF_OTA
 #include <Arduino.h>
 #include <Preferences.h>
+#include <WiFi.h>
+#include "network_manager.h"
 #include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 #include <esp_system.h>
@@ -13,6 +16,7 @@
 #include "profile_lease.h"
 
 extern Configuration Config;
+extern NetworkManager* networkManager;
 extern String versionNumber;
 extern bool isUpdatingOTA;
 
@@ -21,7 +25,7 @@ extern "C" bool verifyRollbackLater() { return true; }
 
 namespace {
 using namespace labota;
-constexpr uint8_t HELLO=6,CONFIRM=7,GET_STATUS=8,TEST_FAIL_ONCE=9,REACTIVATE=10,PREPARE_FAST=11,RETURN_NORMAL=12,TEST_REBOOT=13;
+constexpr uint8_t HELLO=6,CONFIRM=7,GET_STATUS=8,TEST_FAIL_ONCE=9,REACTIVATE=10,PREPARE_FAST=11,RETURN_NORMAL=12,TEST_REBOOT=13,NETWORK_STATUS=14;
 std::atomic<bool> pending{false},armed{false};
 bool radioReady=false,watchdog=false;
 uint32_t bootAt=0,armedAt=0,lastPacket=0,rebootAt=0,helloCounter=0;
@@ -67,6 +71,15 @@ void reply(const uint8_t* request,Status result) {
     memcpy(frame+5,nonce,8);memcpy(frame+13,request+13,4);
     memcpy(frame+19,Config.callsign.c_str(),Config.callsign.length());memcpy(frame+27,request+19,8);
     frame[35]=request[4];frame[36]=result;put32(frame+37,session.written);
+    if(request[4]==NETWORK_STATUS) {
+        frame[41]=uint8_t(WiFi.getMode());frame[42]=networkManager->isConnected()?1:0;
+        frame[43]=networkManager->hasActiveInterface()?1:0;frame[18]=9;
+        uint8_t digest[32];
+        if(REMOTE_AUTH::otaTag(frame,44,digest)) {
+            memcpy(frame+44,digest,16);LoRa_Utils::sendOtaFrame(frame,60);
+        }
+        return;
+    }
     if(request[4]==DATA) {
         frame[18]=6;uint8_t digest[32];
         if(REMOTE_AUTH::otaTag(frame,41,digest)) {
@@ -124,6 +137,14 @@ void diagnostics() {
                 Config.loramodule.rxCodingRate4=Config.loramodule.txCodingRate4=5;
                 Config.loramodule.power=2;Config.digi.ecoMode=0;
                 Serial.println(Config.writeFile()?"OTABASE_SAVED":"OTABASE_ERROR");
+            } else if(!strcmp(serialInput,"OTAOFFLINE")) {
+                Config.wifiAPs.clear();Config.wifiAutoAP.enabled=false;
+                bool saved=Config.writeFile();
+                networkManager->disconnectWiFi();networkManager->disableAP();
+                Serial.println(saved?"OTAOFFLINE_SAVED":"OTAOFFLINE_ERROR");
+            } else if(!strncmp(serialInput,"OTAROUTE ",9)) {
+                char* encoded=strchr(serialInput+9,' ');
+                if(encoded) {*encoded++=0;Serial.println(RF_ROUTE::configureTarget(Config.remoteManagement.authController.c_str(),serialInput+9,encoded)?"OTAROUTE_SAVED":"OTAROUTE_ERROR");}
             } else if(!strcmp(serialInput,"OTARESET")) {
                 Serial.flush();ESP.restart();
             }
@@ -160,7 +181,7 @@ void tick() {
     if(watchdog)esp_task_wdt_reset();
     if(pending && uint32_t(millis()-bootAt)>180000U)rollback();
     if(rebootAt && int32_t(millis()-rebootAt)>=0) {Serial.flush();ESP.restart();}
-    if(armed && (uint32_t(millis()-armedAt)>2700000U || uint32_t(millis()-lastPacket)>60000U)) {
+    if(armed && (uint32_t(millis()-armedAt)>7200000U || uint32_t(millis()-lastPacket)>60000U)) {
         Serial.println("[RFOTA] Session expired");cancel();
     }
     auto previous=profile.mode;
@@ -209,7 +230,7 @@ bool handle(const uint8_t* f,size_t n) {
         }
     }
     else if(op==RETURN_NORMAL)result=body?FORMAT:labota::OK;
-    else if(op==GET_STATUS)result=body?FORMAT:labota::OK;
+    else if(op==GET_STATUS || op==NETWORK_STATUS)result=body?FORMAT:labota::OK;
     else if(op==CONFIRM) {
         uint8_t expected[32],actual[32];uint32_t bytes=0;
         if(!radioReady || body!=32)result=ORDER;

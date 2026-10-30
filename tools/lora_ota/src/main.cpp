@@ -134,7 +134,7 @@ void serialCommand(char* line) {
     } else if(!OTA_RECEIVER && !strncmp(line,"TX ",3)) {
         uint8_t frame[255];size_t n=fromHex(line+3,frame,sizeof frame);
         // Bridge only carries this bench's private frame type.
-        if(n>=51 && !memcmp(frame,"\x3c\xff\x7e",3) && (frame[3]==1 || frame[3]==2)) {
+        if((n>=51 && !memcmp(frame,"\x3c\xff\x7e",3) && (frame[3]==1 || frame[3]==2)) || (n>=80 && !memcmp(frame,"\x3c\xff\x7d\x01",4))) {
             int status=radio.transmit(frame,n);receiveMode();Serial.printf("TXDONE %d\n",status);
         } else Serial.println("ERROR frame");
     }

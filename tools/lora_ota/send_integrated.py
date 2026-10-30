@@ -13,11 +13,13 @@ from pathlib import Path
 import struct
 import time
 from send import open_serial
+from route_transport import RouteTransport
 
 PREFIX=b'\x3c\xff\x7e\x02'
 DOMAIN=b'LORA-APRS-OTA2'
 START,DATA,FINISH,ACTIVATE,ABORT,HELLO,CONFIRM,STATUS,TEST_FAIL_ONCE,REACTIVATE=range(1,11)
 PREPARE_FAST,RETURN_NORMAL=11,12
+NETWORK_STATUS=14
 ACK=128
 CHUNK=204
 BOARD=0x54474732
@@ -34,6 +36,9 @@ def decode_reply(key,source,target,raw):
     if not hmac.compare_digest(raw[-16:],hmac.digest(key,DOMAIN+raw[:-16],'sha256')[:16]):return None
     p=raw[35:-16]
     result=dict(nonce=raw[5:13],offset=offset,op=p[0],status=p[1],written=struct.unpack('>I',p[2:6])[0])
+    if p[0]==NETWORK_STATUS:
+        if len(p)!=9 or p[6]>3 or p[7]>1 or p[8]>1:return None
+        result.update(wifi_mode=p[6],connected=bool(p[7]),active_interface=bool(p[8]));return result
     if len(p)>6:
         if len(p)<48 or p[6] not in (0,1):return None
         vl=p[15]
@@ -51,16 +56,23 @@ class Client:
         self.key,self.source,self.target=key,source,target
         self.counter_file=counter_file;self.nonce=bytes(8);self.event=event;self.retries=0
         self.default_timeout=1;self.negotiated=False;self.fast=False
+        self.route=None;self.chunk=CHUNK;self.normal_timeout=12
     def request(self,op,offset=0,payload=b'',expected=0,drop_ack=False,timeout=None,attempts=16):
         if timeout is None:timeout=self.default_timeout
         raw=make_frame(self.key,self.source,self.target,self.nonce if op!=HELLO else bytes(8),op,offset,payload)
+        if self.route:raw=self.route.encode(raw)
         for attempt in range(attempts):
             self.serial.write(b'TX '+raw.hex().encode()+b'\n')
             deadline=time.monotonic()+timeout
             while time.monotonic()<deadline:
                 line=self.serial.readline().strip()
                 if not line.startswith(b'RX '):continue
-                try:r=decode_reply(self.key,self.source,self.target,bytes.fromhex(line[3:].decode()))
+                try:
+                    wire=bytes.fromhex(line[3:].decode())
+                    if self.route:
+                        wire=self.route.decode(wire)
+                        if wire is None:continue
+                    r=decode_reply(self.key,self.source,self.target,wire)
                 except (ValueError,IndexError,UnicodeDecodeError):continue
                 if r is None or r['op']!=op or r['offset']!=offset:continue
                 if op!=HELLO and r['nonce']!=self.nonce:continue
@@ -76,7 +88,7 @@ class Client:
         counter=max(int(time.time()),previous+1)
         if counter>0xffffffff:raise ValueError('counter exhausted')
         self.counter_file.write_text(str(counter)+'\n')
-        response=self.request(HELLO,counter,attempts=80,timeout=12 if self.negotiated else 3)
+        response=self.request(HELLO,counter,attempts=80,timeout=self.normal_timeout if self.negotiated else 3)
         self.event('hello',**printable(response));return response
 
     def bridge_profile(self,fast):
@@ -87,12 +99,12 @@ class Client:
             if time.monotonic()>=next_send:
                 self.serial.write(command);next_send=time.monotonic()+.5
             if self.serial.readline().strip()==expected:
-                self.fast=fast;self.default_timeout=1 if fast else 12;return
+                self.fast=fast;self.default_timeout=(2 if self.route else 1) if fast else self.normal_timeout;return
         raise TimeoutError('bridge profile command')
     def enable_profiles(self):
         self.negotiated=True;self.bridge_profile(False)
     def enter_fast(self,lease=30,drop_prepare_ack=False):
-        try:self.request(PREPARE_FAST,0,bytes([1])+struct.pack('>H',lease),timeout=12,attempts=1,drop_ack=drop_prepare_ack)
+        try:self.request(PREPARE_FAST,0,bytes([1])+struct.pack('>H',lease),timeout=self.normal_timeout,attempts=1,drop_ack=drop_prepare_ack)
         except TimeoutError:self.event('prepare_ack_missing')
         self.bridge_profile(True);time.sleep(2.2)
         self.request(STATUS,attempts=8)
@@ -124,8 +136,12 @@ def main():
     ap.add_argument('--exercise-confirm-timeout',action='store_true',help='Withhold confirmation, observe rollback, then activate again')
     ap.add_argument('--fault-checks',action='store_true')
     ap.add_argument('--negotiate-profile',action='store_true',help='Start at the bench normal profile; negotiate the temporary fast profile')
+    ap.add_argument('--via',help='Relay identity for the test log; requires a configured relay and target')
+    ap.add_argument('--route-key-file',type=Path,help='Separate transport key for the controller, relay and target')
+    ap.add_argument('--require-offline',action='store_true',help='Require radio-reported Wi-Fi off and no active IP interface before and after updating')
     args=ap.parse_args();image=args.image.read_bytes();sha=hashlib.sha256(image).digest()
     if args.negotiate_profile and args.resume_log:raise ValueError('profile resume not supported by this client')
+    if args.via and (not args.route_key_file or not args.negotiate_profile):raise ValueError('relay requires route key and profile negotiation')
     key=base64.urlsafe_b64decode(args.key_file.read_text().strip()+'=')
     if len(key)!=32 or image[:1]!=b'\xe9':raise ValueError('key/image')
     args.log.parent.mkdir(parents=True,exist_ok=True)
@@ -136,6 +152,10 @@ def main():
         counter_file=args.counter_file or args.log.parent/(args.target+'.counter')
         c=Client(args.bridge,key,args.source.encode(),args.target.encode(),counter_file,event)
         try:
+            if args.via:
+                route_key=base64.urlsafe_b64decode(args.route_key_file.read_text().strip()+'=')
+                c.route=RouteTransport(route_key,c.source,c.target,args.via.encode());c.chunk=175;c.normal_timeout=35
+                event('route_selected',via=args.via,chunk=c.chunk)
             if args.negotiate_profile:c.enable_profiles()
             if args.resume_log:
                 previous=[json.loads(x) for x in args.resume_log.read_text().splitlines()]
@@ -147,35 +167,38 @@ def main():
                 event('hello',**printable(before))
             else:before=c.hello()
             assert not before['pending']
+            if args.require_offline:
+                net=c.request(NETWORK_STATUS);assert net['wifi_mode']==0 and not net['connected'] and not net['active_interface']
+                event('offline_before_update',reply=printable(net))
             if args.negotiate_profile:c.enter_fast()
             event('image',bytes=len(image),sha256=sha.hex(),initial=printable(before))
             manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',BOARD)
             resume_offset=c.request(START,0,manifest,timeout=12)['written']
-            assert resume_offset<=len(image) and (resume_offset==len(image) or resume_offset%CHUNK==0)
+            assert resume_offset<=len(image) and (resume_offset==len(image) or resume_offset%c.chunk==0)
             if args.resume_log:event('resumed',offset=resume_offset,previous_log=str(args.resume_log))
             else:assert resume_offset==0
             if args.fault_checks and resume_offset==0:
                 c.request(FINISH,len(image),expected=2)
-                c.request(DATA,CHUNK,image[CHUNK:2*CHUNK],expected=2)
+                c.request(DATA,c.chunk,image[c.chunk:2*c.chunk],expected=2)
             started=time.monotonic()
-            for offset in range(resume_offset,len(image),CHUNK):
-                block=image[offset:offset+CHUNK]
+            for offset in range(resume_offset,len(image),c.chunk):
+                block=image[offset:offset+c.chunk]
                 r=c.request(DATA,offset,block,drop_ack=args.fault_checks and offset==resume_offset)
                 assert r['written']==offset+len(block)
                 event('block',offset=offset,written=r['written'])
-                if offset//CHUNK%500==0:print(f'{r["written"]}/{len(image)} bytes',flush=True)
+                if offset//c.chunk%500==0:print(f'{r["written"]}/{len(image)} bytes',flush=True)
             r=c.request(FINISH,len(image));assert r['running']==before['running'] and r['boot']==before['boot']
             event('verified',elapsed_s=time.monotonic()-started,start_offset=resume_offset,retries=c.retries,reply=printable(r))
             if args.negotiate_profile:c.return_normal()
             if args.exercise_rollback:c.request(TEST_FAIL_ONCE)
-            try:c.request(ACTIVATE,len(image),attempts=3,timeout=12 if c.negotiated else 3)
+            try:c.request(ACTIVATE,len(image),attempts=3,timeout=c.normal_timeout if c.negotiated else 3)
             except TimeoutError:event('activation_ack_missing')
             time.sleep(5)
             new=c.hello()
             if args.exercise_rollback:
                 assert new['running']==before['running'] and new['version']==before['version'] and not new['pending']
                 event('rollback_confirmed',reply=printable(new))
-                try:c.request(REACTIVATE,0,sha,attempts=3,timeout=12 if c.negotiated else 3)
+                try:c.request(REACTIVATE,0,sha,attempts=3,timeout=c.normal_timeout if c.negotiated else 3)
                 except TimeoutError:event('reactivation_ack_missing')
                 time.sleep(5)
                 new=c.hello()
@@ -189,7 +212,7 @@ def main():
                 fallback=c.hello()
                 assert not fallback['pending'] and fallback['running']==before['running'] and fallback['version']==before['version']
                 event('confirmation_timeout_rollback',reply=printable(fallback))
-                try:c.request(REACTIVATE,0,sha,attempts=3,timeout=12 if c.negotiated else 3)
+                try:c.request(REACTIVATE,0,sha,attempts=3,timeout=c.normal_timeout if c.negotiated else 3)
                 except TimeoutError:event('reactivation_ack_missing')
                 time.sleep(5);new=c.hello()
                 assert new['pending'] and new['running']!=before['running'] and new['image_sha']==sha.hex()
@@ -199,6 +222,9 @@ def main():
             # turn an already successful confirmation into an error.
             r=c.request(CONFIRM,0,sha);assert not r['pending']
             event('radio_confirmed',reply=printable(r))
+            if args.require_offline:
+                net=c.request(NETWORK_STATUS);assert net['wifi_mode']==0 and not net['connected'] and not net['active_interface']
+                event('offline_after_update',reply=printable(net))
             c.request(ABORT)
         finally:
             c.close()

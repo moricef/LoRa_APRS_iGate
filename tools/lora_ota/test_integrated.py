@@ -11,6 +11,22 @@ class WireTests(unittest.TestCase):
         return make_frame(self.key,self.target,self.source,self.nonce,ACK,204,payload)
     def decode(self,raw):
         return decode_reply(self.key,self.source,self.target,raw)
+    def test_network_status(self):
+        p=bytes([NETWORK_STATUS,0])+struct.pack('>I',0)+bytes([0,0,0])
+        r=self.decode(self.reply(p));self.assertEqual(r['wifi_mode'],0)
+        self.assertFalse(r['connected']);self.assertFalse(r['active_interface'])
+        self.assertIsNone(self.decode(self.reply(p[:-1])))
+        self.assertIsNone(self.decode(self.reply(p[:-3]+bytes([4,0,0]))))
+    def test_route_transport(self):
+        transport=RouteTransport(bytes(range(32)))
+        raw=make_frame(self.key,self.source,self.target,self.nonce,DATA,0,bytes(175))
+        wire=transport.encode(raw,phase=3);self.assertEqual(len(wire),255)
+        self.assertEqual(transport.decode(wire),raw)
+        self.assertIsNone(transport.decode(wire,phase=1))
+        self.assertIsNone(transport.decode(wire[:-1]))
+        self.assertIsNone(transport.decode(wire[:-1]+bytes([wire[-1]^1])))
+        self.assertIsNone(RouteTransport(bytes(32)).decode(wire))
+        with self.assertRaises(ValueError):transport.encode(raw+b'x')
     def test_maximum_data_frame(self):
         f=make_frame(self.key,self.source,self.target,self.nonce,DATA,0,bytes(CHUNK))
         self.assertEqual(len(f),255)
