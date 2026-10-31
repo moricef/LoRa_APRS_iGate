@@ -8,8 +8,10 @@ the LoRa APRS JSON reception protocol or RXT.
 
 The first version is deliberately minimal: one random secret key per iGate,
 one Graywolf controller, one persistent counter, a readable clear-text command
-and an HMAC computed by standard cryptographic libraries. It protects only
-`?EM=ON/OFF`, `?TX=ON/OFF` and `?COMMIT`. Once enabled, unsigned forms of
+and an HMAC computed by standard cryptographic libraries. It protects
+`?EM=ON/OFF`, `?TX=ON/OFF` and `?COMMIT`.
+`RXT=ON`, `RXT=OFF`, and `RXT=?` also require authentication, including
+when no authentication key is configured. Once enabled, unsigned forms of
 these state-changing commands are rejected.
 
 Version 1 has no multiple accounts, certificates, clock synchronization or
@@ -72,8 +74,8 @@ The APRS message body is:
 ```
 
 `A` is the v1 key identifier. The counter is a non-zero 64-bit integer in
-uppercase base 36 without leading zeroes. The only accepted commands are
-`EM=ON`, `EM=OFF`, `TX=ON`, `TX=OFF` and `COMMIT`. The tag is the first 12
+uppercase base 36 without leading zeroes. The accepted management commands are
+`EM=ON`, `EM=OFF`, `TX=ON`, `TX=OFF`, `COMMIT`, `RXT=ON`, `RXT=OFF`, and `RXT=?`. The tag is the first 12
 bytes of HMAC-SHA-256 encoded as unpadded Base64URL, exactly 16 characters.
 
 The authenticated bytes are concatenated in this order:
@@ -159,3 +161,19 @@ twice after retransmission or power loss.
 
 References: [RFC 4226 (HOTP)](https://www.rfc-editor.org/rfc/rfc4226) and
 [RFC 2104 (HMAC)](https://www.rfc-editor.org/rfc/rfc2104).
+
+## Remote RXT control
+
+In Graywolf, sign `RXT=ON`, `RXT=OFF`, or `RXT=?`, without prepending `?`
+to the command to sign. The reply is `RXT=ON` or `RXT=OFF`. These commands
+change `rxtEnabled` immediately, matching the WebUI: this enables or disables
+appending local measurements to eligible relayed RF packets. Decoding and
+forwarding measurements already present remain active.
+
+The change is in RAM. Send a signed `COMMIT` to save the configuration;
+otherwise a restart reloads the saved value. Unsigned RXT commands are
+rejected, even for a manager and even without a configured key. The existing
+RF-only restriction also applies to RXT commands.
+
+The experimental OTA variant also accepts the profile commands
+[documented here](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--implémentées-essai-radio-à-réaliser).

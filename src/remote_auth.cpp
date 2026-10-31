@@ -15,6 +15,9 @@
 #include <vector>
 
 #include "remote_auth.h"
+#ifdef ENABLE_RF_OTA
+#include "ota_aprs_control.h"
+#endif
 #include "remote_replay_window.h"
 
 namespace {
@@ -132,6 +135,12 @@ bool parseBase36(const String& text, uint64_t& value) {
 }
 
 bool allowedCommand(const String& command) {
+    if (command == "RXT=ON" || command == "RXT=OFF" || command == "RXT=?") return true;
+#ifdef ENABLE_RF_OTA
+    // Authenticate the same OTA syntax that the RF command handler accepts.
+    labota::AprsOtaCommand ota;
+    if (labota::AprsOtaCommand::parse(std::string(command.c_str()), ota)) return true;
+#endif
     return command == "EM=ON" || command == "EM=OFF" || command == "TX=ON" ||
            command == "TX=OFF" || command == "COMMIT";
 }

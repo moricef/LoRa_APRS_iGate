@@ -79,6 +79,16 @@ namespace QUERY_Utils {
                                           queryQuestion.startsWith("?COMMIT");
         if (answer != "") {
             // Authentication failure response already selected above.
+        } else if (queryQuestion == "?RXT=ON" || queryQuestion == "?RXT=OFF" || queryQuestion == "?RXT=?") {
+            // RXT control has no unsigned legacy form, even without a key.
+            if (!authenticatedCommand) {
+                if (station == Config.remoteManagement.authController || STATION_Utils::isManager(station))
+                    answer = "AUTH REQUIRED";
+            } else {
+                if (queryQuestion == "?RXT=ON") Config.rxtEnabled = true;
+                else if (queryQuestion == "?RXT=OFF") Config.rxtEnabled = false;
+                answer = Config.rxtEnabled ? "RXT=ON" : "RXT=OFF";
+            }
         } else if (queryQuestion == "?APRS?" || queryQuestion == "H" || queryQuestion == "HELP" || queryQuestion=="?") {
             answer.concat("?APRSV ?APRSP ?APRSL ?APRSSR ?EM=? ?TX=? "); // ?APRSH ?WHERE callsign
         } else if (queryQuestion == "?APRSV") {

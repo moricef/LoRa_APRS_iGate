@@ -15,7 +15,7 @@ documents déplacés contiennent un lien vers leur nouvel emplacement.
 | Routage retour des messages | [Français](REVERSE_MESSAGE_ROUTING_fr.md) · [English](REVERSE_MESSAGE_ROUTING.md) | Fonctionnement et limites du chemin retour appris |
 | Doublons APRS-IS et aprs.fi | [Note de référence](APRS_IS_DUPLICATE_HANDLING_fr.md) | Règles à relire avant toute analyse de doublons |
 | Référence APRS-IS | [Markdown](APRS_IS_REFERENCE.md) · [PDF](APRS_IS_REFERENCE.pdf) | Référence complémentaire |
-| Authentification distante | [Français](REMOTE_CONTROL_AUTH_DRAFT_FR.md) · [English](REMOTE_CONTROL_AUTH_DRAFT.md) | Brouillon de protocole ; ne remplace pas le code ni le guide opérateur Graywolf |
+| Authentification distante | [Français](REMOTE_CONTROL_AUTH_DRAFT_FR.md) · [English](REMOTE_CONTROL_AUTH_DRAFT.md) | Protocole et commandes RXT signées (`RXT=ON/OFF/?`), sauvegarde explicite ; guide opérateur Graywolf distinct |
 
 ## Propositions en discussion
 
