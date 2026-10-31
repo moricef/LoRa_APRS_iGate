@@ -14,6 +14,7 @@ import struct
 import time
 from send import open_serial
 from route_transport import RouteTransport
+from radio_profiles import load_profiles
 
 PREFIX=b'\x3c\xff\x7e\x02'
 DOMAIN=b'LORA-APRS-OTA2'
@@ -40,6 +41,10 @@ def decode_reply(key,source,target,raw):
     if p[0] in (WINDOW_START,WINDOW_QUERY):
         if len(p)!=10:return None
         result['bitmap']=int.from_bytes(p[6:10],'big');return result
+    if p[0]==24:
+        if len(p)!=13 or p[6]>1:return None
+        result.update(power_cut_paused=bool(p[6]),partial_offset=int.from_bytes(p[7:11],'big'),
+                      partial_bytes=int.from_bytes(p[11:13],'big'));return result
     if p[0]==NETWORK_STATUS:
         if len(p)!=9 or p[6]>3 or p[7]>1 or p[8]>1:return None
         result.update(wifi_mode=p[6],connected=bool(p[7]),active_interface=bool(p[8]));return result
@@ -61,6 +66,25 @@ class Client:
         self.counter_file=counter_file;self.nonce=bytes(8);self.event=event;self.retries=0
         self.default_timeout=1;self.negotiated=False;self.fast=False
         self.route=None;self.chunk=CHUNK;self.normal_timeout=12
+        self.radio_profiles=None;self.profile_lease=30;self.windowed=False;self.window_timeout=20
+    def set_radio_profiles(self,profiles):
+        self.radio_profiles=profiles
+        for index,name in enumerate(('normal','transfer')):
+            command=profiles[name].bridge_command(index);expected=b'PROFILEDEF '+str(index).encode()+b' OK'
+            for attempt in range(4):
+                self.serial.write(command);deadline=time.monotonic()+1
+                while time.monotonic()<deadline:
+                    line=self.serial.readline().strip()
+                    if line==expected:break
+                    if line.startswith(b'PROFILEDEF ') and line.endswith(b'ERROR'):
+                        raise ValueError('profile rejected by controller radio: '+name)
+                else:continue
+                break
+            else:raise TimeoutError('bridge does not support configurable profiles')
+        self.normal_timeout=max(35 if self.route else 12,4*profiles['normal'].airtime()+5)
+        fast=profiles['transfer']
+        self.window_timeout=max(20,32*(fast.airtime(208)+.02)+4*fast.airtime()+5)
+        self.event('radio_profiles_configured',**{name:p.mapping() for name,p in profiles.items()})
     def request(self,op,offset=0,payload=b'',expected=0,drop_ack=False,timeout=None,attempts=16):
         if timeout is None:timeout=self.default_timeout
         raw=make_frame(self.key,self.source,self.target,self.nonce if op!=HELLO else bytes(8),op,offset,payload)
@@ -82,7 +106,8 @@ class Client:
                 if op!=HELLO and r['nonce']!=self.nonce:continue
                 if drop_ack and attempt==0:
                     self.event('drop_ack',op=op,offset=offset);break
-                if r['status']!=expected:raise RuntimeError(f'Unexpected response: {r}')
+                allowed=(expected,) if isinstance(expected,int) else expected
+                if r['status'] not in allowed:raise RuntimeError(f'Unexpected response: {r}')
                 if op==HELLO:self.nonce=r['nonce']
                 return r
             self.retries+=1;self.event('retry',op=op,offset=offset,attempt=attempt+1)
@@ -99,16 +124,17 @@ class Client:
         # No final RF command is assumed to reach a failed relay or target.
         # Both have a 30-second inactivity lease in this client configuration.
         self.bridge_profile(False)
-        self.event('waiting_for_profile_recovery',seconds=35)
-        time.sleep(35)
+        self.event('waiting_for_profile_recovery',seconds=self.profile_lease+5)
+        time.sleep(self.profile_lease+5)
         self.hello(attempts=3)
-        self.enter_fast()
+        self.enter_fast(self.profile_lease)
 
     def send_unacknowledged(self,op,offset,payload):
         raw=make_frame(self.key,self.source,self.target,self.nonce,op,offset,payload)
         if self.route:raw=self.route.encode(raw)
         self.serial.write(b'TX '+raw.hex().encode()+b'\n')
-        deadline=time.monotonic()+5
+        allowance=max(5,self.radio_profiles['transfer' if self.fast else 'normal'].airtime()+2) if self.radio_profiles else 5
+        deadline=time.monotonic()+allowance
         while time.monotonic()<deadline:
             line=self.serial.readline().strip()
             if line==b'TXDONE 0':
@@ -124,13 +150,32 @@ class Client:
             if time.monotonic()>=next_send:
                 self.serial.write(command);next_send=time.monotonic()+.5
             if self.serial.readline().strip()==expected:
-                self.fast=fast;self.default_timeout=(2 if self.route else 1) if fast else self.normal_timeout;return
+                self.fast=fast
+                response_time=max(2,4*self.radio_profiles['transfer'].airtime()+2) if self.radio_profiles else (2 if self.route else 1)
+                self.default_timeout=response_time if fast else self.normal_timeout;return
         raise TimeoutError('bridge profile command')
     def enable_profiles(self):
         self.negotiated=True;self.bridge_profile(False)
-    def enter_fast(self,lease=30,drop_prepare_ack=False):
-        try:self.request(PREPARE_FAST,0,bytes([1])+struct.pack('>H',lease),timeout=self.normal_timeout,attempts=1,drop_ack=drop_prepare_ack)
-        except TimeoutError:self.event('prepare_ack_missing')
+    def enter_fast(self,lease=None,drop_prepare_ack=False):
+        if lease is None:lease=60 if self.radio_profiles else 30
+        if not 15<=lease<=60:raise ValueError('profile lease outside 15..60 seconds')
+        self.profile_lease=lease
+        payload=bytes([1])+struct.pack('>H',lease)
+        if self.radio_profiles:
+            normal=self.radio_profiles['normal'];fast=self.radio_profiles['transfer']
+            if 2*normal.airtime()+5>=lease:raise ValueError('normal profile is too slow for the profile lease')
+            if self.windowed and 32*(fast.airtime(208)+.02)+5>=lease:
+                raise ValueError('transfer profile is too slow for a page burst within the profile lease')
+            payload=bytes([2])+struct.pack('>H',lease)+fast.encode()
+        try:self.request(PREPARE_FAST,0,payload,timeout=self.normal_timeout,attempts=1,drop_ack=drop_prepare_ack)
+        except TimeoutError:
+            self.event('prepare_ack_missing')
+            if self.radio_profiles:
+                # An unsupported relay drops the request before forwarding it.
+                # If only the ACK was lost, peers return through their own lease.
+                self.event('waiting_for_profile_recovery',seconds=lease+5)
+                time.sleep(lease+5)
+                raise TimeoutError('custom RF profile was not acknowledged; controller stayed on normal profile')
         self.bridge_profile(True);time.sleep(2.2)
         self.request(STATUS,attempts=8)
         self.event('fast_profile_confirmed',lease_seconds=lease)
@@ -161,16 +206,24 @@ def main():
     ap.add_argument('--exercise-confirm-timeout',action='store_true',help='Withhold confirmation, observe rollback, then activate again')
     ap.add_argument('--fault-checks',action='store_true')
     ap.add_argument('--negotiate-profile',action='store_true',help='Start at the bench normal profile; negotiate the temporary fast profile')
+    ap.add_argument('--radio-profiles',type=Path,help='JSON file with normal and transfer profiles; transfer settings are sent over authenticated RF')
     ap.add_argument('--via',help='Relay identity for the test log; requires a configured relay and target')
     ap.add_argument('--route-key-file',type=Path,help='Separate transport key for the controller, relay and target')
     ap.add_argument('--require-offline',action='store_true',help='Require radio-reported Wi-Fi off and no active IP interface before and after updating')
     ap.add_argument('--windowed',action='store_true',help='Use page bursts, relay repair cache, and persistent page checkpoints')
     ap.add_argument('--exercise-resume',action='store_true',help='Reboot after two pages plus a volatile half-page, then resume')
+    ap.add_argument('--exercise-relay-restart',action='store_true',help='Restart diagnostic relay with half a page cached, then require link recovery')
+    ap.add_argument('--relay-restart-point',choices=['cache','burst','ack'],default='cache',help='Inject before forwarding, during a page burst, or before forwarding a committed-page ACK')
     args=ap.parse_args();image=args.image.read_bytes();sha=hashlib.sha256(image).digest()
     if args.negotiate_profile and args.resume_log:raise ValueError('profile resume not supported by this client')
+    if args.radio_profiles and not args.negotiate_profile:raise ValueError('--radio-profiles requires --negotiate-profile')
+    profiles=load_profiles(args.radio_profiles) if args.radio_profiles else None
     if args.via and (not args.route_key_file or not args.negotiate_profile):raise ValueError('relay requires route key and profile negotiation')
     if args.windowed and (not args.via or args.resume_log):raise ValueError('window mode requires a relay and uses durable target progress, not --resume-log')
     if args.exercise_resume and not args.windowed:raise ValueError('resume test requires window mode')
+    if args.exercise_relay_restart and not args.windowed:raise ValueError('relay restart test requires window mode')
+    if args.relay_restart_point!='cache' and not args.exercise_relay_restart:raise ValueError('restart point requires --exercise-relay-restart')
+    if args.exercise_relay_restart and args.exercise_resume:raise ValueError('exercise receiver and relay restarts separately')
     key=base64.urlsafe_b64decode(args.key_file.read_text().strip()+'=')
     if len(key)!=32 or image[:1]!=b'\xe9':raise ValueError('key/image')
     args.log.parent.mkdir(parents=True,exist_ok=True)
@@ -185,6 +238,8 @@ def main():
                 route_key=base64.urlsafe_b64decode(args.route_key_file.read_text().strip()+'=')
                 c.route=RouteTransport(route_key,c.source,c.target,args.via.encode());c.chunk=175;c.normal_timeout=35
                 event('route_selected',via=args.via,chunk=c.chunk)
+            c.windowed=args.windowed
+            if profiles:c.set_radio_profiles(profiles)
             if args.negotiate_profile:c.enable_profiles()
             if args.resume_log:
                 previous=[json.loads(x) for x in args.resume_log.read_text().splitlines()]
@@ -204,7 +259,7 @@ def main():
             manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',BOARD)
             if args.windowed:
                 from window_transfer import transfer
-                r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume)
+                r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume,args.exercise_relay_restart,args.relay_restart_point)
                 assert r['running']==before['running'] and r['boot']==before['boot']
             else:
                 r=transfer_stop_and_wait(c,args,image,manifest,before,event)

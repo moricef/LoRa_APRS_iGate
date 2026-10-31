@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock
 from send_integrated import *
 
 class WireTests(unittest.TestCase):
@@ -17,6 +18,22 @@ class WireTests(unittest.TestCase):
         self.assertFalse(r['connected']);self.assertFalse(r['active_interface'])
         self.assertIsNone(self.decode(self.reply(p[:-1])))
         self.assertIsNone(self.decode(self.reply(p[:-3]+bytes([4,0,0]))))
+    def test_power_cut_diagnostic_status(self):
+        p=bytes([24,0])+struct.pack('>I',8192)+b'\1'+struct.pack('>IH',8192,2048)
+        r=self.decode(self.reply(p));self.assertTrue(r['power_cut_paused'])
+        self.assertEqual((r['written'],r['partial_offset'],r['partial_bytes']),(8192,8192,2048))
+        self.assertIsNone(self.decode(self.reply(p[:-1])))
+        self.assertIsNone(self.decode(self.reply(p+b'x')))
+        self.assertIsNone(self.decode(self.reply(p[:6]+b'\2'+p[7:])))
+    def test_explicit_busy_status_is_accepted_only_when_requested(self):
+        payload=bytes([WINDOW_QUERY,5])+struct.pack('>II',8192,0)
+        client=Client.__new__(Client)
+        client.key,client.source,client.target,client.nonce=self.key,self.source,self.target,self.nonce
+        client.route=None;client.default_timeout=1;client.serial=Mock()
+        client.serial.readline.return_value=b'RX '+self.reply(payload).hex().encode()
+        self.assertEqual(client.request(WINDOW_QUERY,204,expected=(0,5))['status'],5)
+        with self.assertRaisesRegex(RuntimeError,'Unexpected response'):
+            client.request(WINDOW_QUERY,204)
     def test_window_bitmap_reply(self):
         for op in (WINDOW_START,WINDOW_QUERY):
             p=bytes([op,0])+struct.pack('>II',4096,0x80000001)

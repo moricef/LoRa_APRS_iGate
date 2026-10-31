@@ -52,5 +52,68 @@ class WindowClientTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'unexpected durable offset'):
             transfer(client,bytes(2*PAGE),bytes(32),lambda *a,**kw:None)
 
+    def test_relay_restart_loses_cache_but_keeps_durable_pages(self):
+        client=Mock(retries=0)
+        client.request.side_effect=[{'written':0},
+            {'written':PAGE,'bitmap':0xffffffff},
+            {'written':2*PAGE,'bitmap':0xffffffff},
+            TimeoutError('relay restarted'),{'written':2*PAGE},
+            {'written':3*PAGE,'bitmap':0xffffffff},{'written':3*PAGE}]
+        events=[]
+        transfer(client,bytes(3*PAGE),bytes(32),lambda kind,**kw:events.append((kind,kw)),
+                 exercise_relay_restart=True)
+        client.recover_fast_session.assert_called_once_with()
+        calls=client.send_unacknowledged.call_args_list
+        resets=[i for i,c in enumerate(calls) if c.args[0]==21]
+        self.assertEqual(resets,[80]) # two full pages and half of the third
+        data=[c.args[1] for c in calls if c.args[0]==DATA]
+        self.assertEqual(data,list(range(0,3*PAGE,128))+list(range(2*PAGE,3*PAGE,128)))
+        self.assertIn(('relay_restart_recovered',{'written':2*PAGE}),events)
+
+    def test_relay_restart_must_actually_interrupt_the_link(self):
+        client=Mock(retries=0)
+        client.request.side_effect=[{'written':0}]+[
+            {'written':i*PAGE,'bitmap':0xffffffff} for i in range(1,4)]
+        with self.assertRaisesRegex(RuntimeError,'did not exercise link recovery'):
+            transfer(client,bytes(3*PAGE),bytes(32),lambda *a,**kw:None,
+                     exercise_relay_restart=True)
+        self.assertNotIn(FINISH,[c.args[0] for c in client.request.call_args_list])
+
+    def test_relay_restart_refuses_existing_checkpoint(self):
+        client=Mock(retries=0);client.request.return_value={'written':PAGE}
+        with self.assertRaisesRegex(RuntimeError,'fresh transfer'):
+            transfer(client,bytes(3*PAGE),bytes(32),lambda *a,**kw:None,
+                     exercise_relay_restart=True)
+        client.send_unacknowledged.assert_not_called()
+
+    def test_burst_and_lost_commit_ack_resume_at_different_offsets(self):
+        for point,resumed,mode in [('burst',2*PAGE,1),('ack',3*PAGE,2)]:
+            with self.subTest(point=point):
+                client=Mock(retries=0)
+                client.request.side_effect=[{'written':0},
+                    {'written':PAGE,'bitmap':0xffffffff},
+                    {'written':2*PAGE,'bitmap':0xffffffff},
+                    TimeoutError('injected restart'),{'written':resumed}]+[
+                    {'written':pos,'bitmap':0xffffffff} for pos in range(resumed+PAGE,5*PAGE,PAGE)
+                    ]+[{'written':4*PAGE}]
+                events=[]
+                transfer(client,bytes(4*PAGE),bytes(32),lambda kind,**kw:events.append((kind,kw)),
+                         exercise_relay_restart=True,relay_restart_point=point)
+                calls=client.send_unacknowledged.call_args_list
+                armed=[c.args for c in calls if c.args[0]==22]
+                self.assertEqual(armed,[(22,2*PAGE,bytes([mode]))])
+                data=[c.args[1] for c in calls if c.args[0]==DATA]
+                self.assertEqual(data,list(range(0,3*PAGE,128))+list(range(resumed,4*PAGE,128)))
+                self.assertIn(('relay_restart_recovered',{'written':resumed}),events)
+
+    def test_lost_commit_ack_must_recover_committed_page(self):
+        client=Mock(retries=0)
+        client.request.side_effect=[{'written':0},
+            {'written':PAGE,'bitmap':0xffffffff},{'written':2*PAGE,'bitmap':0xffffffff},
+            TimeoutError('relay restarted'),{'written':2*PAGE}]
+        with self.assertRaisesRegex(RuntimeError,'unexpected durable offset'):
+            transfer(client,bytes(4*PAGE),bytes(32),lambda *a,**kw:None,
+                     exercise_relay_restart=True,relay_restart_point='ack')
+
 
 if __name__=='__main__':unittest.main()

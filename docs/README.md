@@ -33,6 +33,10 @@ par un relais est validé en laboratoire. L'envoi groupé, le cache du relais
 et la reprise persistante ont aussi été validés lors d'un transfert complet
 par un relais, avec reset de la cible pendant le transfert. Aucun de ces prototypes ne constitue
 une garantie de déploiement distant.
+Un essai court sur cartes vérifie aussi la reprise après redémarrage du
+relais, avec conservation des pages durables et refus d'activer l'image incomplète.
+Le profil temporaire peut être choisi et activé par commande RF authentifiée ;
+un essai court vérifie ce changement et le retour au profil habituel.
 
 ## Comptes rendus d’essais
 
@@ -50,6 +54,8 @@ spécification actuelle.
 | 27 octobre 2026 | [Collisions entre relais](tests/2026-10-27/RELAY_COLLISIONS_20261027_fr.md) : expérimentation mise de côté ; branche d’archive indiquée dans le rapport |
 | 29 octobre 2026 | [OTA LoRa direct entre deux ESP32](tests/2026-10-29/OTA_LORA_DIRECT_fr.md) : banc autonome puis intégration dans le firmware iGate complet ; armement radio, partition inactive, retour arrière et récupération du profil radio initial |
 | 30 octobre 2026 | [OTA LoRa avec la cible sans Wi-Fi](tests/2026-10-30/OTA_LORA_fr.md) : image complète, confirmation radio et retours arrière en direct puis par F4MLV-10 |
+| 31 octobre 2026 | [Reprises OTA sur quatre pages](tests/2026-10-31/OTA_RELAY_RESTART_fr.md) : cache perdu, groupe interrompu, acquittement perdu et coupure physique de la cible avec une page partielle |
+| 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans

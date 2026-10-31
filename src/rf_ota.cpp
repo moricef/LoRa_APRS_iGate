@@ -55,6 +55,7 @@ WindowSession pages(pageStorage);
 uint32_t dropWindowOnce=0;
 #endif
 ProfileLease profile;
+FastProfileRequest proposedFast;
 
 bool equalTag(const uint8_t* f,size_t n) {
     uint8_t digest[32];if(!REMOTE_AUTH::otaTag(f,n-16,digest))return false;
@@ -77,7 +78,21 @@ void reply(const uint8_t* request,Status result) {
     memcpy(frame+5,nonce,8);memcpy(frame+13,request+13,4);
     memcpy(frame+19,Config.callsign.c_str(),Config.callsign.length());memcpy(frame+27,request+19,8);
     bool windowOp=request[4]>=WINDOW_START && request[4]<=WINDOW_ACTIVATE;
+#ifdef RFOTA_DIAGNOSTICS
+    windowOp=windowOp || request[4]==24;
+#endif
     frame[35]=request[4];frame[36]=result;put32(frame+37,windowOp?pages.written:session.written);
+#ifdef RFOTA_DIAGNOSTICS
+    if(request[4]==24) {
+        frame[41]=pageStorage.cutPaused?1:0;put32(frame+42,pageStorage.cutOffset);
+        frame[46]=uint8_t(pageStorage.cutBytes>>8);frame[47]=uint8_t(pageStorage.cutBytes);
+        frame[18]=13;uint8_t digest[32];
+        if(REMOTE_AUTH::otaTag(frame,48,digest)) {
+            memcpy(frame+48,digest,16);LoRa_Utils::sendOtaFrame(frame,64);
+        }
+        return;
+    }
+#endif
     if(request[4]==WINDOW_START || request[4]==WINDOW_QUERY) {
         put32(frame+41,pages.bitmap(get32(request+13)));frame[18]=10;uint8_t digest[32];
         if(REMOTE_AUTH::otaTag(frame,45,digest)) {
@@ -235,13 +250,18 @@ bool handle(const uint8_t* f,size_t n) {
     if(!armed||memcmp(f+5,nonce,8)||memcmp(peer,f+19,8))return true;
     lastPacket=millis();profile.activity(lastPacket);Status result=FORMAT;
     if(op==PREPARE_FAST) {
-        if(pending || session.state!=IDLE || body!=3 || f[35]!=1)result=FORMAT;
+        FastProfileRequest candidate;
+        if(pending || session.state!=IDLE || pages.state!=IDLE ||
+           !FastProfileRequest::decode(f+35,body,candidate) ||
+           (candidate.custom && !LoRa_Utils::otaProfileSupported(candidate.radio)))result=FORMAT;
         else {
-            uint16_t lease=(uint16_t(f[36])<<8)|f[37];
             // Schedule only after the ACK has finished transmitting below.
-            result=lease>=15 && lease<=60 &&
-                (profile.mode==ProfileLease::NORMAL ||
-                 (profile.mode==ProfileLease::WAIT_FAST && profile.seconds==lease))?labota::OK:ORDER;
+            result=ORDER;
+            if(profile.mode==ProfileLease::WAIT_FAST && candidate==proposedFast)result=labota::OK;
+            else if(profile.mode==ProfileLease::NORMAL &&
+                    LoRa_Utils::configureOtaFastProfile(candidate.radio,candidate.custom)) {
+                proposedFast=candidate;result=labota::OK;
+            }
         }
     }
     else if(op==RETURN_NORMAL)result=body?FORMAT:labota::OK;
@@ -258,6 +278,11 @@ bool handle(const uint8_t* f,size_t n) {
         }
     }
 #ifdef RFOTA_DIAGNOSTICS
+    else if(op==23 && !pending && !body) {
+        result=pages.state==RECEIVING && pages.written==offset && pages.pageSize(offset)==PAGE_BYTES &&
+            pageStorage.armPowerCut(offset)?labota::OK:ORDER;
+    }
+    else if(op==24)result=body?FORMAT:labota::OK;
     else if(op==20 && !pending && body==4) {dropWindowOnce=get32(f+35);result=labota::OK;}
     else if(op==TEST_REBOOT && !pending && body==0) {result=labota::OK;rebootAt=millis()+400;}
     else if(op==TEST_FAIL_ONCE && !pending && (session.state==READY || pages.state==READY) && body==0) {
@@ -280,6 +305,7 @@ bool handle(const uint8_t* f,size_t n) {
     else if(op==WINDOW_START)result=offset || session.state!=IDLE?ORDER:pages.start(f+35,body);
     else if(op==WINDOW_DATA) {
 #ifdef RFOTA_DIAGNOSTICS
+        if(pageStorage.cutPaused)return true;
         uint32_t bit=uint32_t(1)<<((offset%PAGE_BYTES)/WINDOW_CHUNK);
         if(dropWindowOnce&bit) {dropWindowOnce&=~bit;return true;}
 #endif
@@ -288,6 +314,9 @@ bool handle(const uint8_t* f,size_t n) {
     else if(op==WINDOW_QUERY) {
         result=body==4 && pages.state!=IDLE && offset%PAGE_BYTES==0 && offset<pages.manifest.size &&
             get32(f+35)==WindowSession::mask(pages.pageSize(offset))?labota::OK:FORMAT;
+#ifdef RFOTA_DIAGNOSTICS
+        if(result==labota::OK && pageStorage.cutPaused)result=labota::BUSY;
+#endif
     }
     else if(op==WINDOW_FINISH)result=body || offset!=pages.manifest.size?FORMAT:pages.finish();
     else if(op==WINDOW_ACTIVATE)result=body || offset!=pages.manifest.size?FORMAT:pages.activate();
@@ -300,7 +329,7 @@ bool handle(const uint8_t* f,size_t n) {
     // A burst carries no per-block ACK. Its bitmap query reports all holes.
     if(op==WINDOW_DATA)return true;
     reply(f,result);
-    if(result==labota::OK && op==PREPARE_FAST)profile.prepare(millis(),(uint16_t(f[36])<<8)|f[37]);
+    if(result==labota::OK && op==PREPARE_FAST)profile.prepare(millis(),proposedFast.lease);
     if(result==labota::OK && op==RETURN_NORMAL)profile.requestReturn(millis());
     if(result==labota::OK && (op==ACTIVATE || op==WINDOW_ACTIVATE))rebootAt=millis()+400;
     if(result==labota::OK && op==ABORT)cancel();

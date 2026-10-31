@@ -6,10 +6,16 @@ START,DATA,QUERY,FINISH,ACTIVATE=range(15,20)
 PAGE,CHUNK=4096,128
 
 
-def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False):
+def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exercise_relay_restart=False,
+             relay_restart_point='cache'):
+    if relay_restart_point not in ('cache','burst','ack'):raise ValueError('invalid relay restart point')
+    if exercise_relay_restart and len(image)<3*PAGE:
+        raise ValueError('relay restart test requires at least three pages')
     manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',0x54474732)
     initial=client.request(START,0,manifest,timeout=12)
     position=initial['written']
+    if exercise_relay_restart and position!=0:
+        raise RuntimeError('relay restart test requires a fresh transfer')
     if position>len(image) or position!=len(image) and position%PAGE:
         raise RuntimeError('invalid durable receiver offset')
     event('durable_progress',written=position,total=len(image))
@@ -23,11 +29,17 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False):
     repairs=0
     recoveries=0
     recovery_seconds=0
+    relay_restart_injected=False
+    relay_restart_recovered=False
     while position<len(image):
         length=min(PAGE,len(image)-position)
         mask=(1<<((length+CHUNK-1)//CHUNK))-1
         missing=mask
         try:
+            if exercise_relay_restart and relay_restart_point!='cache' and not relay_restart_injected and position==2*PAGE:
+                client.send_unacknowledged(22,position,bytes([1 if relay_restart_point=='burst' else 2]))
+                relay_restart_injected=True
+                event('relay_restart_armed',point=relay_restart_point,durable=position)
             for attempt in range(16):
                 for index in range(32):
                     if not missing&(1<<index):continue
@@ -36,7 +48,12 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False):
                         continue
                     offset=position+index*CHUNK
                     client.send_unacknowledged(DATA,offset,image[offset:offset+CHUNK])
-                reply=client.request(QUERY,position,struct.pack('>I',mask),timeout=20,attempts=2)
+                    if exercise_relay_restart and relay_restart_point=='cache' and not relay_restart_injected and position==2*PAGE and index==15:
+                        # The first half-page is in relay RAM, not yet forwarded.
+                        client.send_unacknowledged(21,0,b'')
+                        relay_restart_injected=True
+                        event('relay_restart_requested',durable=position,cached_bytes=16*CHUNK)
+                reply=client.request(QUERY,position,struct.pack('>I',mask),timeout=getattr(client,'window_timeout',20),attempts=2)
                 bitmap=reply['bitmap']
                 if bitmap&~mask or reply['written']>len(image):raise RuntimeError('invalid page bitmap')
                 if bitmap==mask and reply['written']==position+length:break
@@ -53,6 +70,11 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False):
             client.recover_fast_session()
             restored=client.request(START,0,manifest,timeout=12)
             resumed=restored['written']
+            if relay_restart_injected and not relay_restart_recovered:
+                expected=(3 if relay_restart_point=='ack' else 2)*PAGE
+                if resumed!=expected:raise RuntimeError('unexpected durable offset after relay restart')
+                relay_restart_recovered=True
+                event('relay_restart_recovered',written=resumed)
             if resumed<position or resumed>position+length or resumed!=len(image) and resumed%PAGE:
                 raise RuntimeError('unexpected durable offset after link recovery')
             position=resumed
@@ -85,6 +107,8 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False):
             recovery_seconds+=time.monotonic()-recovery_started
             event('persistent_resume_confirmed',written=position)
             resume_exercised=True
+    if exercise_relay_restart and not relay_restart_recovered:
+        raise RuntimeError('relay restart did not exercise link recovery')
     result=client.request(FINISH,len(image),timeout=12)
     if result['written']!=len(image):raise RuntimeError('incomplete finished image')
     event('verified',elapsed_s=time.monotonic()-started,recovery_s=recovery_seconds,start_offset=start_offset,

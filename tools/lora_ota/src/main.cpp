@@ -7,6 +7,9 @@
 #include <mbedtls/md.h>
 #include <mbedtls/sha256.h>
 #include "session.h"
+#include "ota_radio_profile.h"
+#include <cerrno>
+#include <cstdlib>
 
 using namespace labota;
 SX1278 radio = new Module(18,26,14,RADIOLIB_NC);
@@ -56,6 +59,8 @@ public:
     void abort() override { if(handle) esp_ota_abort(handle); handle=0; partition=nullptr; }
 } storage;
 Session session(storage);
+RadioProfile bridgeProfiles[2]={{434100000,125000,12,5,2},{434500000,500000,7,5,2}};
+RadioProfile bridgeActive;
 
 int nibble(char c) {
     if(c>='0'&&c<='9') return c-'0';
@@ -97,16 +102,39 @@ void reply(const uint8_t* request,Status status) {
     uint8_t tag[32];mac(frame,41,tag);memcpy(frame+41,tag,16);
     radio.transmit(frame,sizeof frame); receiveMode();
 }
-bool bridgeProfile(bool fast) {
+bool applyBridgeProfile(const RadioProfile& p) {
     radio.standby();
-    bool ok=radio.setFrequency(fast?434.5:434.1)==RADIOLIB_ERR_NONE;
-    ok=(radio.setBandwidth(fast?500.0:125.0)==RADIOLIB_ERR_NONE) && ok;
-    ok=(radio.setSpreadingFactor(fast?7:12)==RADIOLIB_ERR_NONE) && ok;
-    ok=(radio.setCodingRate(5)==RADIOLIB_ERR_NONE) && ok;
+    bool ok=radio.setFrequency(float(p.frequencyHz)/1000000.0f)==RADIOLIB_ERR_NONE;
+    ok=(radio.setBandwidth(float(p.bandwidthHz)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
+    ok=(radio.setSpreadingFactor(p.sf)==RADIOLIB_ERR_NONE) && ok;
+    ok=(radio.setCodingRate(p.cr)==RADIOLIB_ERR_NONE) && ok;
+    ok=(radio.setOutputPower(p.power)==RADIOLIB_ERR_NONE) && ok;
+    return ok;
+}
+bool bridgeProfile(bool fast) {
+    RadioProfile wanted=bridgeProfiles[fast?1:0];
+    bool ok=applyBridgeProfile(wanted);
+    if(ok)bridgeActive=wanted;else applyBridgeProfile(bridgeActive);
     receiveMode();return ok;
 }
 void serialCommand(char* line) {
-    if(!OTA_RECEIVER && (!strcmp(line,"PROFILE 0") || !strcmp(line,"PROFILE 1"))) {
+    if(!OTA_RECEIVER && !strncmp(line,"PROFILEDEF ",11)) {
+        char* cursor=line+11;long long values[6]{};bool ok=true;
+        for(int i=0;i<6 && ok;i++) {
+            errno=0;char* end;values[i]=strtoll(cursor,&end,10);
+            ok=errno!=ERANGE && end!=cursor && (*end==' '||*end==0);cursor=end;
+        }
+        while(*cursor==' ')++cursor;
+        ok=ok && !*cursor && values[0]>=0 && values[0]<=1 && values[1]>0 && values[1]<=UINT32_MAX &&
+            values[2]>0 && values[2]<=UINT32_MAX && values[3]>=0 && values[3]<=255 &&
+            values[4]>=0 && values[4]<=255 && values[5]>=-128 && values[5]<=127;
+        if(ok) {
+            RadioProfile p{uint32_t(values[1]),uint32_t(values[2]),uint8_t(values[3]),uint8_t(values[4]),int8_t(values[5])};
+            ok=p.valid(RadioChip::SX1278);
+            if(ok)bridgeProfiles[values[0]]=p;
+        }
+        Serial.printf("PROFILEDEF %lld %s\n",values[0],ok?"OK":"ERROR");
+    } else if(!OTA_RECEIVER && (!strcmp(line,"PROFILE 0") || !strcmp(line,"PROFILE 1"))) {
         bool fast=line[8]=='1';bool ok=bridgeProfile(fast);
         Serial.printf("PROFILE %u %s\n",unsigned(fast),ok?"OK":"ERROR");
     } else if(!strcmp(line,"INFO")) {

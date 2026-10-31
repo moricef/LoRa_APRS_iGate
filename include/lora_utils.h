@@ -22,6 +22,7 @@
 #include <Arduino.h>
 #include <vector>
 #include "native_aprs.h"
+#include "ota_radio_profile.h"
 
 
 namespace LoRa_Utils {
@@ -66,6 +67,8 @@ namespace LoRa_Utils {
     String  formatCrcError(const RxtRxContext& context);
     bool    isReceiving();
     bool    setOtaFastProfile(bool fast);
+    bool    otaProfileSupported(const labota::RadioProfile& profile);
+    bool    configureOtaFastProfile(const labota::RadioProfile& profile,bool custom);
     bool    sendOtaFrame(const uint8_t* frame,size_t size);
     bool    sendNewPacket(const String& newPacket, const RxtRxContext* rxtContext = nullptr, bool deferIfBusy = false);
     String  receivePacketFromSleep();

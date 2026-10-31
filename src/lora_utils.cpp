@@ -758,14 +758,54 @@ namespace LoRa_Utils {
     // returned to the application. A text frame keeps the
     // behaviour of readData(String&), which stops at the first zero byte.
     static bool otaFastProfile=false;
+    static labota::RadioProfile otaSelectedProfile;
+    static bool otaCustomProfile=false,otaPowerChanged=false;
+    bool otaProfileSupported(const labota::RadioProfile& p) {
+#if defined(HAS_SX1278)
+        return p.valid(labota::RadioChip::SX1278);
+#elif defined(HAS_SX1276)
+        return p.valid(labota::RadioChip::SX1276);
+#elif defined(HAS_SX1262)
+        return p.valid(labota::RadioChip::SX1262);
+#elif defined(HAS_SX1268)
+        return p.valid(labota::RadioChip::SX1268);
+#elif defined(HAS_LLCC68)
+        return p.valid(labota::RadioChip::LLCC68);
+#else
+        return false;
+#endif
+    }
+    bool configureOtaFastProfile(const labota::RadioProfile& p,bool custom) {
+        if(otaFastProfile || (custom && !otaProfileSupported(p)))return false;
+        otaSelectedProfile=custom?p:labota::RadioProfile();otaCustomProfile=custom;return true;
+    }
+    static labota::RadioProfile otaNormalProfile() {
+        int power=Config.loramodule.power;
+#if (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
+        power+=2; // same board adjustment as setup()
+#endif
+        return {uint32_t(Config.loramodule.rxFreq),uint32_t(Config.loramodule.rxSignalBandwidth),
+                uint8_t(Config.loramodule.rxSpreadingFactor),uint8_t(Config.loramodule.rxCodingRate4),int8_t(power)};
+    }
+    static bool applyOtaProfile(const labota::RadioProfile& p,bool power) {
+        bool ok=radio.standby()==RADIOLIB_ERR_NONE;
+        ok=(radio.setFrequency(float(p.frequencyHz)/1000000.0f)==RADIOLIB_ERR_NONE) && ok;
+        ok=(radio.setBandwidth(float(p.bandwidthHz)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
+        ok=(radio.setSpreadingFactor(p.sf)==RADIOLIB_ERR_NONE) && ok;
+        ok=(radio.setCodingRate(p.cr)==RADIOLIB_ERR_NONE) && ok;
+        if(power)ok=(radio.setOutputPower(p.power)==RADIOLIB_ERR_NONE) && ok;
+        return ok;
+    }
     bool setOtaFastProfile(bool fast) {
-        radio.standby();
-        bool ok=radio.setFrequency(fast?434.5f:float(Config.loramodule.rxFreq)/1000000.0f)==RADIOLIB_ERR_NONE;
-        ok=(radio.setBandwidth(fast?500.0f:float(Config.loramodule.rxSignalBandwidth)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
-        ok=(radio.setSpreadingFactor(fast?7:Config.loramodule.rxSpreadingFactor)==RADIOLIB_ERR_NONE) && ok;
-        ok=(radio.setCodingRate(fast?5:Config.loramodule.rxCodingRate4)==RADIOLIB_ERR_NONE) && ok;
-        operationDone=false;transmitFlag=false;otaFastProfile=fast;
-        return (radio.startReceive()==RADIOLIB_ERR_NONE) && ok;
+        bool ok=applyOtaProfile(fast?otaSelectedProfile:otaNormalProfile(),fast?otaCustomProfile:otaPowerChanged);
+        operationDone=false;transmitFlag=false;
+        ok=(radio.startReceive()==RADIOLIB_ERR_NONE) && ok;
+        if(!ok && fast) {
+            applyOtaProfile(otaNormalProfile(),otaCustomProfile||otaPowerChanged);
+            radio.startReceive();otaFastProfile=false;otaPowerChanged=false;return false;
+        }
+        otaFastProfile=fast;otaPowerChanged=fast && otaCustomProfile;
+        return ok;
     }
     bool sendOtaFrame(const uint8_t* frame,size_t size) {
         uint8_t routed[255];

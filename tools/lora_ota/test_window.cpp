@@ -51,11 +51,18 @@ int main() {
     for(uint32_t i=PAGE_BYTES;i<2*PAGE_BYTES;i+=128)
         assert(block(resumed,i)==(i==2*PAGE_BYTES-128?STORAGE:OK));
     assert(store.committed==PAGE_BYTES && resumed.bits==0);
+    assert(!memcmp(store.flash.data()+PAGE_BYTES,image.data()+PAGE_BYTES,PAGE_BYTES/2));
+    for(uint32_t i=PAGE_BYTES+PAGE_BYTES/2;i<2*PAGE_BYTES;i++)assert(store.flash[i]==0xff);
     store.failPage=false;WindowSession restart(store);assert(restart.start(manifest,40)==OK);
+    // A partly programmed page must be rewritten in full after restart.
+    for(uint32_t i=PAGE_BYTES;i<2*PAGE_BYTES;i+=128)assert(block(restart,i)==OK);
+    assert(store.committed==2*PAGE_BYTES && !memcmp(store.flash.data(),image.data(),2*PAGE_BYTES));
+    // Repeat the separate journal-failure scenario with the previous checkpoint.
+    store.committed=PAGE_BYTES;WindowSession journalTest(store);assert(journalTest.start(manifest,40)==OK);
     // Cut power after page programming but before journal commit.
     store.failCheckpoint=true;
     for(uint32_t i=PAGE_BYTES;i<2*PAGE_BYTES;i+=128)
-        assert(block(restart,i)==(i==2*PAGE_BYTES-128?STORAGE:OK));
+        assert(block(journalTest,i)==(i==2*PAGE_BYTES-128?STORAGE:OK));
     assert(store.committed==PAGE_BYTES);
     store.failCheckpoint=false;WindowSession again(store);assert(again.start(manifest,40)==OK);
     for(uint32_t i=PAGE_BYTES;i<size;i+=128)assert(block(again,i)==OK);

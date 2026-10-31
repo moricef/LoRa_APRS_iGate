@@ -8,6 +8,7 @@ def main():
     ap.add_argument('action',choices=['upload','backup','stats','route','pause','resume','restore'])
     ap.add_argument('--host',default='http://192.168.4.1');ap.add_argument('--config',type=Path,required=True)
     ap.add_argument('--file',type=Path);ap.add_argument('--key-file',type=Path);ap.add_argument('--expected-sha');ap.add_argument('--original-build')
+    ap.add_argument('--bench-profile',action='store_true',help='Explicitly replace normal radio settings with the laboratory profile when provisioning the relay')
     args=ap.parse_args();cfg=json.loads(args.config.read_text())
     if cfg.get('callsign')!='F4MLV-10':raise ValueError('unexpected relay config')
     web=cfg.get('webadmin',{});ota=cfg.get('ota',{})
@@ -57,7 +58,9 @@ def main():
     elif args.action=='stats':
         code,body=req('/lab/ota/route');print(body.decode())
     elif args.action=='route':
-        code,body=req('/lab/ota/route',{'controller':'F4MLV-2','target':'F4MLV-15','key':args.key_file.read_text().strip()});print(code,body.decode())
+        data={'controller':'F4MLV-2','target':'F4MLV-15','key':args.key_file.read_text().strip()}
+        if args.bench_profile:data['bench_profile']='1'
+        code,body=req('/lab/ota/route',data);print(code,body.decode())
     elif args.action in ('pause','resume'):
         code,body=req('/lab/ota/pause',{'paused':'1' if args.action=='pause' else '0'});print(code,body.decode())
     elif args.action=='restore':

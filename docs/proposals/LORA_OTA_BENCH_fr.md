@@ -288,6 +288,83 @@ de 21 875 bit/s. Le profil BW500/SF5/CR4/5 proposé par Jon donne 62 500
 bit/s mais nécessite une radio prenant en charge SF5, comme le SX1262 ;
 il n'est pas validé par cet essai matériel.
 
+## Profil temporaire configurable et activable par RF
+
+Une extension de PREPARE_FAST conserve l'ancien sélecteur 1 et ajoute le
+sélecteur 2. Son corps de 14 octets transporte les paramètres suivants,
+tous couverts par l'authentification de la commande :
+
+| Position dans le corps | Taille | Valeur |
+|---|---|---|
+| 0 | 1 | Sélecteur 2 |
+| 1 | 2 | Bail de 15 à 60 secondes |
+| 3 | 4 | Fréquence en Hz |
+| 7 | 4 | Largeur de bande en Hz |
+| 11 | 1 | Facteur d'étalement SF |
+| 12 | 1 | Dénominateur du taux 4/CR, de 5 à 8 |
+| 13 | 1 signé | Puissance demandée au transceiver, en dBm |
+
+Les entiers multioctets sont transmis en ordre réseau. Chaque équipement
+valide les paramètres selon son composant radio avant d'accepter le
+changement. Les SX127x refusent notamment SF5 et SF6 pour ce transport à
+en-tête explicite. Une répétition pendant l'attente doit conserver le bail
+et le profil entier ; elle ne repousse pas le changement prévu.
+
+La cible répond sur son profil habituel puis passe temporairement au
+profil reçu. Le relais effectue la même opération après retransmission de
+l'acquittement. Une erreur d'application des paramètres provoque une tentative
+de restauration immédiate du profil habituel. Le bail, RETURN_NORMAL et
+le reset conservent les mécanismes de retour déjà décrits.
+
+Le profil habituel des cartes reste celui de `Config`. La commande RF ne
+réécrit pas cette configuration. La puissance temporaire est demandée au
+transceiver ; au retour, le firmware rétablit celle du démarrage, y compris
+l'ajustement déjà utilisé sur les cartes SX126x. Le préambule, le mot de
+synchronisation et le contrôle CRC ne sont pas modifiés par cette extension.
+
+Côté contrôleur, ajouter aux options de `send_integrated.py` :
+
+```text
+--negotiate-profile --radio-profiles tools/lora_ota/radio-profiles.example.json
+```
+
+Le [fichier d'exemple](../../tools/lora_ota/radio-profiles.example.json)
+contient `normal` et `transfer`, avec cinq valeurs entières :
+`frequency_hz`, `bandwidth_hz`, `spreading_factor`, `coding_rate`,
+`power_dbm`. Le profil `normal` configure le pont USB et doit correspondre
+aux paramètres de modulation déjà enregistrés sur les cartes distantes.
+Le profil `transfer` configure le pont et est transmis aux cartes par RF.
+Les définitions du pont restent en RAM et sont renvoyées au lancement du
+client ; aucune recompilation n'est nécessaire pour changer ces valeurs.
+Les fréquences de l'exemple sont celles d'un essai de laboratoire.
+
+Avec un profil explicite, le contrôleur exige l'acquittement avant de changer
+de profil. Si le relais refuse localement les paramètres, il ne transmet
+pas la demande à la cible et n'émet aucun acquittement de cible à sa place.
+En l'absence d'acquittement, le contrôleur reste sur son profil habituel
+et laisse expirer les éventuels baux distants. Il ne tente pas silencieusement
+un autre profil. Les compteurs de diagnostic du relais permettent de
+constater ses refus.
+
+Cette extension nécessite un firmware compatible sur toute la chaîne.
+L'ancien corps de trois octets reste accepté. Le client adapte ses délais
+au profil demandé et refuse un groupe de blocs trop lent pour le bail
+maximal. Les estimations supposent un préambule de huit symboles, un en-tête
+explicite et le CRC activé. Un seul profil temporaire commun est utilisé
+sur les deux liaisons du relais ; les profils différents par liaison ne
+sont pas implémentés.
+
+Le provisionnement de laboratoire du relais conserve maintenant sa
+configuration radio par défaut. L'option explicite `relay_admin.py route
+--bench-profile` permet de retrouver le profil de banc 434,100 MHz ; sans
+cette option, la création du rôle de relais ne remplace pas ses paramètres
+radio enregistrés.
+
+L'[essai court du 31 octobre](../tests/2026-10-31/OTA_RF_PROFILES_fr.md)
+vérifie sur cartes la demande RF, le refus de SF5 sur SX1278, le transfert
+de quatre pages sur le profil choisi et les retours après silence,
+commande et reset. Il ne constitue pas un résultat terrain.
+
 ## Groupes de blocs, cache du relais et reprise persistante
 
 Cette extension expérimentale conserve le mode précédent. Elle est activée
@@ -352,5 +429,86 @@ chaque liaison ; `--exercise-resume` provoque un reset après deux pages
 durables et une demi-page volatile. Ces diagnostics n'établissent pas à eux
 seuls la résistance aux coupures électriques pendant une écriture réelle.
 
+Un essai supplémentaire est préparé avec `--exercise-relay-restart`,
+à utiliser séparément de `--exercise-resume`, sur un transfert neuf d'au
+moins trois pages. Après deux pages durables, le contrôleur charge une
+demi-page dans le cache du relais puis lui demande de redémarrer. Il poursuit
+par la récupération habituelle du lien : expiration des profils rapides,
+nouvel armement authentifié, puis reprise à l'offset durable de la cible.
+Le client refuse de conclure si cette injection ne déclenche aucune
+récupération, ou si la progression retrouvée n'est pas celle des deux pages.
+
+La commande de diagnostic 21 est interceptée localement par le relais ;
+elle n'est jamais transmise à la cible. Elle nécessite la variante
+`RFOTA_ROUTE_DIAGNOSTICS`, une enveloppe de transport authentifiée du
+contrôleur configuré, les bonnes adresses et le nonce de la session active.
+Elle ne contient ni corps ni offset. L'état HTTP de diagnostic expose
+`boot_id` et `uptime_ms` pour contrôler le redémarrage indépendamment du
+seul constat de perte du lien. La commande utilise la clé de transport ;
+le relais ne vérifie pas la signature interne avec la clé privée de la cible.
+
+Au 31 octobre, ce scénario passe les tests sur ordinateur et un
+[essai sur cartes borné à quatre pages](../tests/2026-10-31/OTA_RELAY_RESTART_fr.md).
+La reprise retrouve les deux pages durables puis poursuit le transfert.
+L'essai vérifie aussi le refus d'activer l'image incomplète et l'identité
+des octets écrits. Il ne s'agit ni d'un nouveau transfert complet ni d'une
+coupure électrique.
+
+Deux autres points d'injection sont disponibles pour ce même essai court :
+`--relay-restart-point burst` et `--relay-restart-point ack`, avec
+`--exercise-relay-restart`. L'opération locale de diagnostic 22 arme la
+panne pour une page donnée (offset multiple de 4 096, corps d'un octet).
+Elle exige la même authentification de transport et le même nonce actif
+que le diagnostic 21 ; elle n'est pas retransmise à la cible.
+
+- Mode 1 (`burst`) : le relais redémarre entre deux trames, après 16 blocs
+  émis pendant la transmission du groupe. La reprise doit retrouver
+  8 192 octets et renvoyer la page interrompue.
+- Mode 2 (`ack`) : il redémarre après réception du bilan de la cible
+  indiquant 12 288 octets durables et un bitmap complet, avant de transmettre
+  ce bilan au contrôleur. La reprise doit retrouver 12 288 octets et ne pas
+  renvoyer la page déjà enregistrée.
+
+Le relais enregistre avant le reset un témoin de diagnostic séparé
+(`ota-diag`) contenant le mode, la page et le nombre de blocs émis ou
+l'offset durable annoncé. Après redémarrage, les champs HTTP `fault_mode`,
+`fault_base` et `fault_value` permettent de contrôler le point d'injection.
+La trace est réservée au banc ; elle ne sert pas à reprendre le transfert.
+Ces deux scénarios passent les tests sur ordinateur et les
+[essais courts sur cartes du 31 octobre](../tests/2026-10-31/OTA_RELAY_RESTART_fr.md).
+Le banc contrôle aussi l'armement par les champs HTTP `armed_fault_mode`
+et `armed_fault_base` avant d'envoyer le groupe à interrompre. Ce contrôle
+de diagnostic ne participe pas à la récupération radio.
+
 Les chemins alternatifs, plusieurs relais successifs, plusieurs cibles,
 les profils différents par liaison et SF5 restent hors de cette extension.
+
+## Préparation d'une coupure physique avec une page partielle
+
+Le diagnostic cible 23, réservé à `RFOTA_DIAGNOSTICS`, arme une interruption
+sur la page durable courante (offset multiple de 4 096, corps vide).
+Il exige une session authentifiée, une page complète de l'image et aucune
+activation en attente. À réception de tous les blocs de cette page, le
+récepteur l'efface, écrit seulement ses 2 048 premiers octets, puis suspend
+les écritures sans avancer le journal de progression.
+
+WINDOW_QUERY renvoie alors BUSY (5), un bitmap vide et l'offset durable
+précédent. Le diagnostic 24, sans corps, rapporte dans une réponse signée
+de 13 octets : opération/statut, progression durable (4 octets), pause
+(1 octet), offset de page partielle (4 octets), taille programmée (2 octets).
+Un reset efface cette pause volatile ; un ABORT explicite efface aussi le
+journal et doit donc être évité avant l'essai de reprise.
+
+Cet arrêt permet une coupure manuelle d'alimentation pendant que la flash
+contient une page incomplète et que le journal reste à la page précédente.
+Il ne coupe pas le courant au milieu d'un appel matériel de programmation
+ou d'effacement. L'essai doit vérifier la page partielle après rallumage,
+puis sa réécriture intégrale et la conservation des pages durables.
+L'alimentation exclusivement USB doit être confirmée avant d'assimiler le
+débranchement à une coupure électrique.
+
+L'[essai court du 31 octobre](../tests/2026-10-31/OTA_RELAY_RESTART_fr.md)
+confirme cette reprise après une coupure USB de 22,22 secondes : la page
+partielle est lue avant reprise, le journal retrouve 8 192 octets, puis le
+transfert atteint 16 384 octets exacts en réécrivant la page. Il ne teste pas
+la coupure au milieu d'une opération matérielle d'écriture ou d'effacement.

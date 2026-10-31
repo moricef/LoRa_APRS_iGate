@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <esp_ota_ops.h>
+#include <esp_system.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
@@ -16,6 +17,7 @@
 #include "session.h"
 #include "route_frame.h"
 #include "page_cache.h"
+#include "relay_diagnostics.h"
 extern Configuration Config;
 namespace {
 constexpr uint8_t ROLE_OFF=0,ROLE_RELAY=1,ROLE_TARGET=2;
@@ -23,10 +25,27 @@ uint8_t role=ROLE_OFF,key[32]{};char controller[9]{},target[9]{},via[9]{};
 std::atomic<bool> paused{false};std::atomic<int> reportedProfile{0};
 std::atomic<bool> active{false};std::atomic<uint32_t> rebootAt{0};
 uint32_t started=0,lastPacket=0;bool replyContext=false;
+uint32_t bootId=0;
 labota::ProfileLease profile;
 uint8_t expectedNonce[8]{};uint32_t expectedOffset=0;uint8_t expectedOp=0;
-uint16_t proposedLease=0;
+labota::FastProfileRequest proposedFast;
+std::atomic<uint32_t> profileRejections{0};
 labota::PageCache cache;
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+routeota::RelayFault fault;
+uint32_t faultMode=0,faultBase=0,faultValue=0;
+uint32_t faultArms=0,faultAttempts=0,faultStorageErrors=0;
+void executeFault(uint32_t value) {
+    // Durable witness distinguishes the intended injection from an unrelated reset.
+    Preferences p;
+    ++faultAttempts;
+    if(!p.begin("ota-diag",false)) {++faultStorageErrors;fault.clear();return;}
+    uint32_t witness[3]={fault.mode,fault.base,value};
+    bool saved=p.putBytes("fault",witness,sizeof witness)==sizeof witness;p.end();
+    fault.clear();
+    if(saved)ESP.restart();else ++faultStorageErrors;
+}
+#endif
 uint32_t queuedBlocks=0,queryMask=0;
 uint8_t queuedQuery[55]{};size_t queuedQuerySize=0;
 uint8_t repairRound=0;
@@ -63,6 +82,9 @@ size_t encode(uint8_t phase,const uint8_t* inner,size_t n,uint8_t* out) {
     memcpy(out+count,digest,16);return count+16;
 }
 void stop() {
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+    fault.clear();
+#endif
     active=false;
     if(profile.mode!=labota::ProfileLease::NORMAL)LoRa_Utils::setOtaFastProfile(false);
     profile.reset();reportedProfile=0;expectedOp=0;
@@ -94,6 +116,17 @@ void recoverConfiguration() {
         SPIFFS.rename("/igate_conf.ota-previous","/igate_conf.json");
 }
 void begin() {
+    bootId=esp_random();
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+    Preferences diag;
+    if(diag.begin("ota-diag",true)) {
+        uint32_t witness[3]{};
+        if(diag.getBytes("fault",witness,sizeof witness)==sizeof witness) {
+            faultMode=witness[0];faultBase=witness[1];faultValue=witness[2];
+        }
+        diag.end();
+    }
+#endif
     Preferences p;if(!p.begin("ota-route",true))return;
     uint8_t r=p.getUChar("role",0);String src=p.getString("controller",""),dst=p.getString("target",""),hop=p.getString("via","");
     if((r==ROLE_RELAY||r==ROLE_TARGET) && src.length() && src.length()<=8 && dst.length() && dst.length()<=8 && hop.length() && hop.length()<=8 && p.getBytes("key",key,32)==32) {
@@ -132,7 +165,11 @@ void tick() {
             count=encode(routeota::RELAY_TARGET,queuedQuery,queuedQuerySize,out);
             queuedQuerySize=0;
         }
-        if(!count||!LoRa_Utils::sendOtaFrame(out,count))++txErrors;else ++requests;
+        bool sent=count && LoRa_Utils::sendOtaFrame(out,count);
+        if(!sent)++txErrors;else ++requests;
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+        if(sent && queuedBlocks && fault.afterBlock(expectedOffset,expectedNonce))executeFault(fault.forwarded);
+#endif
         lastPacket=millis();profile.activity(lastPacket);
         nextCacheSend=millis()+(queuedBlocks?5:80); // allow the target's page commit before the query
     }
@@ -149,9 +186,40 @@ bool handle(const uint8_t* f,size_t n) {
         ++requests;replyContext=true;RF_OTA::handle(inner,v.size);replyContext=false;return true;
     }
     if(v.phase==routeota::CONTROLLER_RELAY && address(v.hopSource,controller) && address(inner+19,controller) && address(inner+27,target) && inner[4]!=128) {
+        if(inner[4]==routeota::TEST_RELAY_FAULT) {
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+            if(fault.arm(inner,v.size,active.load(),expectedNonce))++faultArms;else ++wrongPhase;
+#else
+            ++wrongPhase;
+#endif
+            return true;
+        }
+        if(inner[4]==routeota::TEST_RELAY_RESTART) {
+#if defined(RFOTA_ROUTE_DIAGNOSTICS)
+            if(routeota::restartMatchesSession(inner,v.size,active.load(),expectedNonce))
+                rebootAt=millis()+100;
+            else ++wrongPhase;
+#else
+            ++wrongPhase;
+#endif
+            return true; // diagnostic is local to the relay, never forwarded
+        }
+        if(inner[4]==11) {
+            labota::FastProfileRequest candidate;
+            bool accepted=labota::FastProfileRequest::decode(inner+35,v.size-51,candidate);
+            accepted=accepted && (!candidate.custom || LoRa_Utils::otaProfileSupported(candidate.radio));
+            if(accepted && profile.mode==labota::ProfileLease::WAIT_FAST)accepted=candidate==proposedFast;
+            else if(accepted)accepted=profile.mode==labota::ProfileLease::NORMAL &&
+                LoRa_Utils::configureOtaFastProfile(candidate.radio,candidate.custom);
+            if(!accepted) {++profileRejections;return true;}
+            proposedFast=candidate;
+        }
         if(!active) {active=true;started=millis();}
         lastPacket=millis();profile.activity(lastPacket);
         expectedOp=inner[4];expectedOffset=labota::get32(inner+13);memcpy(expectedNonce,inner+5,8);
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+        if(expectedOp==6 || expectedOp==labota::WINDOW_START)fault.clear();
+#endif
         if(expectedOp==6 || expectedOp==labota::WINDOW_START)cache.clear();
         if(expectedOp==labota::WINDOW_DATA) {
             if(cache.put(inner,v.size))++cachedBlocks;else ++wrongPhase;
@@ -167,7 +235,6 @@ bool handle(const uint8_t* f,size_t n) {
             nextCacheSend=millis()+10;
             return true;
         }
-        if(expectedOp==11 && v.size==54 && inner[35]==1)proposedLease=(uint16_t(inner[36])<<8)|inner[37];
         uint8_t out[255];size_t count=encode(routeota::RELAY_TARGET,inner,v.size,out);
         if(!count||!LoRa_Utils::sendOtaFrame(out,count))++txErrors;else ++requests;
     } else if(v.phase==routeota::TARGET_RELAY && address(v.hopSource,target) && active && address(inner+19,target) && address(inner+27,controller) &&
@@ -176,6 +243,13 @@ bool handle(const uint8_t* f,size_t n) {
         lastPacket=millis();profile.activity(lastPacket);
         if(expectedOp==labota::WINDOW_QUERY && v.size==61 && inner[36]==0) {
             knownBits=labota::get32(inner+41);
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+            uint32_t written=labota::get32(inner+37);
+            if(fault.afterBitmap(expectedOffset,expectedNonce,written,knownBits)) {
+                executeFault(written);
+                return true; // never forward this committed-page ACK to the controller
+            }
+#endif
             uint32_t missing=queryMask&~knownBits;
             uint32_t local=missing&cache.available(expectedOffset,expectedNonce);
             if(local && repairRound<3) {
@@ -187,7 +261,7 @@ bool handle(const uint8_t* f,size_t n) {
         uint8_t out[255];size_t count=encode(routeota::RELAY_CONTROLLER,inner,v.size,out);
         bool sent=count && LoRa_Utils::sendOtaFrame(out,count);if(!sent)++txErrors;else ++responses;
         if(sent && inner[36]==0) {
-            if(expectedOp==11)profile.prepare(millis(),proposedLease);
+            if(expectedOp==11)profile.prepare(millis(),proposedFast.lease);
             if(expectedOp==12)profile.requestReturn(millis());
             if(expectedOp==5)stop();
         }
@@ -203,6 +277,13 @@ void setupWeb(AsyncWebServer* server) {
         d["wrong_phase"]=wrongPhase.load();d["tx_errors"]=txErrors.load();d["profile"]=reportedProfile.load();d["paused"]=paused.load();
         d["cached_blocks"]=cachedBlocks.load();d["cache_sends"]=cacheHits.load();
         d["local_repair_blocks"]=localRepairBlocks.load();
+        d["profile_rejections"]=profileRejections.load();
+        d["boot_id"]=bootId;d["uptime_ms"]=millis();
+#ifdef RFOTA_ROUTE_DIAGNOSTICS
+        d["fault_mode"]=faultMode;d["fault_base"]=faultBase;d["fault_value"]=faultValue;
+        d["armed_fault_mode"]=fault.mode;d["armed_fault_base"]=fault.base;d["fault_forwarded"]=fault.forwarded;
+        d["fault_arms"]=faultArms;d["fault_attempts"]=faultAttempts;d["fault_storage_errors"]=faultStorageErrors;
+#endif
         esp_app_desc_t desc;
         if(esp_ota_get_partition_description(esp_ota_get_running_partition(),&desc)==ESP_OK) {
             char hex[65]{};for(int i=0;i<32;i++)snprintf(hex+2*i,3,"%02x",desc.app_elf_sha256[i]);
@@ -227,11 +308,13 @@ void setupWeb(AsyncWebServer* server) {
         if(!r->hasParam("controller",true)||!r->hasParam("target",true)||!r->hasParam("key",true)) {r->send(400);return;}
         auto src=r->getParam("controller",true)->value(),dst=r->getParam("target",true)->value(),k=r->getParam("key",true)->value();
         if(!save(ROLE_RELAY,src.c_str(),dst.c_str(),Config.callsign.c_str(),k.c_str())) {r->send(400);return;}
-        Config.loramodule.rxFreq=Config.loramodule.txFreq=434100000;
-        Config.loramodule.rxSignalBandwidth=Config.loramodule.txSignalBandwidth=125000;
-        Config.loramodule.rxSpreadingFactor=Config.loramodule.txSpreadingFactor=12;
-        Config.loramodule.rxCodingRate4=Config.loramodule.txCodingRate4=5;Config.loramodule.power=2;Config.digi.ecoMode=0;
-        if(!Config.writeFile()) {r->send(500);return;}
+        if(r->hasParam("bench_profile",true) && r->getParam("bench_profile",true)->value()=="1") {
+            Config.loramodule.rxFreq=Config.loramodule.txFreq=434100000;
+            Config.loramodule.rxSignalBandwidth=Config.loramodule.txSignalBandwidth=125000;
+            Config.loramodule.rxSpreadingFactor=Config.loramodule.txSpreadingFactor=12;
+            Config.loramodule.rxCodingRate4=Config.loramodule.txCodingRate4=5;Config.loramodule.power=2;Config.digi.ecoMode=0;
+            if(!Config.writeFile()) {r->send(500);return;}
+        }
         r->send(200,"text/plain","Relay configured; rebooting");rebootAt=millis()+700;
     });
     server->on("/lab/ota/config-restore",HTTP_POST,[](AsyncWebServerRequest* r){

@@ -9,6 +9,15 @@ class WindowFlashStore : public WindowStore {
     const esp_partition_t* partition=nullptr;
     static constexpr uint32_t MAGIC=0x574f5431;
 public:
+#ifdef RFOTA_DIAGNOSTICS
+    bool cutArmed=false,cutPaused=false;
+    uint32_t cutOffset=0;
+    uint16_t cutBytes=0;
+    bool armPowerCut(uint32_t offset) {
+        if(cutPaused || offset%PAGE_BYTES)return false;
+        cutOffset=offset;cutBytes=0;cutArmed=true;return true;
+    }
+#endif
     uint32_t capacity() const override {
         auto p=esp_ota_get_next_update_partition(nullptr);return p?p->size:0;
     }
@@ -30,6 +39,20 @@ public:
         bool ok=p.putBytes("checkpoint",record,sizeof record)==sizeof record;p.end();return ok;
     }
     bool page(uint32_t offset,const uint8_t* data,size_t n) override {
+#ifdef RFOTA_DIAGNOSTICS
+        if(cutPaused)return false;
+        if(cutArmed && offset==cutOffset) {
+            if(!partition || n!=PAGE_BYTES || offset>partition->size || PAGE_BYTES>partition->size-offset ||
+               esp_partition_erase_range(partition,offset,PAGE_BYTES)!=ESP_OK)return false;
+            if(esp_partition_write(partition,offset,data,PAGE_BYTES/2)!=ESP_OK)return false;
+            cutArmed=false;cutPaused=true;cutBytes=PAGE_BYTES/2;
+            // Keep a partially written page and the previous durable checkpoint.
+            // No more data writes until a reset, or an explicit test abort.
+            Serial.printf("[RFOTA] POWER_CUT_READY offset=%lu programmed=%u\n",
+                          (unsigned long)offset,unsigned(cutBytes));
+            return false;
+        }
+#endif
         return partition && offset%PAGE_BYTES==0 && n && n<=PAGE_BYTES &&
             offset<=partition->size && PAGE_BYTES<=partition->size-offset &&
             esp_partition_erase_range(partition,offset,PAGE_BYTES)==ESP_OK &&
@@ -53,7 +76,11 @@ public:
     }
     bool discard() override {
         Preferences p;if(!p.begin("ota-pages",false))return false;
-        bool ok=p.clear();p.end();return ok;
+        bool ok=p.clear();p.end();
+#ifdef RFOTA_DIAGNOSTICS
+        if(ok)cutArmed=cutPaused=false;
+#endif
+        return ok;
     }
 };
 }
