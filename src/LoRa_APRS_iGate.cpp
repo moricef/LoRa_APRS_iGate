@@ -170,7 +170,7 @@ void loop() {
         if (RF_OTA::busy() || RF_ROUTE::busy()) {
             // Keep the radio and network alive, but avoid APRS transmissions
             // and display/sensor work between stop-and-wait OTA blocks.
-            LoRa_Utils::receivePacket();
+            RF_OTA::handleAprsControl(LoRa_Utils::receivePacket());
             RF_OTA::tick();RF_ROUTE::tick();
             return;
         }
@@ -240,6 +240,7 @@ void loop() {
         }
 
         if (packet != "") {
+            if (RF_OTA::handleAprsControl(packet)) return;
             // Snapshot the measurements made by this receiver before any
             // subsequent processing or RF transmission can change state.
             const LoRa_Utils::RxtRxContext localRx = LoRa_Utils::captureRxtRxContext();

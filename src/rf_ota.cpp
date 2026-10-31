@@ -14,6 +14,8 @@
 #include "lora_utils.h"
 #include "flash_store.h"
 #include "profile_lease.h"
+#include "ota_aprs_control.h"
+#include "station_utils.h"
 #include "window_flash_store.h"
 
 extern Configuration Config;
@@ -56,6 +58,8 @@ uint32_t dropWindowOnce=0;
 #endif
 ProfileLease profile;
 FastProfileRequest proposedFast;
+RadioProfile aprsSelectedProfile;
+bool aprsProfileSelected=false;
 
 bool equalTag(const uint8_t* f,size_t n) {
     uint8_t digest[32];if(!REMOTE_AUTH::otaTag(f,n-16,digest))return false;
@@ -206,7 +210,76 @@ void begin() {
     radioReady=true;
     Serial.printf("[RFOTA] Ready version=%s running=%s pending=%u\n",versionNumber.c_str(),esp_ota_get_running_partition()->label,unsigned(pending.load()));
 }
-bool busy() {return armed||pending;}
+bool busy() {return armed||pending||profile.mode!=ProfileLease::NORMAL;}
+
+bool handleAprsControl(const String& packet) {
+    // Only direct RF APRS messages, addressed to this node, from the configured
+    // controller. Other traffic is left to the ordinary APRS handlers.
+    int gt=packet.indexOf('>'), info=packet.indexOf(':');
+    if(gt<1 || info<gt || packet.length()<unsigned(info+12) ||
+       packet[info+1]!=':' || packet[info+11]!=':')return false;
+    String target=packet.substring(info+2,info+11);target.trim();
+    String local=Config.tacticalCallsign.isEmpty()?Config.callsign:Config.tacticalCallsign;
+    if(target!=local)return false;
+    String envelope=packet.substring(info+12);
+    int brace=envelope.indexOf('{');String messageId;
+    if(brace>=0) {
+        messageId=envelope.substring(brace+1);envelope=envelope.substring(0,brace);
+        int suffix=messageId.indexOf('}');if(suffix>=0)messageId=messageId.substring(0,suffix);
+        if(messageId.length()>5)messageId="";
+        for(unsigned i=0;i<messageId.length();++i)
+            if(!((messageId[i]>='0'&&messageId[i]<='9')||
+                 (messageId[i]>='A'&&messageId[i]<='Z')||
+                 (messageId[i]>='a'&&messageId[i]<='z'))) {messageId="";break;}
+    }
+    if(!envelope.startsWith("!RC1:"))return false;
+    int start=5;
+    for(int i=0;i<2;++i) {start=envelope.indexOf(':',start);if(start<0)return false;++start;}
+    if(!envelope.substring(start).startsWith("OTA="))return false;
+    String controller=packet.substring(0,gt);
+    if(controller!=Config.remoteManagement.authController || !Config.loramodule.txActive ||
+       Config.digi.ecoMode!=0 || isUpdatingOTA)return true;
+    auto auth=REMOTE_AUTH::verifyAndConsume(envelope,controller,
+        Config.remoteManagement.authController,Config.callsign);
+    auto sendText=[&](const String& text) {
+        String to=controller;while(to.length()<9)to+=' ';
+        String response=STATION_Utils::localReplyHeader(local,controller,false)+"::"+to+":"+text;
+        String wire=String("\x3c\xff\x01")+response;
+        return LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.c_str()),wire.length(),true);
+    };
+    if(auth.status!=REMOTE_AUTH::Status::Accepted && auth.status!=REMOTE_AUTH::Status::Replay) {
+        sendText("AUTH FAILED");return true;
+    }
+    STATION_Utils::learnReturnPath(controller,packet);
+    if(!messageId.isEmpty())sendText("ack"+messageId);
+    if(auth.status==REMOTE_AUTH::Status::Replay)return true;
+    AprsOtaCommand command;String answer;
+    bool switchFast=false,returnNormal=false;
+    if(!AprsOtaCommand::parse(std::string(auth.command.c_str()),command))answer="OTA BAD COMMAND";
+    else if(command.kind==AprsOtaCommand::STATUS) {
+        answer="OTA "+String(profile.mode==ProfileLease::FAST?"FAST":"NORMAL")+
+            " ARMED="+String(armed?1:0)+" PROFILE="+String(aprsProfileSelected?1:0);
+        if(aprsProfileSelected)answer+=" "+String(aprsSelectedProfile.frequencyHz)+","+
+            String(aprsSelectedProfile.bandwidthHz)+","+String(aprsSelectedProfile.sf)+","+
+            String(aprsSelectedProfile.cr)+","+String(aprsSelectedProfile.power);
+    } else if(pending || RF_ROUTE::busy())answer="OTA BUSY";
+    else if(command.kind==AprsOtaCommand::NORMAL) {
+        answer="OTA RETURN NORMAL";returnNormal=true;
+    } else if(armed || profile.mode!=ProfileLease::NORMAL || session.state!=IDLE || pages.state!=IDLE)
+        answer="OTA BUSY";
+    else if(command.kind==AprsOtaCommand::PROFILE) {
+        if(!LoRa_Utils::otaProfileSupported(command.radio))answer="OTA UNSUPPORTED PROFILE";
+        else {aprsSelectedProfile=command.radio;aprsProfileSelected=true;answer="OTA PROFILE READY (RAM)";}
+    } else if(!aprsProfileSelected)answer="OTA SET PROFILE FIRST";
+    else if(!LoRa_Utils::configureOtaFastProfile(aprsSelectedProfile,true))answer="OTA PROFILE ERROR";
+    else {answer="OTA FAST IN 2S LEASE="+String(command.lease);switchFast=true;}
+    // Transmit the application response on the CURRENT profile before any
+    // switch. A failed transmit must never trigger the requested transition.
+    bool sent=sendText(answer);
+    if(sent && switchFast)profile.prepare(millis(),command.lease);
+    if(sent && returnNormal)cancel();
+    return true;
+}
 void tick() {
     if(watchdog)esp_task_wdt_reset();
     if(pending && uint32_t(millis()-bootAt)>180000U)rollback();

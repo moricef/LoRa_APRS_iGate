@@ -807,7 +807,7 @@ namespace LoRa_Utils {
         otaFastProfile=fast;otaPowerChanged=fast && otaCustomProfile;
         return ok;
     }
-    bool sendOtaFrame(const uint8_t* frame,size_t size) {
+    bool sendOtaFrame(const uint8_t* frame,size_t size,bool channelAccess) {
         uint8_t routed[255];
         if(RF_ROUTE::routedReply()) {
             size_t count=RF_ROUTE::wrapReply(frame,size,routed);if(!count)return false;
@@ -815,6 +815,10 @@ namespace LoRa_Utils {
         }
         if (!Config.loramodule.txActive || size>255) return false;
         if (!otaFastProfile) changeFreqTx();
+        if(channelAccess && Config.loramodule.cadActive && !tryChannelAccess()) {
+            if(!otaFastProfile)changeFreqRx();
+            operationDone=false;transmitFlag=false;radio.startReceive();return false;
+        }
         int result=radio.transmit(const_cast<uint8_t*>(frame),size);
         if (!otaFastProfile) changeFreqRx();
         operationDone=false;

@@ -365,6 +365,53 @@ vérifie sur cartes la demande RF, le refus de SF5 sur SX1278, le transfert
 de quatre pages sur le profil choisi et les retours après silence,
 commande et reset. Il ne constitue pas un résultat terrain.
 
+### Commandes APRS authentifiées — implémentées, essai radio à réaliser
+
+Les variantes `ENABLE_RF_OTA` acceptent aussi les commandes ci-dessous dans
+un message APRS reçu par LoRa. Elles utilisent l'enveloppe `!RC1`, la clé,
+le contrôleur autorisé et le compteur anti-rejeu déjà utilisés par la gestion
+à distance. **Les envoyer comme texte ordinaire ne suffit pas** : dans un
+client compatible tel que Graywolf, les saisir comme commandes à signer.
+La cible signée reste le champ Callsign-SSID de l'équipement ; le destinataire
+radio est son tactique lorsqu'il en possède un, sinon son Callsign-SSID.
+Cette entrée n'accepte pas les commandes reçues d'APRS-IS ni les paquets tiers.
+
+| Commande à signer | Effet |
+| --- | --- |
+| `OTA=PROFILE,434550000,250000,8,6,3` | Prépare en RAM : 434,550 MHz, BW250, SF8, CR4/6, puissance demandée 3 dBm |
+| `OTA=?` | Renvoie l'état, l'armement et le profil préparé |
+| `OTA=FAST,30` | Passe au profil préparé deux secondes après la transmission réussie de la réponse ; bail de 30 secondes |
+| `OTA=NORMAL` | Rétablit le profil habituel après sa réponse, suspend une session éventuelle et conserve le point de reprise durable |
+
+Fréquence et bande passante sont en Hz entiers ; CR est le dénominateur
+(5 à 8), et la puissance est celle demandée au transceiver. Le firmware
+valide ces valeurs pour sa puce radio et refuse par exemple SF5 sur SX1278.
+Le bail doit être compris entre 15 et 60 secondes. Une session en cours
+empêche la modification du profil et une nouvelle activation par APRS.
+Les commandes non signées ne sont pas exécutées. Un numéro de message
+valide reçoit un ACK après authentification ; une répétition reconnue par
+l'anti-rejeu peut être acquittée, sans être exécutée une seconde fois.
+
+La réponse et l'ACK utilisent le chemin de retour APRS appris. Ils ne sont
+pas des garanties de réception : le contrôleur doit entendre la réponse
+avant de suivre la bascule. S'il ne l'entend pas, il reste sur le profil
+habituel et attend l'expiration du bail. Après bascule, `OTA=NORMAL` doit
+être envoyé sur le profil temporaire. Sans activité OTA binaire authentifiée,
+le bail expire et la carte revient seule au profil habituel. Un reset recharge
+également la configuration habituelle. Rien n'est écrit dans `Config`.
+
+Ces commandes pilotent **un équipement**, sans organiser la bascule d'une
+chaîne de relais. Elles ne lancent pas un transfert d'image : le transport
+binaire, son armement authentifié, le manifeste, les blocs, la vérification,
+l'activation et la confirmation restent nécessaires. Le client Python actuel
+continue d'utiliser sa négociation binaire coordonnée ; il n'est pas converti
+en client de cette séquence APRS manuelle.
+
+Le parseur et les bornes ont des tests sur hôte. Les builds OTA et le build
+standard sont vérifiés avant publication. **Aucun essai sur cartes de ces
+nouvelles commandes APRS n'est encore réalisé** ; les résultats matériels
+du 31 octobre ci-dessus concernent la négociation RF binaire.
+
 ## Groupes de blocs, cache du relais et reprise persistante
 
 Cette extension expérimentale conserve le mode précédent. Elle est activée

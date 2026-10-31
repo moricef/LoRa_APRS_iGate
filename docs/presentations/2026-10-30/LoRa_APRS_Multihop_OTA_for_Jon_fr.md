@@ -98,7 +98,7 @@ La commande RF authentifiée peut maintenant transporter **fréquence, largeur d
 
 L’essai a utilisé **434,550 MHz, BW250, SF8, CR4/6, puissance demandée 3 dBm**, au lieu du profil de banc fixé dans le premier prototype. Quatre pages ont été transférées et relues à l’identique. Une demande SF5 a été refusée par le relais SX1278. Le retour au profil habituel a été vérifié après silence, par commande et après reset. La puissance de sortie RF n’a pas été mesurée.
 
-Pour l’instant, le contrôleur lit un fichier JSON `normal` / `transfer`, fourni à l’outil d’envoi avec `--radio-profiles`. Il transmet le profil temporaire par RF. Le pilotage par des messages APRS authentifiés usuels reste une étape distincte ; il n’a pas servi à ces essais. L’ancien sélecteur de profil est toujours accepté par le nouveau firmware.
+Pour l’instant, le contrôleur lit un fichier JSON `normal` / `transfer`, fourni à l’outil d’envoi avec `--radio-profiles`. Il transmet le profil temporaire par RF. Des commandes APRS signées sont maintenant implémentées pour préparer le profil, consulter l’état, basculer temporairement et revenir au profil habituel. Elles n’ont pas servi à ces essais matériels et restent à tester sur cartes. Elles pilotent un équipement, sans coordonner la bascule de plusieurs relais ni lancer le transfert. L’ancien sélecteur de profil est toujours accepté par le nouveau firmware.
 
 Ce mécanisme fonctionne pour le chemin essayé. La coordination de plusieurs relais et de profils différents par liaison reste un développement distinct.
 
@@ -135,7 +135,7 @@ Un équipement déjà installé doit donc recevoir une première fois un firmwar
 | Coupure pendant une opération matérielle flash/NVS | Simulée sur hôte ; essai matériel à faire |
 | Redémarrage du relais pendant le transfert | Trois points testés sur transferts courts |
 | Profil temporaire configurable par RF | Validé sur quatre pages et retours au profil habituel |
-| Pilotage par messages APRS authentifiés | À réaliser |
+| Pilotage par messages APRS authentifiés | Implémenté ; compilation et tests hôte, essai radio à faire |
 | Plusieurs relais successifs | À développer et tester |
 | Chemins alternatifs et plusieurs cibles | À développer et tester |
 | SX1262/SF5 et profils différents par liaison | Non mesurés |
@@ -147,6 +147,6 @@ Les coupures pendant les opérations matérielles d’écriture, la gestion des 
 
 **Le premier fonctionnement de l’architecture 1 est démontré sur un chemin à deux sauts.** L’envoi groupé, la réparation locale et la reprise persistante fonctionnent ensemble sur une image complète, avec intégrité vérifiée, activation séparée, confirmation radio et retours arrière.
 
-Les essais ciblés ajoutent la récupération après panne du relais, la coupure réelle avec une page partielle et le changement de profil choisi par RF. La suite porte sur le pilotage APRS, les interruptions au milieu des opérations matérielles d’écriture, les essais terrain, puis l’extension à plusieurs relais, chemins et cibles. L’architecture générale du projet n’est pas encore entièrement validée.
+Les essais ciblés ajoutent la récupération après panne du relais, la coupure réelle avec une page partielle et le changement de profil choisi par RF. La suite porte sur la validation radio du pilotage APRS, les interruptions au milieu des opérations matérielles d’écriture, les essais terrain, puis l’extension à plusieurs relais, chemins et cibles. L’architecture générale du projet n’est pas encore entièrement validée.
 
 Le [code expérimental](https://github.com/moricef/LoRa_APRS_iGate/tree/experiment/lora-ota), le [transfert complet du 30 octobre](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-30/OTA_LORA_fr.md), les [reprises après panne](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-31/OTA_RELAY_RESTART_fr.md) et les [profils choisis par RF](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-31/OTA_RF_PROFILES_fr.md) sont publics. Le code et les comptes rendus du 31 octobre sont publiés au commit `68707c5` ; le transfert complet du 30 octobre utilisait `8241529`. Il s’agit de sources et de résultats expérimentaux, pas d’une version de firmware proposée pour les sites isolés.

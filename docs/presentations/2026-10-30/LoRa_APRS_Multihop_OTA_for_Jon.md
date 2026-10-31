@@ -98,7 +98,7 @@ The authenticated RF command can now carry **frequency, bandwidth, SF, CR, and r
 
 The test used **434.550 MHz, BW250, SF8, CR4/6, requested power 3 dBm**, instead of the first prototype's fixed bench profile. Four pages were transferred and read back identically. An SF5 request was rejected by the SX1278 relay. Return to the normal profile was checked after silence, by command, and after reset. RF output power was not measured.
 
-For now, the controller reads a `normal` / `transfer` JSON file supplied to the sending tool with `--radio-profiles`, and sends the temporary settings over RF. Control through ordinary authenticated APRS messages is a separate next step; it was not used for these tests. The new firmware also accepts the old profile selector.
+For now, the controller reads a `normal` / `transfer` JSON file supplied to the sending tool with `--radio-profiles`, and sends the temporary settings over RF. Signed APRS commands are now implemented to stage the profile, query status, switch temporarily, and restore the normal profile. They were not used for these hardware tests and still need testing on boards. They control one node, without coordinating several relays or starting the image transfer. The new firmware also accepts the old profile selector.
 
 This mechanism works for the tested route. Coordinating several relays or different profiles per link is a separate extension.
 
@@ -135,7 +135,7 @@ An existing node must therefore first receive compatible firmware through Web OT
 | Cut during an actual flash/NVS operation | Simulated on host; hardware test pending |
 | Relay restart during transfer | Three injection points checked in short tests |
 | Configurable temporary profile over RF | Validated on four pages and return checks |
-| Control through authenticated APRS messages | Still to implement |
+| Control through authenticated APRS messages | Implemented; builds and host checks, RF test pending |
 | Several successive relays | Still to implement and test |
 | Alternate paths and multiple targets | Still to implement and test |
 | SX1262/SF5 and different profiles per link | Not measured |
@@ -147,6 +147,6 @@ Cuts during actual write operations, path handling, and coexistence with APRS tr
 
 **The first working form of Architecture 1 has been demonstrated on a two-hop path.** Grouped transfer, local repair, and persistent resume work together over a complete image, with verified integrity, separate activation, RF confirmation, and rollback.
 
-The targeted tests add relay-failure recovery, a real power cut with a partial page, and controller-selected RF profiles. Next work concerns APRS control, cuts during actual write operations, field testing, and then extension to several relays, paths, and targets. The overall project architecture has not yet been fully validated.
+The targeted tests add relay-failure recovery, a real power cut with a partial page, and controller-selected RF profiles. Next work concerns RF testing of APRS control, cuts during actual write operations, field testing, and then extension to several relays, paths, and targets. The overall project architecture has not yet been fully validated.
 
 The [experimental code](https://github.com/moricef/LoRa_APRS_iGate/tree/experiment/lora-ota), [30 October complete transfer](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-30/OTA_LORA_fr.md), [fault-recovery tests](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-31/OTA_RELAY_RESTART_fr.md), and [RF-selected profiles](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-31/OTA_RF_PROFILES_fr.md) are public. Detailed test reports are in French. Code and reports for 31 October are published in commit `68707c5`; the complete transfer on 30 October used `8241529`. This publishes experimental sources and results, not a deployment firmware release for isolated sites.

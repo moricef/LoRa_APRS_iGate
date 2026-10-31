@@ -62,6 +62,10 @@ par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
 `logs/bt-20261026/` ; les sauvegardes de configuration peuvent contenir des
 secrets et ne doivent pas être publiées.
 
+Les commandes APRS signées du profil OTA sont décrites dans la
+[proposition OTA](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--implémentées-essai-radio-à-réaliser).
+Leur implémentation reste à valider sur cartes.
+
 ## Présentations et archives
 
 - OTA LoRa — mise à jour du 31 octobre 2026 :
