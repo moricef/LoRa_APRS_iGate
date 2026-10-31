@@ -1,19 +1,19 @@
 # Multihop LoRa OTA Firmware Updates for APRS Networks
 
 **Experimental results, architecture, and further development**\
-**Prepared for Jon N7UV — updated 30 October 2026**
+**Prepared for Jon N7UV — updated 31 October 2026**
 
 ## 1. Objective
 
 Update ESP32 LoRa APRS iGates and digipeaters over RF, without an IP connection or physical intervention at the remote target. The longer-term goal is to distribute an image through several relays to one or more devices, with recovery after interruption and restoration of normal APRS operation.
 
-**An initial implementation of controlled distribution has now passed laboratory testing: one controller, one relay, and one target, using block groups, local repair, and resumption after a target restart.** Multiple paths and distribution to several targets remain to be developed.
+**An initial implementation of controlled distribution has now passed laboratory testing: one controller, one relay, and one target, using block groups, local repair, and recovery after interruption. Subsequent short tests checked relay restarts, a real power cut with a partial page, and an RF-selected temporary profile.** Multiple paths and distribution to several targets remain to be developed.
 
 ## 2. Test results
 
 The tests used TTGO LoRa32 V2.1 boards with ESP32 processors and SX1278 radios. The relayed setup is **F4MLV-2 → F4MLV-10 → F4MLV-15**. The prototype is integrated into the iGate firmware containing RXT, native-frame support, and standalone PPM decoding.
 
-The common fast profile is **BW500 kHz, SF7, CR4/5, 2 dBm**, giving **21.875 kbps nominal**. The initial bench profile is 434.100 MHz, BW125/SF12/CR4/5; the fast profile uses 434.500 MHz. These settings are specific to the laboratory setup.
+The fast profile used for the complete-image tests on 30 October is **BW500 kHz, SF7, CR4/5, 2 dBm**, giving **21.875 kbps nominal**. The initial bench profile is 434.100 MHz, BW125/SF12/CR4/5; the fast profile uses 434.500 MHz. These settings are specific to the laboratory setup.
 
 | Test | Image, bytes | Transfer and verification | Useful throughput |
 |---|---:|---:|---:|
@@ -51,11 +51,24 @@ Over the complete transfer, the relay counted **94 local block repairs** and the
 
 The target accepts out-of-order blocks within the current group and checks duplicates. It writes a complete page to the inactive partition. Only then does an NVS checkpoint record the image identity and durable offset. Blocks from an incomplete page remain in RAM.
 
-The test committed **8,192 bytes**, then received **2,048 additional bytes** without completing the next page. An RF diagnostic command reset the target. After the nodes returned to their initial profiles and a fresh authenticated session was established, the target recovered the **8,192 committed bytes**. Only the incomplete page was retransmitted; committed pages were not sent again.
+During the complete transfer on 30 October, the target committed **8,192 bytes**, then received **2,048 additional bytes** without completing the next page. An RF diagnostic command reset the target. After the nodes returned to their initial profiles and a fresh authenticated session was established, the target recovered the **8,192 committed bytes**. Only the incomplete page was retransmitted; committed pages were not sent again.
 
-Session expiry preserves this progress; explicit cancellation clears it. Resumption uses fresh authentication rather than reusing the old nonce. The client also implements recovery after link loss, but physically restarting the relay during a transfer still needs testing.
+Session expiry preserves this progress; explicit cancellation clears it. Resumption uses fresh authentication rather than reusing the old nonce.
 
-**Target reset was tested on hardware. Power cuts during page programming or checkpoint writes were only simulated in the C++ test bench; hardware power-loss testing remains necessary.**
+### Targeted tests on 31 October
+
+Each test below continued to **16,384 bytes**, independently read back from flash and identical to the file. These short tests complement the previous complete transfer; they are not additional complete-image transfers.
+
+| Interruption | Recovered progress | Observed result |
+|---|---:|---|
+| Relay restarted while its cache was being loaded | 8,192 bytes | Interrupted page retransmitted |
+| Relay restarted after sending 16 blocks towards the target | 8,192 bytes | Interrupted group retransmitted |
+| Relay restarted before forwarding the ACK of a committed page | 12,288 bytes | Committed page not retransmitted |
+| Target USB power removed for 22.22 seconds with a partial page | 8,192 bytes | Partial page rewritten in full |
+
+For the physical power cut, a diagnostic had erased a 4,096-byte page and written its first half without advancing the checkpoint. A readback after power-up, before resuming, found the expected **2,048 programmed bytes and 2,048 erased bytes**. Resumption preserved committed pages and rewrote the incomplete page.
+
+Activation of incomplete images was rejected and the running application remained selected. **Power was removed between programming operations. A cut during an actual erase, program operation, or NVS checkpoint write remains to be tested.**
 
 ## 6. The two project architectures
 
@@ -78,6 +91,14 @@ Preparation, profile changes, activation, and confirmation use authenticated bin
 The controller prepares the session on that initial profile. The target acknowledges switching; the relay forwards the acknowledgment, then each node switches to the fast profile after its local delay. The controller checks the link before sending data. After image verification, participants return to the initial profile for activation and confirmation.
 
 A node with one radio cannot keep listening to the initial profile while using the fast profile. Return commands during transfer therefore use the fast profile. A local inactivity lease restores stored settings if the link disappears; recovery does not depend on receiving a final command. A restart also reloads stored radio settings.
+
+### Controller-selected temporary profile
+
+The authenticated RF command can now carry **frequency, bandwidth, SF, CR, and requested transceiver power**. Target and relay check compatibility with their radios before switching. Settings remain in RAM; normal saved settings are not overwritten.
+
+The test used **434.550 MHz, BW250, SF8, CR4/6, requested power 3 dBm**, instead of the first prototype's fixed bench profile. Four pages were transferred and read back identically. An SF5 request was rejected by the SX1278 relay. Return to the normal profile was checked after silence, by command, and after reset. RF output power was not measured.
+
+For now, the controller reads a `normal` / `transfer` JSON file supplied to the sending tool with `--radio-profiles`, and sends the temporary settings over RF. Control through ordinary authenticated APRS messages is a separate next step; it was not used for these tests. The new firmware also accepts the old profile selector.
 
 This mechanism works for the tested route. Coordinating several relays or different profiles per link is a separate extension.
 
@@ -110,19 +131,22 @@ An existing node must therefore first receive compatible firmware through Web OT
 | One relay, complete image, target Wi-Fi off | Validated in the laboratory |
 | Groups, cache, and selective repair | Validated over the full transfer |
 | Resume after target reset | Validated on hardware |
-| Power cuts during flash/NVS writes | Simulated on host; hardware tests pending |
-| Relay restart or outage during transfer | Still to test |
+| Real power cut with a partially written page | Validated in a short test |
+| Cut during an actual flash/NVS operation | Simulated on host; hardware test pending |
+| Relay restart during transfer | Three injection points checked in short tests |
+| Configurable temporary profile over RF | Validated on four pages and return checks |
+| Control through authenticated APRS messages | Still to implement |
 | Several successive relays | Still to implement and test |
 | Alternate paths and multiple targets | Still to implement and test |
 | SX1262/SF5 and different profiles per link | Not measured |
 | Remote sites, hidden nodes, asymmetry, busy channel | Field tests pending |
 
-Power-loss recovery, path handling, and coexistence with APRS traffic need testing before treating this as ready for inaccessible sites.
+Cuts during actual write operations, path handling, and coexistence with APRS traffic still need testing before treating this as ready for inaccessible sites.
 
 ## 12. Current position
 
 **The first working form of Architecture 1 has been demonstrated on a two-hop path.** Grouped transfer, local repair, and persistent resume work together over a complete image, with verified integrity, separate activation, RF confirmation, and rollback.
 
-The next work concerns real write interruptions and relay failures, followed by extension to several relays, paths, and targets. The overall project architecture has not yet been fully validated.
+The targeted tests add relay-failure recovery, a real power cut with a partial page, and controller-selected RF profiles. Next work concerns APRS control, cuts during actual write operations, field testing, and then extension to several relays, paths, and targets. The overall project architecture has not yet been fully validated.
 
-The [experimental code](https://github.com/moricef/LoRa_APRS_iGate/tree/experiment/lora-ota) and the [30 October test report](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-30/OTA_LORA_fr.md) are available on branch `experiment/lora-ota`. The tested code is `8241529`, and the report is `043af4d`. This publishes experimental sources and results, not a firmware release offered for deployment.
+The [experimental code](https://github.com/moricef/LoRa_APRS_iGate/tree/experiment/lora-ota), [30 October complete transfer](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-30/OTA_LORA_fr.md), [fault-recovery tests](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-31/OTA_RELAY_RESTART_fr.md), and [RF-selected profiles](https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/tests/2026-10-31/OTA_RF_PROFILES_fr.md) are public. Detailed test reports are in French. Code and reports for 31 October are published in commit `68707c5`; the complete transfer on 30 October used `8241529`. This publishes experimental sources and results, not a deployment firmware release for isolated sites.

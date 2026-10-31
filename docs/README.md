@@ -64,12 +64,13 @@ secrets et ne doivent pas être publiées.
 
 ## Présentations et archives
 
-- OTA LoRa — 30 octobre 2026 :
+- OTA LoRa — mise à jour du 31 octobre 2026 :
   [Français](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon_fr.md)
   · [PDF français](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon_fr.pdf)
   · [English](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon.md)
   · [English PDF](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon.pdf).
-  Résultats du transfert par un relais, envoi groupé et reprise après reset ;
+  Résultats du transfert par un relais, envoi groupé, reprises après panne,
+  coupure réelle sur page partielle et choix du profil par RF ;
   limites et développements restant à réaliser. Sources, PDF et générateur
   sont conservés ensemble.
 - [Présentations du 15 octobre 2026](presentations/2026-10-15/) : sources
