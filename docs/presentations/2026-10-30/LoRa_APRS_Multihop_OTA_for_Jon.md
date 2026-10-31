@@ -144,7 +144,7 @@ The OTA path inspected in Ricardo’s firmware uses ElegantOTA and the ESP32 Web
 
 An existing node must therefore first receive compatible firmware through Web OTA where reachable or local flashing. The experimental prototype described here has not been published as a deployment release for isolated sites.
 
-## 11. Remaining validation
+## 11. Validation status
 
 | Topic | Status |
 |---|---|

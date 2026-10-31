@@ -144,7 +144,7 @@ La voie OTA examinée dans le firmware de Ricardo utilise ElegantOTA et le serve
 
 Un équipement déjà installé doit donc recevoir une première fois un firmware compatible, par mise à jour Web s’il est accessible ou par flashage local. Le prototype expérimental décrit ici n’est pas publié comme version de déploiement pour les sites isolés.
 
-## 11. Validations restantes
+## 11. État des validations
 
 | Sujet | État |
 |---|---|
