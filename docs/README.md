@@ -76,7 +76,7 @@ bascule/retour ; les échanges sur le profil temporaire restent à tester.
   · [English PDF](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon.pdf).
   Résultats du transfert par un relais, envoi groupé, reprises après panne,
   coupure réelle sur page partielle et choix du profil par RF ;
-  limites et développements restant à réaliser. Sources, PDF et générateur
+  commandes RF signées, limites et développements restant à réaliser. Sources, PDF et générateur
   sont conservés ensemble.
 - [Présentations du 15 octobre 2026](presentations/2026-10-15/) : sources
   Markdown, documents ODT, PDF et diapositives conservés ensemble. Ils

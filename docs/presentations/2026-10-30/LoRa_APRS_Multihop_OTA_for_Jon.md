@@ -102,6 +102,26 @@ For now, the controller reads a `normal` / `transfer` JSON file supplied to the 
 
 This mechanism works for the tested route. Coordinating several relays or different profiles per link is a separate extension.
 
+### RF commands from Graywolf
+
+Enter these in the **authenticated command field**, without prepending `?` or `@@#`. Graywolf builds the signed `!RC1` envelope using the target key and counter. The signed identity is the board’s Callsign-SSID; the RF addressee is its tactical callsign if set, otherwise its Callsign-SSID.
+
+| Command to sign | Effect |
+| --- | --- |
+| `RXT=ON` | Enables appending local measurements to relayed RF packets. |
+| `RXT=OFF` | Disables this addition; decoding and forwarding measurements already present remain active. |
+| `RXT=?` | Returns `RXT=ON` or `RXT=OFF`. |
+| `OTA=?` | Returns the mode, session arming state, and staged temporary profile. |
+| `OTA=PROFILE,434550000,250000,8,6,3` | Stages in RAM: 434.550 MHz, BW250, SF8, CR4/6, requested power 3 dBm. **Does not switch the radio yet.** |
+| `OTA=FAST,30` | Switches to the staged profile two seconds after transmitting the reply; inactivity lease of 30 seconds. |
+| `OTA=NORMAL` | Replies on the current profile, then restores the normal profile; suspends any session while retaining the durable checkpoint. |
+
+The existing **`COMMIT`** command, also signed, saves the RXT setting across restarts. It does not make the temporary OTA profile permanent.
+
+For `OTA=PROFILE`, frequency and bandwidth are integer Hz; the last three values are SF, CR denominator, and requested power in dBm. `OTA=FAST` accepts leases from 15 to 60 seconds. An active session prevents staging a new profile or starting another APRS profile switch.
+
+**After `OTA=FAST`, the controller radio must use the same temporary profile to reach the target.** Graywolf does not change that radio’s settings itself. If it remains on the normal profile, wait for the lease to expire and the target to return automatically. Send `OTA=NORMAL` on the temporary profile for an explicit return. These commands do not start image transfer or coordinate several relays switching together.
+
 ## 8. Authentication, integrity, and boot
 
 The protocol already includes controller and target identities, a persistent arming counter, a session nonce, block offsets and lengths, an authenticated manifest, and HMACs. The relay envelope adds the transmitting hop’s identity and separate transport authentication; the relay preserves the target’s end-to-end authenticator unchanged.

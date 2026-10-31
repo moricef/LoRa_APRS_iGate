@@ -102,6 +102,26 @@ Pour l’instant, le contrôleur lit un fichier JSON `normal` / `transfer`, four
 
 Ce mécanisme fonctionne pour le chemin essayé. La coordination de plusieurs relais et de profils différents par liaison reste un développement distinct.
 
+### Commandes RF depuis Graywolf
+
+Saisir ces commandes dans le **champ de commande authentifiée**, sans préfixe `?` ni `@@#`. Graywolf produit l’enveloppe signée `!RC1` avec la clé et le compteur de la cible. L’identité signée est le Callsign-SSID de la carte ; le destinataire radio est son tactique, lorsqu’il en possède un, sinon son Callsign-SSID.
+
+| Commande à signer | Effet |
+| --- | --- |
+| `RXT=ON` | Active l’ajout des mesures locales aux paquets RF relayés. |
+| `RXT=OFF` | Désactive cet ajout ; conserve le décodage et le transport des mesures déjà présentes. |
+| `RXT=?` | Renvoie l’état `RXT=ON` ou `RXT=OFF`. |
+| `OTA=?` | Renvoie le mode, l’armement et le profil temporaire préparé. |
+| `OTA=PROFILE,434550000,250000,8,6,3` | Prépare en RAM : 434,550 MHz, BW250, SF8, CR4/6 et puissance demandée de 3 dBm. **Ne change pas encore de profil radio.** |
+| `OTA=FAST,30` | Bascule vers le profil préparé deux secondes après la transmission de la réponse ; bail d’inactivité de 30 secondes. |
+| `OTA=NORMAL` | Répond sur le profil courant puis rétablit le profil habituel ; suspend la session éventuelle et conserve le point de reprise durable. |
+
+La commande existante **`COMMIT`**, également signée, sauvegarde le réglage RXT pour les prochains démarrages. Elle ne rend pas le profil OTA temporaire permanent.
+
+Pour `OTA=PROFILE`, fréquence et largeur de bande sont en Hz entiers ; les trois dernières valeurs sont SF, dénominateur de CR et puissance demandée en dBm. Pour `OTA=FAST`, le bail autorisé est de 15 à 60 secondes. Une session en cours empêche de préparer un nouveau profil ou de relancer la bascule par APRS.
+
+**Après `OTA=FAST`, la radio de commande doit utiliser le même profil temporaire pour joindre la cible.** Graywolf ne modifie pas lui-même les paramètres de cette radio. Si elle reste sur le profil habituel, attendre le retour automatique après expiration du bail. Pour un retour explicite, transmettre `OTA=NORMAL` sur le profil temporaire. Ces commandes ne lancent ni le transfert d’image ni une bascule coordonnée de plusieurs relais.
+
 ## 8. Authentification, intégrité et démarrage
 
 Le protocole comporte déjà les identités du contrôleur et de la cible, un compteur d’armement persistant, un nonce de session, les offsets et longueurs des blocs, un manifeste authentifié et des HMAC. L’enveloppe du relais ajoute l’identité de l’émetteur du saut et une authentification de transport distincte ; le relais conserve intacte la signature destinée à la cible.
