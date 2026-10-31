@@ -176,4 +176,4 @@ rejected, even for a manager and even without a configured key. The existing
 RF-only restriction also applies to RXT commands.
 
 The experimental OTA variant also accepts the profile commands
-[documented here](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--implémentées-essai-radio-à-réaliser).
+[documented here](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--premier-essai-radio).

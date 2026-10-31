@@ -55,7 +55,7 @@ spécification actuelle.
 | 29 octobre 2026 | [OTA LoRa direct entre deux ESP32](tests/2026-10-29/OTA_LORA_DIRECT_fr.md) : banc autonome puis intégration dans le firmware iGate complet ; armement radio, partition inactive, retour arrière et récupération du profil radio initial |
 | 30 octobre 2026 | [OTA LoRa avec la cible sans Wi-Fi](tests/2026-10-30/OTA_LORA_fr.md) : image complète, confirmation radio et retours arrière en direct puis par F4MLV-10 |
 | 31 octobre 2026 | [Reprises OTA sur quatre pages](tests/2026-10-31/OTA_RELAY_RESTART_fr.md) : cache perdu, groupe interrompu, acquittement perdu et coupure physique de la cible avec une page partielle |
-| 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset |
+| 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset ; complément APRS signé et bail de 30 secondes |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
@@ -63,8 +63,9 @@ par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
 secrets et ne doivent pas être publiées.
 
 Les commandes APRS signées du profil OTA sont décrites dans la
-[proposition OTA](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--implémentées-essai-radio-à-réaliser).
-Leur implémentation reste à valider sur cartes.
+[proposition OTA](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--premier-essai-radio).
+Un premier essai vérifie les réponses, la préparation et les événements de
+bascule/retour ; les échanges sur le profil temporaire restent à tester.
 
 ## Présentations et archives
 

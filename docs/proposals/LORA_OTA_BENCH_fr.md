@@ -365,7 +365,7 @@ vérifie sur cartes la demande RF, le refus de SF5 sur SX1278, le transfert
 de quatre pages sur le profil choisi et les retours après silence,
 commande et reset. Il ne constitue pas un résultat terrain.
 
-### Commandes APRS authentifiées — implémentées, essai radio à réaliser
+### Commandes APRS authentifiées — premier essai radio
 
 Les variantes `ENABLE_RF_OTA` acceptent aussi les commandes ci-dessous dans
 un message APRS reçu par LoRa. Elles utilisent l'enveloppe `!RC1`, la clé,
@@ -408,9 +408,12 @@ continue d'utiliser sa négociation binaire coordonnée ; il n'est pas converti
 en client de cette séquence APRS manuelle.
 
 Le parseur et les bornes ont des tests sur hôte. Les builds OTA et le build
-standard sont vérifiés avant publication. **Aucun essai sur cartes de ces
-nouvelles commandes APRS n'est encore réalisé** ; les résultats matériels
-du 31 octobre ci-dessus concernent la négociation RF binaire.
+standard sont vérifiés avant publication. Le [complément du 31 octobre](../tests/2026-10-31/OTA_RF_PROFILES_fr.md#complément--commandes-aprs-signées-depuis-graywolf)
+vérifie les réponses aux commandes signées, la préparation du profil et les
+événements de bascule puis de retour automatique à 30,001 secondes. Les
+échanges RF sur le profil temporaire et le retour explicite par APRS restent
+à tester. Le transfert de quatre pages rapporté plus haut utilise la
+négociation RF binaire.
 
 ## Groupes de blocs, cache du relais et reprise persistante
 

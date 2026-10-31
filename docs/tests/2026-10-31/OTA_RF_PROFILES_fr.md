@@ -78,3 +78,47 @@ Les quatre suites C++ et les 23 tests Python passent. Les variantes OTA-A,
 OTA-B, relais, iGate standard et le pont `bridge_fast` compilent. Les
 artefacts, scripts de mesure et journaux sont conservés dans
 `logs/lora-ota-configurable-20261031/`, hors publication.
+
+## Complément : commandes APRS signées depuis Graywolf
+
+Essai manuel du 31 octobre, réalisé par Fabrice depuis Graywolf, avec
+F4MLV-2 comme émetteur radio et MLV-15/GENATX comme destinataire. Les
+observations ci-dessous sont les réponses RF et les extraits du journal
+série fournis dans la session. Les commandes concernées sont implémentées
+au commit `dcaca1e` ; le numéro exact du build installé n'a pas été relevé
+pendant ce complément.
+
+| Commande signée | Observation |
+| --- | --- |
+| `RXT=?` | Réponse `RXT=ON` |
+| `RXT=ON` | Réponse `RXT=ON` |
+| `RXT=OFF` | Réponse `RXT=OFF` |
+| `OTA=?`, avant préparation | `OTA NORMAL ARMED=0 PROFILE=0` |
+| `OTA=PROFILE,434550000,250000,8,6,3` | `OTA PROFILE READY (RAM)` |
+| `OTA=FAST,30` | `OTA FAST IN 2S LEASE=30` |
+| `OTA=?`, après retour | `OTA NORMAL ARMED=0 PROFILE=1 434550000,250000,8,6,3` |
+
+Un message signé contenant `XT=OFF`, au lieu de `RXT=OFF`, a reçu
+`AUTH FAILED` : cette commande inconnue a été refusée. Cela ne constitue
+pas un essai de mauvaise clé ni de modification d'une signature valide.
+
+Le journal de MLV-15 fournit les deux événements suivants :
+
+```text
+20:35:34.727 > [RFOTA] Temporary fast profile
+20:36:04.728 > [RFOTA] Configured radio profile restored
+```
+
+L'intervalle observé est de **30,001 secondes**. Ces événements vérifient
+la séquence logicielle de bascule et d'expiration du bail après commande
+APRS signée. La réponse RF ultérieure confirme que la carte est accessible
+sur son profil habituel, sans perdre le profil temporaire préparé en RAM.
+
+Les réponses RXT vérifient le traitement des commandes et l'état retourné.
+L'ajout effectif des tuples à des paquets relayés, leur absence après OFF,
+la sauvegarde par `COMMIT` et la persistance après reset n'ont pas été
+mesurés dans cet essai. Aucun échange RF sur le profil temporaire, aucune
+mesure de sa fréquence ou de sa puissance, aucun `OTA=NORMAL` pendant ce
+profil et aucun transfert d'image par cette séquence APRS n'ont été vérifiés.
+Ce complément ne remplace pas le transfert court par négociation binaire
+rapporté plus haut.

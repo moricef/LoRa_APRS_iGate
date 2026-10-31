@@ -182,4 +182,4 @@ gestionnaire et même sans clé configurée. La restriction RF uniquement
 existante s’applique aussi aux commandes RXT.
 
 La variante expérimentale OTA accepte en plus les commandes de profil
-[documentées ici](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--implémentées-essai-radio-à-réaliser).
+[documentées ici](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--premier-essai-radio).
