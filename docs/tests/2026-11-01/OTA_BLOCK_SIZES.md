@@ -8,6 +8,7 @@ A follow-up checks **128- and 175-byte blocks through one relay** using the
 same sample. These tests validate the benchmark; they do not determine
 the optimal size for a distant link.
 Both sizes are then tested again with an attenuator on MLV-15.
+A final follow-up uses the setup reported with an 8.2 kΩ series resistor.
 
 ## Versions and setup
 
@@ -130,6 +131,34 @@ cannot establish where smaller blocks would become advantageous. They
 also measure neither the effective attenuation of the setup nor its
 remaining RF margin.
 
+## Follow-up with a nominal 8.2 kΩ series resistor
+
+The user reports two 51 Ω resistors and a nominal 8.2 kΩ series resistor,
+with approximately 102 Ω measured between the centre contacts, coax
+disconnected. An ideal π using these components would give 50.2 dB in
+50 Ω. The effective RF attenuation of the assembly was not measured;
+the ohmmeter reading does not characterise it.
+
+Same firmware, 8,192-byte file, route through MLV-10 and radio profiles.
+One run per size, 175 then 128 bytes, without injected loss.
+
+| Data block (bytes) | Duration (s) | Recalculated aggregate airtime (s) | Controller block retransmissions | Local repairs | SHA-256 |
+|---:|---:|---:|---:|---:|---|
+| 128 | 50.28 | 47.14 | 0 | 0 | Match |
+| 175 | 45.11 | 42.49 | 0 | 0 | Match |
+
+Controller/relay/target TX counts are 68/72/4 for 128-byte blocks and
+52/56/4 for 175-byte blocks. No reboot or driver TX error occurred during
+the measurements. Each run starts from zero and verifies the two written
+pages by SHA-256; no received image is activated.
+
+Frame counts and recalculated airtimes are identical to the follow-up
+without an attenuator. These two runs do not demonstrate a loss regime
+on the attenuated link. They establish neither an effective attenuation
+of 50.2 dB, nor a reception margin, nor a distance threshold favouring
+smaller blocks. The attenuation must be measured before attributing the
+results to a particular signal reduction.
+
 ## Airtime calculation correction
 
 The airtimes in both tables replace the initial estimates. On SX1278 with
@@ -142,7 +171,7 @@ Corrected values are recalculated using the final profile, an eight-symbol
 preamble, explicit header and enabled CRC. Frame lengths come from TX traces
 and ACK formats; their counts and byte totals match target and relay
 counters. The same calculation with stale LDRO state reproduces their raw
-counters exactly for all nine runs. For the attenuated 128-byte run, the
+counters exactly for all eleven runs. For the 128-byte run with the 820 Ω attenuator, the
 cache retransmits each data offset only once; the controller's duplicate
 remains counted on its own link. Frame counts and byte totals are checked
 separately for all three transmitters. Original traces are retained unchanged.
@@ -157,7 +186,7 @@ verified SHA-256 hashes.
 
 The benchmark can now be used for the comparative series described in the
 [evaluation protocol](../../proposals/LORA_OTA_BLOCK_BENCH.md).
-The durations above describe nine individual runs, not a statistical
+The durations above describe eleven individual runs, not a statistical
 distribution. They do not justify changing the default block size.
 
 Repeated comparisons at several documented attenuation levels, both
@@ -170,4 +199,5 @@ geometry were not validated by this test.
 
 Traces, CSV/JSON results, binaries and fingerprints are retained in
 `logs/block-smoke-20261101/`, `logs/block-relay-20261101/` and
-`logs/block-relay-pad-20261101/`, local directories ignored by Git.
+`logs/block-relay-pad-20261101/` and `logs/block-relay-pad82k-20261101/`,
+local directories ignored by Git.

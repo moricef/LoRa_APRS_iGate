@@ -8,6 +8,7 @@ Un complément vérifie ensuite **128 et 175 octets par un relais** sur le
 même échantillon. Ces essais valident le fonctionnement du banc ; ils ne
 déterminent pas la taille optimale sur une liaison éloignée.
 Les deux tailles sont ensuite réessayées avec un atténuateur sur MLV-15.
+Un dernier complément utilise le montage annoncé avec 8,2 kΩ en série.
 
 ## Versions et montage
 
@@ -132,6 +133,34 @@ cible atténuée. Ils ne permettent pas de mesurer le point où les petits
 blocs deviendraient avantageux. Ils ne mesurent pas non plus l’atténuation
 effective du montage ni la marge RF disponible.
 
+## Complément avec une résistance série nominale de 8,2 kΩ
+
+L’utilisateur indique deux résistances de 51 Ω et une résistance série
+nominale de 8,2 kΩ, avec environ 102 Ω mesurés entre les points chauds,
+coax débranchés. Un π idéal avec ces composants donnerait 50,2 dB en 50 Ω.
+L’atténuation RF effective de l’assemblage n’a pas été mesurée ; la mesure
+à l’ohmmètre ne la caractérise pas.
+
+Mêmes firmwares, fichier de 8 192 octets, trajet via MLV-10 et profils radio.
+Un passage par taille, ordre 175 puis 128 octets, sans perte injectée.
+
+| Bloc utile (octets) | Durée (s) | Temps d’antenne cumulé recalculé (s) | Blocs retransmis par le contrôleur | Réparations locales | SHA-256 |
+|---:|---:|---:|---:|---:|---|
+| 128 | 50,28 | 47,14 | 0 | 0 | Conforme |
+| 175 | 45,11 | 42,49 | 0 | 0 | Conforme |
+
+Les TX contrôleur/relais/cible sont 68/72/4 en 128 octets et 52/56/4 en
+175 octets. Aucun redémarrage ni erreur TX pendant les mesures. Chaque
+passage repart de zéro et vérifie les deux pages écrites par leur SHA-256 ;
+aucune image reçue n’est activée.
+
+Les nombres de trames et temps d’antenne recalculés sont identiques à ceux
+du complément sans atténuateur. Sur ces deux passages, aucun régime de
+pertes sur le lien atténué n’est mis en évidence. On ne peut en déduire ni
+une atténuation effective de 50,2 dB, ni une marge de réception, ni un seuil
+de distance où les petits blocs seraient préférables. Avant d’attribuer
+les résultats à un niveau d’affaiblissement, il faut mesurer ce niveau.
+
 ## Correction du calcul du temps d’antenne
 
 Les temps d’antenne des deux tableaux remplacent les premières estimations.
@@ -146,7 +175,7 @@ huit symboles, en-tête explicite et CRC actif. Les longueurs sont obtenues
 des traces d’émission et des formats d’ACK ; leurs nombres et leurs sommes
 d’octets concordent avec les compteurs de la cible et du relais. Le même
 calcul avec l’état LDRO périmé reproduit exactement leurs compteurs bruts
-pour les neuf passages. Pour le passage de 128 octets avec atténuateur,
+pour les onze passages. Pour le passage de 128 octets avec l’atténuateur de 820 Ω,
 le cache ne retransmet qu’une fois chaque offset de données ; le doublon
 émis par le contrôleur reste compté sur son propre lien. Les nombres de
 trames et d’octets sont recoupés séparément pour les trois émetteurs.
@@ -162,7 +191,7 @@ correction ne change ni les durées chronométrées ni les SHA-256 obtenus.
 
 Le banc peut maintenant servir aux séries comparatives décrites dans le
 [protocole d’évaluation](../../proposals/LORA_OTA_BLOCK_BENCH_fr.md).
-Les durées ci-dessus décrivent neuf passages isolés, pas une distribution
+Les durées ci-dessus décrivent onze passages isolés, pas une distribution
 statistique. Elles ne justifient pas un changement du bloc par défaut.
 
 Restent à comparer les tailles avec répétitions et plusieurs niveaux
@@ -175,4 +204,5 @@ cette nouvelle géométrie ne sont pas validés par cet essai.
 
 Les traces, résultats CSV/JSON, binaires et empreintes sont conservés dans
 `logs/block-smoke-20261101/`, `logs/block-relay-20261101/` et
-`logs/block-relay-pad-20261101/`, dossiers locaux ignorés par Git.
+`logs/block-relay-pad-20261101/` et `logs/block-relay-pad82k-20261101/`,
+dossiers locaux ignorés par Git.
