@@ -7,6 +7,7 @@ avec vérification SHA-256 du préfixe relu dans la partition inactive.
 Un complément vérifie ensuite **128 et 175 octets par un relais** sur le
 même échantillon. Ces essais valident le fonctionnement du banc ; ils ne
 déterminent pas la taille optimale sur une liaison éloignée.
+Les deux tailles sont ensuite réessayées avec un atténuateur sur MLV-15.
 
 ## Versions et montage
 
@@ -97,6 +98,40 @@ MLV-10 est sur le même site que les deux autres cartes, au bout de son
 mât. Ce trajet à un relais n’est pas un essai à grande distance et ne
 caractérise pas une liaison dégradée. Aucune image complète n’est activée.
 
+## Complément avec atténuateur sur MLV-15
+
+L’utilisateur a intercalé entre MLV-15 et son antenne un atténuateur en π :
+deux résistances de 51 Ω à la masse et une de 820 Ω en série. Le calcul en
+50 Ω donne 30,665 dB ; cette valeur n’a pas été mesurée à 434,550 MHz.
+L’atténuateur avait été construit pour 431,975 MHz. Son insertion concerne
+la liaison MLV-10 ↔ MLV-15 dans les deux sens.
+
+Même fichier de 8 192 octets, mêmes binaires, même trajet et mêmes profils
+que le complément précédent. Aucun reflash ni changement de configuration.
+Un passage par taille, ordre 175 puis 128 octets ; aucune perte injectée.
+
+| Bloc utile (octets) | Durée sans atténuateur (s) | Durée avec atténuateur (s) | Temps d’antenne cumulé recalculé avec atténuateur (s) | Blocs retransmis par le contrôleur | Réparations locales | SHA-256 |
+|---:|---:|---:|---:|---:|---:|---|
+| 128 | 50,30 | 51,43 | 48,12 | 1 | 0 | Conforme |
+| 175 | 45,12 | 45,11 | 42,49 | 0 | 0 | Conforme |
+
+Le passage de 128 octets a demandé au contrôleur le bloc d’indice 8 de la
+première page, à l’offset 1 024. Il ne figurait pas dans le cache du relais.
+Les compteurs donnent 65 envois de données par le contrôleur pour cette
+taille, mais 64 blocs mis en cache et retransmis par MLV-10. Cette réparation
+concerne donc le remplissage du cache sur le premier lien, pas une
+réparation locale du lien atténué. La cause de la perte n’est pas établie.
+
+Les TX contrôleur/relais/cible sont respectivement 70/74/5 en 128 octets
+et 52/56/4 en 175 octets. Aucune erreur TX du pilote ni redémarrage n’est
+signalé ; les deux SHA-256 relus en flash sont conformes. Aucun firmware
+reçu n’est activé.
+
+Ces deux passages ne font apparaître aucune réparation locale vers la
+cible atténuée. Ils ne permettent pas de mesurer le point où les petits
+blocs deviendraient avantageux. Ils ne mesurent pas non plus l’atténuation
+effective du montage ni la marge RF disponible.
+
 ## Correction du calcul du temps d’antenne
 
 Les temps d’antenne des deux tableaux remplacent les premières estimations.
@@ -111,7 +146,11 @@ huit symboles, en-tête explicite et CRC actif. Les longueurs sont obtenues
 des traces d’émission et des formats d’ACK ; leurs nombres et leurs sommes
 d’octets concordent avec les compteurs de la cible et du relais. Le même
 calcul avec l’état LDRO périmé reproduit exactement leurs compteurs bruts
-pour les sept passages. Les traces originales sont conservées sans modification.
+pour les neuf passages. Pour le passage de 128 octets avec atténuateur,
+le cache ne retransmet qu’une fois chaque offset de données ; le doublon
+émis par le contrôleur reste compté sur son propre lien. Les nombres de
+trames et d’octets sont recoupés séparément pour les trois émetteurs.
+Les traces originales sont conservées sans modification.
 
 Le correctif applique le SF avant la bande passante pour actualiser aussi
 l’état de calcul de RadioLib. Il compile pour la cible, le relais et le
@@ -123,16 +162,17 @@ correction ne change ni les durées chronométrées ni les SHA-256 obtenus.
 
 Le banc peut maintenant servir aux séries comparatives décrites dans le
 [protocole d’évaluation](../../proposals/LORA_OTA_BLOCK_BENCH_fr.md).
-Les durées ci-dessus décrivent sept passages isolés, pas une distribution
+Les durées ci-dessus décrivent neuf passages isolés, pas une distribution
 statistique. Elles ne justifient pas un changement du bloc par défaut.
 
-Restent à comparer les tailles avec répétitions, à plus grande distance
-et sur des conditions RF documentées, en direct et par relais. Les petits
+Restent à comparer les tailles avec répétitions et plusieurs niveaux
+d’atténuation documentés, en direct et par relais. Une validation de portée
+sur un site éloigné reste distincte de cette campagne sur place. Les petits
 blocs peuvent devenir avantageux si les blocs longs demandent davantage de
 réparations ; ces essais ne déterminent pas ce seuil. Les bitmaps de douze octets,
 les reprises après panne avec blocs variables et une image complète dans
 cette nouvelle géométrie ne sont pas validés par cet essai.
 
 Les traces, résultats CSV/JSON, binaires et empreintes sont conservés dans
-`logs/block-smoke-20261101/` et `logs/block-relay-20261101/`, dossiers locaux
-ignorés par Git.
+`logs/block-smoke-20261101/`, `logs/block-relay-20261101/` et
+`logs/block-relay-pad-20261101/`, dossiers locaux ignorés par Git.

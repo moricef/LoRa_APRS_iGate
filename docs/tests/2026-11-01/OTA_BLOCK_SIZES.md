@@ -7,6 +7,7 @@ verification of the prefix read back from the inactive partition.
 A follow-up checks **128- and 175-byte blocks through one relay** using the
 same sample. These tests validate the benchmark; they do not determine
 the optimal size for a distant link.
+Both sizes are then tested again with an attenuator on MLV-15.
 
 ## Versions and setup
 
@@ -95,6 +96,40 @@ MLV-10 is on the same site as the other boards, at the end of its mast.
 This route through one relay is not a long-distance test and does not
 characterise a degraded link. No complete image is activated.
 
+## Follow-up with an attenuator on MLV-15
+
+The user inserted a π attenuator between MLV-15 and its antenna: two 51 Ω
+shunt resistors and an 820 Ω series resistor. The 50 Ω calculation gives
+30.665 dB; this value was not measured at 434.550 MHz. The attenuator was
+originally built for 431.975 MHz. Its insertion affects the MLV-10 ↔ MLV-15
+link in both directions.
+
+Same 8,192-byte file, binaries, route and profiles as the preceding test.
+No firmware flash or configuration change. One run per size, 175 then
+128 bytes; no injected loss.
+
+| Data block (bytes) | Duration without attenuator (s) | Duration with attenuator (s) | Recalculated aggregate airtime with attenuator (s) | Controller block retransmissions | Local repairs | SHA-256 |
+|---:|---:|---:|---:|---:|---:|---|
+| 128 | 50.30 | 51.43 | 48.12 | 1 | 0 | Match |
+| 175 | 45.12 | 45.11 | 42.49 | 0 | 0 | Match |
+
+The 128-byte run requested block index 8 of the first page, at offset
+1,024, from the controller. It was absent from the relay cache. Counters
+show 65 controller data transmissions for this size, but 64 blocks cached
+and retransmitted by MLV-10. This repair therefore concerns cache filling
+on the first link, rather than a local repair on the attenuated link.
+The cause of the loss has not been established.
+
+Controller/relay/target TX counts are 70/74/5 for 128-byte blocks and
+52/56/4 for 175-byte blocks. Neither run reports a driver TX error or a
+reboot; both SHA-256 hashes read back from flash match. No received
+firmware is activated.
+
+These two runs show no local repairs towards the attenuated target. They
+cannot establish where smaller blocks would become advantageous. They
+also measure neither the effective attenuation of the setup nor its
+remaining RF margin.
+
 ## Airtime calculation correction
 
 The airtimes in both tables replace the initial estimates. On SX1278 with
@@ -107,7 +142,10 @@ Corrected values are recalculated using the final profile, an eight-symbol
 preamble, explicit header and enabled CRC. Frame lengths come from TX traces
 and ACK formats; their counts and byte totals match target and relay
 counters. The same calculation with stale LDRO state reproduces their raw
-counters exactly for all seven runs. Original traces are retained unchanged.
+counters exactly for all nine runs. For the attenuated 128-byte run, the
+cache retransmits each data offset only once; the controller's duplicate
+remains counted on its own link. Frame counts and byte totals are checked
+separately for all three transmitters. Original traces are retained unchanged.
 
 The fix applies SF before bandwidth to refresh RadioLib's calculation state
 as well. Target, relay and bridge builds pass, as do the 34 Python tests.
@@ -119,16 +157,17 @@ verified SHA-256 hashes.
 
 The benchmark can now be used for the comparative series described in the
 [evaluation protocol](../../proposals/LORA_OTA_BLOCK_BENCH.md).
-The durations above describe seven individual runs, not a statistical
+The durations above describe nine individual runs, not a statistical
 distribution. They do not justify changing the default block size.
 
-Repeated comparisons at greater distances and under documented RF
-conditions, both directly and through a relay, remain to be done. Small
+Repeated comparisons at several documented attenuation levels, both
+directly and through a relay, remain to be done. Field range validation
+at a distant site is separate from this on-site campaign. Small
 blocks may become advantageous if long blocks require more repairs; these
 tests do not establish that threshold. Twelve-byte bitmaps, recovery
 after failures with variable blocks, and a full image using this new block
 geometry were not validated by this test.
 
 Traces, CSV/JSON results, binaries and fingerprints are retained in
-`logs/block-smoke-20261101/` and `logs/block-relay-20261101/`, local
-directories ignored by Git.
+`logs/block-smoke-20261101/`, `logs/block-relay-20261101/` and
+`logs/block-relay-pad-20261101/`, local directories ignored by Git.

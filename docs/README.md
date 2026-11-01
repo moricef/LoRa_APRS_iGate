@@ -63,7 +63,7 @@ spécification actuelle.
 | 31 octobre 2026 | [Reprises OTA sur quatre pages](tests/2026-10-31/OTA_RELAY_RESTART_fr.md) : cache perdu, groupe interrompu, acquittement perdu et coupure physique de la cible avec une page partielle |
 | 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset ; complément APRS signé et bail de 30 secondes |
 | 1 novembre 2026 | [Commandes RXT et profils OTA par radio](tests/2026-11-01/APRS_RXT_OTA_RF_fr.md) : tuples RXT ON/OFF, sauvegarde après reset, échanges sur profil temporaire et retours explicite, après silence et reset |
-| 1 novembre 2026 | [Blocs OTA variables](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md) · [English](tests/2026-11-01/OTA_BLOCK_SIZES.md) : cinq tailles en direct, 128/175 par un relais, 8 Ko vérifiés en flash ; temps d’antenne recalculés, contrôles fonctionnels sans choix d’une taille optimale |
+| 1 novembre 2026 | [Blocs OTA variables](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md) · [English](tests/2026-11-01/OTA_BLOCK_SIZES.md) : cinq tailles en direct, 128/175 par un relais avec et sans atténuateur, 8 Ko vérifiés en flash ; temps d’antenne recalculés, sans choix d’une taille optimale |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
