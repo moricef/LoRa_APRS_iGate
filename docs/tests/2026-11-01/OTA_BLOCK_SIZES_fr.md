@@ -163,7 +163,7 @@ les résultats à un niveau d’affaiblissement, il faut mesurer ce niveau.
 
 ## Vérification préliminaire par RSSI, avec puis sans le montage
 
-Deux requêtes APRS de version ont provoqué chacune un ACK et une réponse
+Trois requêtes APRS de version ont provoqué chacune un ACK et une réponse
 de GENATX (MLV-15), enregistrés par MLV-10. Le RSSI provient du récepteur
 de MLV-10, en filtrant l’émetteur GENATX et les réceptions récentes.
 La mesure utilise le profil normal du banc : **434,100 MHz, BW125, SF12,
@@ -172,10 +172,14 @@ OTA sur le profil rapide à 434,550 MHz.
 
 | Montage annoncé par l’utilisateur | RSSI ACK (dBm) | RSSI réponse de version (dBm) | SNR ACK / réponse (dB) |
 |---|---:|---:|---|
-| Atténuateur actuel en place | −86 | −86 | 10,75 / 8 |
+| Montage annoncé avec 8,2 kΩ en série | −86 | −86 | 10,75 / 8 |
 | Antenne raccordée directement, atténuateur retiré | −85 | −85 | 12,75 / 11,25 |
+| Montage annoncé avec 82 kΩ en série | −86 | −87 | 11,25 / 8,75 |
 
-L’écart observé est d’environ **1 dB**, pas de 50 dB. Il s’agit de deux
+L’écart moyen observé par rapport à l’antenne directe est d’environ
+**1 dB avec 8,2 kΩ et 1,5 dB avec 82 kΩ**. Le π idéal de 82 kΩ avec les
+deux 51 Ω donnerait environ 70 dB en 50 Ω ; ces relevés ne démontrent pas
+cet affaiblissement sur la liaison. Il s’agit de deux
 trames par condition, pas d’une caractérisation calibrée de l’atténuateur.
 Ces relevés ne démontrent pas un affaiblissement important de cette liaison
 par le montage actuel. Ils ne permettent pas d’en attribuer la cause à un

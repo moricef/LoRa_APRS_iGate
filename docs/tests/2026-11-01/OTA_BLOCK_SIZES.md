@@ -161,7 +161,7 @@ results to a particular signal reduction.
 
 ## Preliminary RSSI check, with and without the assembly
 
-Two APRS version queries each produced an ACK and a version reply from
+Three APRS version queries each produced an ACK and a version reply from
 GENATX (MLV-15), recorded by MLV-10. RSSI comes from the MLV-10 receiver,
 filtering for GENATX as the source and recent receptions. The measurement
 uses the normal laboratory profile: **434.100 MHz, BW125, SF12, CR4/5,
@@ -170,10 +170,14 @@ MLV-15 configured power 2 dBm**. These are not OTA frames on the fast
 
 | Setup reported by the user | ACK RSSI (dBm) | Version reply RSSI (dBm) | ACK / reply SNR (dB) |
 |---|---:|---:|---|
-| Current attenuator installed | −86 | −86 | 10.75 / 8 |
+| Assembly reported with an 8.2 kΩ series resistor | −86 | −86 | 10.75 / 8 |
 | Antenna connected directly, attenuator removed | −85 | −85 | 12.75 / 11.25 |
+| Assembly reported with an 82 kΩ series resistor | −86 | −87 | 11.25 / 8.75 |
 
-The observed difference is approximately **1 dB**, not 50 dB. There are
+The observed mean difference relative to the direct antenna connection is
+approximately **1 dB with 8.2 kΩ and 1.5 dB with 82 kΩ**. An ideal π using
+82 kΩ and the two 51 Ω resistors would give approximately 70 dB in 50 Ω;
+these readings do not demonstrate that weakening of the link. There are
 two frames per condition; this is not a calibrated attenuator
 characterisation. These readings do not demonstrate substantial weakening
 of this link by the current assembly. They cannot attribute the result to
