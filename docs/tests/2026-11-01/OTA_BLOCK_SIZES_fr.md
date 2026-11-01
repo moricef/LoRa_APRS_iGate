@@ -1,5 +1,7 @@
 # Blocs OTA variables : essai matériel du 1 novembre 2026
 
+[English](OTA_BLOCK_SIZES.md)
+
 Les cinq tailles essayées ont livré le même échantillon de **8 192 octets**,
 avec vérification SHA-256 du préfixe relu dans la partition inactive.
 Cet essai valide le fonctionnement du banc en liaison directe. Il ne

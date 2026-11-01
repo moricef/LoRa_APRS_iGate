@@ -1,5 +1,7 @@
 # Évaluer la taille des blocs OTA LoRa
 
+[English](LORA_OTA_BLOCK_BENCH.md)
+
 ## Question et critère
 
 Comparer le coût pour livrer et vérifier les mêmes octets, en direct puis
