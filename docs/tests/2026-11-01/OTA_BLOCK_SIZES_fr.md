@@ -161,6 +161,29 @@ une atténuation effective de 50,2 dB, ni une marge de réception, ni un seuil
 de distance où les petits blocs seraient préférables. Avant d’attribuer
 les résultats à un niveau d’affaiblissement, il faut mesurer ce niveau.
 
+## Vérification préliminaire par RSSI, avec puis sans le montage
+
+Deux requêtes APRS de version ont provoqué chacune un ACK et une réponse
+de GENATX (MLV-15), enregistrés par MLV-10. Le RSSI provient du récepteur
+de MLV-10, en filtrant l’émetteur GENATX et les réceptions récentes.
+La mesure utilise le profil normal du banc : **434,100 MHz, BW125, SF12,
+CR4/5, puissance configurée de MLV-15 2 dBm**. Ce ne sont pas les trames
+OTA sur le profil rapide à 434,550 MHz.
+
+| Montage annoncé par l’utilisateur | RSSI ACK (dBm) | RSSI réponse de version (dBm) | SNR ACK / réponse (dB) |
+|---|---:|---:|---|
+| Atténuateur actuel en place | −86 | −86 | 10,75 / 8 |
+| Antenne raccordée directement, atténuateur retiré | −85 | −85 | 12,75 / 11,25 |
+
+L’écart observé est d’environ **1 dB**, pas de 50 dB. Il s’agit de deux
+trames par condition, pas d’une caractérisation calibrée de l’atténuateur.
+Ces relevés ne démontrent pas un affaiblissement important de cette liaison
+par le montage actuel. Ils ne permettent pas d’en attribuer la cause à un
+composant précis : le chemin RF, le câblage et d’éventuels couplages restent
+à vérifier avant d’augmenter encore la résistance série.
+
+Traces et relevés : `logs/attenuator-rssi-20261101/`, conservés localement.
+
 ## Correction du calcul du temps d’antenne
 
 Les temps d’antenne des deux tableaux remplacent les premières estimations.

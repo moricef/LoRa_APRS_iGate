@@ -159,6 +159,29 @@ of 50.2 dB, nor a reception margin, nor a distance threshold favouring
 smaller blocks. The attenuation must be measured before attributing the
 results to a particular signal reduction.
 
+## Preliminary RSSI check, with and without the assembly
+
+Two APRS version queries each produced an ACK and a version reply from
+GENATX (MLV-15), recorded by MLV-10. RSSI comes from the MLV-10 receiver,
+filtering for GENATX as the source and recent receptions. The measurement
+uses the normal laboratory profile: **434.100 MHz, BW125, SF12, CR4/5,
+MLV-15 configured power 2 dBm**. These are not OTA frames on the fast
+434.550 MHz profile.
+
+| Setup reported by the user | ACK RSSI (dBm) | Version reply RSSI (dBm) | ACK / reply SNR (dB) |
+|---|---:|---:|---|
+| Current attenuator installed | −86 | −86 | 10.75 / 8 |
+| Antenna connected directly, attenuator removed | −85 | −85 | 12.75 / 11.25 |
+
+The observed difference is approximately **1 dB**, not 50 dB. There are
+two frames per condition; this is not a calibrated attenuator
+characterisation. These readings do not demonstrate substantial weakening
+of this link by the current assembly. They cannot attribute the result to
+a specific component: the RF path, wiring and possible coupling still need
+checking before increasing the series resistance further.
+
+Traces and readings: `logs/attenuator-rssi-20261101/`, retained locally.
+
 ## Airtime calculation correction
 
 The airtimes in both tables replace the initial estimates. On SX1278 with
