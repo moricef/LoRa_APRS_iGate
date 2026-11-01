@@ -1,5 +1,7 @@
 # Flasher une cible par LoRa : mode opératoire
 
+[PDF français](LORA_OTA_GUIDE_fr.pdf) · [English PDF](LORA_OTA_GUIDE.pdf)
+
 [English](LORA_OTA_GUIDE.md)
 
 Guide de la branche expérimentale `experiment/lora-ota`, vérifié contre

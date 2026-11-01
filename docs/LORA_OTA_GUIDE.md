@@ -1,5 +1,7 @@
 # Flashing a target over LoRa: operator guide
 
+[English PDF](LORA_OTA_GUIDE.pdf) · [PDF français](LORA_OTA_GUIDE_fr.pdf)
+
 [Français](LORA_OTA_GUIDE_fr.md)
 
 For experimental branch `experiment/lora-ota`, checked against
