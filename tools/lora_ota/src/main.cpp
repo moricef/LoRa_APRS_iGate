@@ -105,8 +105,9 @@ void reply(const uint8_t* request,Status status) {
 bool applyBridgeProfile(const RadioProfile& p) {
     radio.standby();
     bool ok=radio.setFrequency(float(p.frequencyHz)/1000000.0f)==RADIOLIB_ERR_NONE;
-    ok=(radio.setBandwidth(float(p.bandwidthHz)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
     ok=(radio.setSpreadingFactor(p.sf)==RADIOLIB_ERR_NONE) && ok;
+    // Keep the SX1278 RadioLib LDRO cache aligned with the final SF/BW.
+    ok=(radio.setBandwidth(float(p.bandwidthHz)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
     ok=(radio.setCodingRate(p.cr)==RADIOLIB_ERR_NONE) && ok;
     ok=(radio.setOutputPower(p.power)==RADIOLIB_ERR_NONE) && ok;
     return ok;

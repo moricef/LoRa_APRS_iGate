@@ -4,8 +4,9 @@
 
 All five block sizes delivered the same **8,192-byte sample**, with SHA-256
 verification of the prefix read back from the inactive partition.
-This test validates the benchmark on a direct link. It does not determine
-the optimal size for a distant or relayed link.
+A follow-up checks **128- and 175-byte blocks through one relay** using the
+same sample. These tests validate the benchmark; they do not determine
+the optimal size for a distant link.
 
 ## Versions and setup
 
@@ -31,15 +32,15 @@ SHA-256 of the application binary running on the target:
 The ELF fingerprint reported over radio matches the one in the saved binary:
 `a01331388424317447a7005f59dbd8b2b78357ae88dba8a58d8a8086180e50b7`.
 
-## Observations
+## Direct-link observations
 
 | Data block (bytes) | Bitmap (bytes) | Duration (s) | Calculated aggregate airtime (s) | Retransmitted blocks | SHA-256 |
 |---:|---:|---:|---:|---:|---|
-| 32 | 16 | 45.84 | 41.70 | 1 | Match |
-| 96 | 8 | 25.28 | 23.56 | 1 | Match |
-| 128 | 4 | 22.02 | 20.63 | 0 | Match |
-| 175 | 4 | 19.89 | 18.70 | 0 | Match |
-| 204 | 4 | 19.39 | 18.28 | 0 | Match |
+| 32 | 16 | 45.84 | 41.49 | 1 | Match |
+| 96 | 8 | 25.28 | 23.35 | 1 | Match |
+| 128 | 4 | 22.02 | 20.47 | 0 | Match |
+| 175 | 4 | 19.89 | 18.54 | 0 | Match |
+| 204 | 4 | 19.39 | 18.12 | 0 | Match |
 
 Timing starts before WINDOW_START and ends after verification in flash.
 Initial negotiation, return to the normal profile and session closure are
@@ -63,17 +64,71 @@ The sample verifier neither validated a complete firmware image nor
 requested activation. Each success covers only the 8,192 bytes written and
 read back, equivalent to two flash pages.
 
+## Follow-up through MLV-10
+
+Selected route: **MLV-2 → MLV-10 → MLV-15**. The relay runs the
+`ttgo-lora32-v21-ota-relay` variant, rebuilt from `482c6a1`; the target,
+bridge and sample are identical to the direct test. The transfer profile
+remains 434.550 MHz/BW250/SF8/CR4/6, with requested power of 3 dBm.
+Target Wi-Fi remains disabled.
+
+Relay ELF fingerprint, checked through its diagnostic interface:
+`08af58e8e0e37f237a402c6f58a6f2e971d8e75275da45199563f5da9191d9ce`.
+
+One run per size, 175 then 128 bytes. Each run starts from zero and checks
+the same SHA-256 of 8,192 bytes read back from flash. The relay cache
+receives a page, retransmits it to the target, then returns its
+acknowledgement. Blocks and acknowledgements travel over radio; management
+Wi-Fi is used to read the relay counters.
+
+| Data block (bytes) | Duration (s) | Calculated aggregate airtime (s) | Controller / relay / target TX | Controller block retransmissions | Local repairs | SHA-256 |
+|---:|---:|---:|---|---:|---:|---|
+| 128 | 50.30 | 47.14 | 68 / 72 / 4 | 0 | 0 | Match |
+| 175 | 45.12 | 42.49 | 52 / 56 / 4 | 0 | 0 | Match |
+
+Neither run reports a target or relay reboot or a radio driver TX error.
+They verify 175-byte blocks with the relay envelope, producing 255-byte
+frames, and shorter blocks at page ends. They do not exercise local
+repairs, since none were needed.
+
+MLV-10 is on the same site as the other boards, at the end of its mast.
+This route through one relay is not a long-distance test and does not
+characterise a degraded link. No complete image is activated.
+
+## Airtime calculation correction
+
+The airtimes in both tables replace the initial estimates. On SX1278 with
+RadioLib 7.6.0, the BW125/SF12 → BW250/SF8 transition applied bandwidth
+before SF. When changing SF, the library correctly disabled LDRO in the
+hardware register, but retained an old value in the state used by
+`getTimeOnAir()`. The counters therefore overestimated transmission time.
+
+Corrected values are recalculated using the final profile, an eight-symbol
+preamble, explicit header and enabled CRC. Frame lengths come from TX traces
+and ACK formats; their counts and byte totals match target and relay
+counters. The same calculation with stale LDRO state reproduces their raw
+counters exactly for all seven runs. Original traces are retained unchanged.
+
+The fix applies SF before bandwidth to refresh RadioLib's calculation state
+as well. Target, relay and bridge builds pass, as do the 34 Python tests.
+This fix was not flashed during these tests: its counters still need a
+hardware check. The correction changes neither measured durations nor
+verified SHA-256 hashes.
+
 ## Scope and next steps
 
 The benchmark can now be used for the comparative series described in the
 [evaluation protocol](../../proposals/LORA_OTA_BLOCK_BENCH.md).
-The durations above describe five individual runs, not a statistical
+The durations above describe seven individual runs, not a statistical
 distribution. They do not justify changing the default block size.
 
-Repeated comparisons under documented RF conditions, followed by tests with
-the intermediate relay, remain to be done. Twelve-byte bitmaps, recovery
+Repeated comparisons at greater distances and under documented RF
+conditions, both directly and through a relay, remain to be done. Small
+blocks may become advantageous if long blocks require more repairs; these
+tests do not establish that threshold. Twelve-byte bitmaps, recovery
 after failures with variable blocks, and a full image using this new block
 geometry were not validated by this test.
 
 Traces, CSV/JSON results, binaries and fingerprints are retained in
-`logs/block-smoke-20261101/`, a local directory ignored by Git.
+`logs/block-smoke-20261101/` and `logs/block-relay-20261101/`, local
+directories ignored by Git.

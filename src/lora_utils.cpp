@@ -790,8 +790,10 @@ namespace LoRa_Utils {
     static bool applyOtaProfile(const labota::RadioProfile& p,bool power) {
         bool ok=radio.standby()==RADIOLIB_ERR_NONE;
         ok=(radio.setFrequency(float(p.frequencyHz)/1000000.0f)==RADIOLIB_ERR_NONE) && ok;
-        ok=(radio.setBandwidth(float(p.bandwidthHz)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
         ok=(radio.setSpreadingFactor(p.sf)==RADIOLIB_ERR_NONE) && ok;
+        // SX1278 RadioLib 7.6 refreshes its LDRO cache in setBandwidth,
+        // but not in setSpreadingFactor. Apply BW last for accurate airtime.
+        ok=(radio.setBandwidth(float(p.bandwidthHz)/1000.0f)==RADIOLIB_ERR_NONE) && ok;
         ok=(radio.setCodingRate(p.cr)==RADIOLIB_ERR_NONE) && ok;
         if(power)ok=(radio.setOutputPower(p.power)==RADIOLIB_ERR_NONE) && ok;
         return ok;

@@ -11,8 +11,11 @@ claimed before measurements.
 
 This protocol and its benchmark are implemented on the OTA branch.
 A [hardware test on 1 November](../tests/2026-11-01/OTA_BLOCK_SIZES.md)
-validates five sizes directly, using the same 8 KiB sample and SHA-256
-verification in flash. It does not replace the comparative matrix below.
+validates five sizes directly, then 128- and 175-byte blocks through one
+relay, using the same 8 KiB sample and SHA-256 verification in flash.
+Airtimes were recalculated after identifying stale LDRO state in RadioLib's
+calculation; the report distinguishes these values from raw counters.
+These tests do not replace the comparative matrix below.
 Previous full-image transfers and hardware recovery tests used 128-byte
 blocks.
 
@@ -144,6 +147,11 @@ configurations, keys and complete flash contents before installation.
 Choose the setup and profiles before flashing. The inventory distinguishes
 radio identities from management access; MLV-10 is at the end of its mast,
 not a board whose USB connection can be assumed available.
+
+Keep the laboratory firmware installed throughout the campaign. Temporary
+management access loss pauses the work; it does not trigger restoration or
+another flash. Board restoration is a separate operation, after the tests
+or when requested.
 
 ```bash
 pio run -e ttgo-lora32-v21-ota-a -e ttgo-lora32-v21-ota-relay

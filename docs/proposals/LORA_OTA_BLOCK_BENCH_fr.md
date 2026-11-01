@@ -11,8 +11,11 @@ Aucune taille optimale n'est annoncée avant les mesures.
 
 Le protocole décrit ici et son banc sont implémentés sur la branche OTA.
 Un [essai matériel du 1 novembre](../tests/2026-11-01/OTA_BLOCK_SIZES_fr.md)
-valide cinq tailles en direct sur le même échantillon de 8 Ko, avec contrôle
-SHA-256 en flash. Il ne remplace pas la matrice comparative ci-dessous.
+valide cinq tailles en direct, puis 128 et 175 octets par un relais, sur
+le même échantillon de 8 Ko avec contrôle SHA-256 en flash. Les temps
+d’antenne ont été recalculés après identification d’un état LDRO périmé
+dans le calcul RadioLib ; le rapport distingue ces valeurs des compteurs
+bruts. Ces essais ne remplacent pas la matrice comparative ci-dessous.
 Les transferts complets et reprises matériels précédents utilisaient les
 blocs de 128 octets.
 
@@ -151,6 +154,11 @@ Sauvegarder leurs configurations, leurs clés et leurs flashs avant toute
 installation. Choisir le montage de test et ses profils avant de flasher.
 L'inventaire distingue les identités radio et les accès de gestion ; MLV-10
 est au bout de son mât, et non une carte dont on suppose l'USB disponible.
+
+Conserver les firmwares de banc pendant la campagne. Une indisponibilité
+temporaire de l’accès de gestion met le travail en attente ; elle ne
+déclenche pas de restauration ni de nouveau flash. La restauration des
+cartes est une opération séparée, après les essais ou sur demande.
 
 ```bash
 pio run -e ttgo-lora32-v21-ota-a -e ttgo-lora32-v21-ota-relay
