@@ -56,6 +56,7 @@ spécification actuelle.
 | 30 octobre 2026 | [OTA LoRa avec la cible sans Wi-Fi](tests/2026-10-30/OTA_LORA_fr.md) : image complète, confirmation radio et retours arrière en direct puis par F4MLV-10 |
 | 31 octobre 2026 | [Reprises OTA sur quatre pages](tests/2026-10-31/OTA_RELAY_RESTART_fr.md) : cache perdu, groupe interrompu, acquittement perdu et coupure physique de la cible avec une page partielle |
 | 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset ; complément APRS signé et bail de 30 secondes |
+| 1 novembre 2026 | [Commandes RXT et profils OTA par radio](tests/2026-11-01/APRS_RXT_OTA_RF_fr.md) : tuples RXT ON/OFF, sauvegarde après reset, échanges sur profil temporaire et retours explicite, après silence et reset |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
@@ -64,8 +65,8 @@ secrets et ne doivent pas être publiées.
 
 Les commandes APRS signées du profil OTA sont décrites dans la
 [proposition OTA](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--premier-essai-radio).
-Un premier essai vérifie les réponses, la préparation et les événements de
-bascule/retour ; les échanges sur le profil temporaire restent à tester.
+Les essais du 1 novembre vérifient les échanges sur le profil temporaire
+et les retours explicite, après silence et après reset en liaison directe.
 
 ## Présentations et archives
 

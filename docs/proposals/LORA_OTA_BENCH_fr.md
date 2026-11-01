@@ -411,9 +411,11 @@ Le parseur et les bornes ont des tests sur hôte. Les builds OTA et le build
 standard sont vérifiés avant publication. Le [complément du 31 octobre](../tests/2026-10-31/OTA_RF_PROFILES_fr.md#complément--commandes-aprs-signées-depuis-graywolf)
 vérifie les réponses aux commandes signées, la préparation du profil et les
 événements de bascule puis de retour automatique à 30,001 secondes. Les
-échanges RF sur le profil temporaire et le retour explicite par APRS restent
-à tester. Le transfert de quatre pages rapporté plus haut utilise la
-négociation RF binaire.
+échanges RF sur le profil temporaire et le retour explicite par APRS ont
+ensuite été vérifiés le [1 novembre](../tests/2026-11-01/APRS_RXT_OTA_RF_fr.md),
+avec le retour après silence et après reset, en liaison directe. Le même
+essai vérifie les tuples RXT ON/OFF et leur sauvegarde explicite. Le transfert
+de quatre pages rapporté plus haut utilise la négociation RF binaire.
 
 ## Groupes de blocs, cache du relais et reprise persistante
 
