@@ -1,5 +1,6 @@
 #pragma once
 #include "session.h"
+#include "window_geometry.h"
 #include <algorithm>
 
 namespace labota {
@@ -29,7 +30,9 @@ struct WindowSession {
     WindowStore& store;
     WindowManifest manifest;
     State state=IDLE;
-    uint32_t written=0,bits=0;
+    uint32_t written=0;
+    WindowBits bits;
+    WindowGeometry geometry;
     uint8_t buffer[PAGE_BYTES]{};
     explicit WindowSession(WindowStore& s):store(s) {}
     static uint32_t mask(uint32_t bytes) {
@@ -39,15 +42,16 @@ struct WindowSession {
     uint32_t pageSize(uint32_t base) const {
         return base<manifest.size?std::min(PAGE_BYTES,manifest.size-base):0;
     }
-    uint32_t bitmap(uint32_t base) const {
+    WindowBits bitmap(uint32_t base) const {
         if(base%PAGE_BYTES || base>=manifest.size)return 0;
-        return base<written?mask(pageSize(base)):base==written?bits:0;
+        return base<written?geometry.mask(pageSize(base)):base==written?bits:WindowBits();
     }
     Status start(const uint8_t* data,size_t n) {
-        if(n!=40 || get32(data+36)!=BOARD)return FORMAT;
+        WindowGeometry wantedGeometry;
+        if(!WindowGeometry::fromManifest(data,n,wantedGeometry) || get32(data+36)!=BOARD)return FORMAT;
         WindowManifest wanted;wanted.size=get32(data);memcpy(wanted.sha,data+4,32);
         if(!wanted.size || wanted.size>store.capacity())return FORMAT;
-        if(state!=IDLE)return manifest.same(wanted)?OK:BUSY;
+        if(state!=IDLE)return manifest.same(wanted) && geometry.chunk==wantedGeometry.chunk?OK:BUSY;
         WindowManifest saved;uint32_t committed=0;
         if(store.load(saved,committed)) {
             if(!saved.same(wanted))return BUSY; // explicit abort is required to replace an image
@@ -56,19 +60,20 @@ struct WindowSession {
             committed=0;
             if(!store.checkpoint(wanted,0))return STORAGE;
         }
-        manifest=wanted;written=committed;bits=0;state=RECEIVING;
+        manifest=wanted;geometry=wantedGeometry;written=committed;bits=0;state=RECEIVING;
         memset(buffer,0xff,sizeof buffer);return OK;
     }
     Status data(uint32_t offset,const uint8_t* bytes,size_t n) {
         if(state!=RECEIVING)return ORDER;
-        if(offset%WINDOW_CHUNK || offset>=manifest.size ||
-           n!=std::min(WINDOW_CHUNK,manifest.size-offset))return FORMAT;
+        uint32_t inPage=offset%PAGE_BYTES;
+        if(inPage%geometry.chunk || offset>=manifest.size ||
+           n!=std::min(uint32_t(geometry.chunk),std::min(manifest.size-offset,PAGE_BYTES-inPage)))return FORMAT;
         if(offset<written)return n<=written-offset && store.same(offset,bytes,n)?OK:ORDER;
         if(offset-written>=PAGE_BYTES)return ORDER;
-        uint32_t index=(offset-written)/WINDOW_CHUNK,bit=uint32_t(1)<<index;
-        if(bits&bit)return !memcmp(buffer+index*WINDOW_CHUNK,bytes,n)?OK:ORDER;
-        memcpy(buffer+index*WINDOW_CHUNK,bytes,n);bits|=bit;
-        if(bits==mask(pageSize(written))) {
+        uint32_t index=(offset-written)/geometry.chunk;
+        if(bits.test(index))return !memcmp(buffer+index*geometry.chunk,bytes,n)?OK:ORDER;
+        memcpy(buffer+index*geometry.chunk,bytes,n);bits.set(index);
+        if(bits==geometry.mask(pageSize(written))) {
             uint32_t end=written+pageSize(written);
             if(!store.page(written,buffer,pageSize(written)) || !store.checkpoint(manifest,end)) {
                 // Retry must rewrite the entire page, never advertise an uncommitted page.
@@ -91,8 +96,8 @@ struct WindowSession {
     }
     Status discard() {
         if(!store.discard())return STORAGE;
-        state=IDLE;manifest={};written=bits=0;return OK;
+        state=IDLE;manifest={};written=0;bits=0;return OK;
     }
-    void suspend() {state=IDLE;manifest={};written=bits=0;}
+    void suspend() {state=IDLE;manifest={};written=0;bits=0;}
 };
 }

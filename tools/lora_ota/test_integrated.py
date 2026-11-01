@@ -27,7 +27,7 @@ class WireTests(unittest.TestCase):
         self.assertIsNone(self.decode(self.reply(p[:6]+b'\2'+p[7:])))
     def test_explicit_busy_status_is_accepted_only_when_requested(self):
         payload=bytes([WINDOW_QUERY,5])+struct.pack('>II',8192,0)
-        client=Client.__new__(Client)
+        client=Client.__new__(Client);client.event=Mock();client.fast=False
         client.key,client.source,client.target,client.nonce=self.key,self.source,self.target,self.nonce
         client.route=None;client.default_timeout=1;client.serial=Mock()
         client.serial.readline.return_value=b'RX '+self.reply(payload).hex().encode()

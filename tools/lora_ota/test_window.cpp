@@ -77,5 +77,68 @@ int main() {
     assert(cache.put(f,sizeof f));f[35]++;assert(!cache.put(f,sizeof f));f[35]--;
     put32(f+13,PAGE_BYTES);assert(cache.put(f,sizeof f) && cache.available(0,f+5)==0);
     f[5]++;assert(cache.available(PAGE_BYTES,f+5)==0);
+    // Extended layouts: preserve 4 KiB atomic pages, including sizes that do
+    // not divide a page. Exercise bits above 31/63/95, tails, and relay slots.
+    for(unsigned chunk:{32u,48u,64u,96u,128u,160u,175u,192u,204u}) {
+        MemoryPages memory;WindowSession dynamic(memory);
+        uint8_t extended[42]{};memcpy(extended,manifest,40);
+        extended[40]=uint8_t(chunk>>8);extended[41]=uint8_t(chunk);
+        assert(dynamic.start(extended,42)==OK && dynamic.geometry.chunk==chunk);
+        uint8_t wire[16]{};auto all=dynamic.geometry.mask(PAGE_BYTES);
+        all.encode(wire,dynamic.geometry.bitmapBytes());
+        assert(WindowBits::decode(wire,dynamic.geometry.bitmapBytes())==all);
+        for(uint32_t base=0;base<size;base+=PAGE_BYTES) {
+            unsigned length=std::min(PAGE_BYTES,size-base),count=dynamic.geometry.count(length);
+            for(int i=int(count)-2;i>=0;--i) {
+                auto off=base+unsigned(i)*chunk;
+                assert(dynamic.data(off,image.data()+off,std::min(chunk,length-unsigned(i)*chunk))==OK);
+            }
+            assert(dynamic.written==base && dynamic.bitmap(base).count()==count-1);
+            if(count>1) {
+                assert(dynamic.data(base,image.data()+base,std::min(chunk,length))==OK);
+                std::vector<uint8_t> bad(image.begin()+base,image.begin()+base+std::min(chunk,length));bad[0]^=1;
+                assert(dynamic.data(base,bad.data(),bad.size())==ORDER);
+            }
+            unsigned last=count-1,off=base+last*chunk;
+            assert(dynamic.data(off,image.data()+off,length-last*chunk)==OK);
+            assert(dynamic.written==base+length);
+        }
+        assert(memory.writes==3 && !memcmp(memory.flash.data(),image.data(),size));
+        assert(dynamic.finish()==OK && !memory.boot);
+        if(chunk<=175) {
+            PageCache slots;slots.geometry=dynamic.geometry;
+            for(unsigned index=0;index<slots.geometry.count();++index) {
+                uint32_t off=PAGE_BYTES+index*chunk;
+                unsigned length=std::min(chunk,PAGE_BYTES-index*chunk);
+                uint8_t frame[255]{};memcpy(frame,"\x3c\xff\x7e\x02",4);frame[4]=WINDOW_DATA;
+                frame[5]=7;put32(frame+13,off);frame[18]=length;
+                memcpy(frame+35,image.data()+off,length);
+                for(unsigned j=0;j<16;++j)frame[35+length+j]=uint8_t(index+j);
+                assert(slots.put(frame,51+length));
+                uint8_t copy[255];assert(slots.frame(index,copy)==51+length && !memcmp(copy,frame,51+length));
+                assert(slots.put(frame,51+length));frame[35]^=1;assert(!slots.put(frame,51+length));
+            }
+            uint8_t nonce[8]={7};auto available=slots.available(PAGE_BYTES,nonce);
+            assert(available==slots.geometry.mask(PAGE_BYTES));
+            for(unsigned i=0;i<slots.geometry.count();++i)assert(available.popFirst()==i);
+            assert(!available);
+        }
+    }
+    MemoryPages invalidStore;WindowSession invalid(invalidStore);uint8_t badManifest[42]{};
+    memcpy(badManifest,manifest,40);badManifest[41]=31;
+    assert(invalid.start(badManifest,42)==FORMAT && !invalidStore.saved);
+    badManifest[41]=205;assert(invalid.start(badManifest,42)==FORMAT);
+    assert(invalid.start(badManifest,41)==FORMAT);
+    // A page checkpoint is independent of block geometry after a fresh session.
+    MemoryPages changed;changed.saved=true;changed.record.size=size;changed.record.sha[0]=42;
+    changed.committed=PAGE_BYTES;memcpy(changed.flash.data(),image.data(),PAGE_BYTES);
+    badManifest[41]=175;WindowSession different(changed);
+    assert(different.start(badManifest,42)==OK && different.written==PAGE_BYTES);
+    for(uint32_t base=PAGE_BYTES;base<size;base+=PAGE_BYTES)
+        for(unsigned off=0;off<std::min(PAGE_BYTES,size-base);off+=175) {
+            auto length=std::min(175u,std::min(PAGE_BYTES,size-base)-off);
+            assert(different.data(base+off,image.data()+base+off,length)==OK);
+        }
+    assert(different.finish()==OK && !memcmp(changed.flash.data(),image.data(),size));
     puts("window: reorder, loss, duplicates, atomic page checkpoint, interrupted flash/journal, restart, image binding and relay cache passed");
 }

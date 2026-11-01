@@ -38,6 +38,10 @@ relais, avec conservation des pages durables et refus d'activer l'image incompl�
 Le profil temporaire peut être choisi et activé par commande RF authentifiée ;
 un essai court vérifie ce changement et le retour au profil habituel.
 
+[Évaluation de la taille des blocs OTA](proposals/LORA_OTA_BLOCK_BENCH_fr.md) :
+protocole comparatif, tailles négociées, mesures CSV/JSON et limites ; banc
+logiciel à valider sur les cartes avant de lancer la matrice RF.
+
 ## Comptes rendus d’essais
 
 Chaque compte rendu est daté. Ses conclusions restent limitées aux versions,

@@ -46,10 +46,11 @@ void executeFault(uint32_t value) {
     if(saved)ESP.restart();else ++faultStorageErrors;
 }
 #endif
-uint32_t queuedBlocks=0,queryMask=0;
-uint8_t queuedQuery[55]{};size_t queuedQuerySize=0;
+labota::WindowBits queuedBlocks,queryMask;
+uint8_t queuedQuery[67]{};size_t queuedQuerySize=0;
 uint8_t repairRound=0;
-uint32_t knownBase=0,knownBits=0,nextCacheSend=0;
+uint32_t knownBase=0,nextCacheSend=0;
+labota::WindowBits knownBits;
 uint8_t knownNonce[8]{};
 std::atomic<uint32_t> cacheHits{0},cachedBlocks{0};
 std::atomic<uint32_t> localRepairBlocks{0};
@@ -158,8 +159,9 @@ void tick() {
     if(active && queuedQuerySize && int32_t(now-nextCacheSend)>=0) {
         uint8_t out[255];size_t count=0;
         if(queuedBlocks) {
-            unsigned index=__builtin_ctz(queuedBlocks);queuedBlocks&=~(uint32_t(1)<<index);
-            count=encode(routeota::RELAY_TARGET,cache.frames[index],cache.lengths[index],out);
+            unsigned index=queuedBlocks.popFirst();
+            uint8_t inner[255];size_t size=cache.frame(index,inner);
+            count=size?encode(routeota::RELAY_TARGET,inner,size,out):0;
             ++cacheHits;
         } else {
             count=encode(routeota::RELAY_TARGET,queuedQuery,queuedQuerySize,out);
@@ -220,13 +222,18 @@ bool handle(const uint8_t* f,size_t n) {
 #ifdef RFOTA_ROUTE_DIAGNOSTICS
         if(expectedOp==6 || expectedOp==labota::WINDOW_START)fault.clear();
 #endif
-        if(expectedOp==6 || expectedOp==labota::WINDOW_START)cache.clear();
+        if(expectedOp==6 || expectedOp==labota::WINDOW_START) {cache.clear();queuedQuerySize=0;queuedBlocks=0;knownBits=0;}
+        if(expectedOp==labota::WINDOW_START) {
+            labota::WindowGeometry wanted;
+            if(!labota::WindowGeometry::fromManifest(inner+35,v.size-51,wanted) || wanted.chunk>routeota::CHUNK) {++wrongPhase;return true;}
+            cache.geometry=wanted;
+        }
         if(expectedOp==labota::WINDOW_DATA) {
             if(cache.put(inner,v.size))++cachedBlocks;else ++wrongPhase;
             return true;
         }
-        if(expectedOp==labota::WINDOW_QUERY && v.size==55) {
-            queryMask=labota::get32(inner+35);repairRound=0;
+        if(expectedOp==labota::WINDOW_QUERY && v.size==51+cache.geometry.bitmapBytes()) {
+            queryMask=labota::WindowBits::decode(inner+35,cache.geometry.bitmapBytes());repairRound=0;
             if(knownBase!=expectedOffset || memcmp(knownNonce,expectedNonce,8)) {
                 knownBase=expectedOffset;memcpy(knownNonce,expectedNonce,8);knownBits=0;
             }
@@ -241,20 +248,20 @@ bool handle(const uint8_t* f,size_t n) {
               inner[4]==128 && v.size>=57 && inner[35]==expectedOp && labota::get32(inner+13)==expectedOffset &&
               (expectedOp==6 || !memcmp(inner+5,expectedNonce,8))) {
         lastPacket=millis();profile.activity(lastPacket);
-        if(expectedOp==labota::WINDOW_QUERY && v.size==61 && inner[36]==0) {
-            knownBits=labota::get32(inner+41);
+        if(expectedOp==labota::WINDOW_QUERY && v.size==57+cache.geometry.bitmapBytes() && inner[36]==0) {
+            knownBits=labota::WindowBits::decode(inner+41,cache.geometry.bitmapBytes());
 #ifdef RFOTA_ROUTE_DIAGNOSTICS
             uint32_t written=labota::get32(inner+37);
-            if(fault.afterBitmap(expectedOffset,expectedNonce,written,knownBits)) {
+            if(fault.afterBitmap(expectedOffset,expectedNonce,written,knownBits.words[0])) {
                 executeFault(written);
                 return true; // never forward this committed-page ACK to the controller
             }
 #endif
-            uint32_t missing=queryMask&~knownBits;
-            uint32_t local=missing&cache.available(expectedOffset,expectedNonce);
+            labota::WindowBits missing=queryMask&~knownBits;
+            labota::WindowBits local=missing&cache.available(expectedOffset,expectedNonce);
             if(local && repairRound<3) {
-                localRepairBlocks+=__builtin_popcount(local);
-                ++repairRound;queuedBlocks=local;queuedQuerySize=55;nextCacheSend=millis()+10;
+                localRepairBlocks+=local.count();
+                ++repairRound;queuedBlocks=local;queuedQuerySize=51+cache.geometry.bitmapBytes();nextCacheSend=millis()+10;
                 return true; // repair locally before involving the controller
             }
         }
@@ -279,6 +286,8 @@ void setupWeb(AsyncWebServer* server) {
         d["local_repair_blocks"]=localRepairBlocks.load();
         d["profile_rejections"]=profileRejections.load();
         d["boot_id"]=bootId;d["uptime_ms"]=millis();
+        auto tx=LoRa_Utils::otaTxStats();d["window_geometry"]=2;d["max_chunk"]=routeota::CHUNK;d["tx_frames"]=tx.frames;d["tx_bytes"]=tx.bytes;
+        d["tx_airtime_us"]=tx.airtimeUs;d["tx_errors_radio"]=tx.errors;
 #ifdef RFOTA_ROUTE_DIAGNOSTICS
         d["fault_mode"]=faultMode;d["fault_base"]=faultBase;d["fault_value"]=faultValue;
         d["armed_fault_mode"]=fault.mode;d["armed_fault_base"]=fault.base;d["fault_forwarded"]=fault.forwarded;

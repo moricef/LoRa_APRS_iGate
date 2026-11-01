@@ -807,6 +807,16 @@ namespace LoRa_Utils {
         otaFastProfile=fast;otaPowerChanged=fast && otaCustomProfile;
         return ok;
     }
+    static OtaTxStats otaTxTotals;
+    static portMUX_TYPE otaStatsMux=portMUX_INITIALIZER_UNLOCKED;
+    OtaTxStats otaTxStats() {
+        portENTER_CRITICAL(&otaStatsMux);OtaTxStats copy=otaTxTotals;portEXIT_CRITICAL(&otaStatsMux);return copy;
+    }
+    static bool isOtaStatsRead(const uint8_t* frame,size_t size) {
+        if(size>=80 && !memcmp(frame,"\x3c\xff\x7d\x01",4)) {frame+=13;size-=29;}
+        return size>=51 && !memcmp(frame,"\x3c\xff\x7e\x02",4) &&
+            (frame[4]==25 || (frame[4]==128 && size>=57 && frame[35]==25));
+    }
     bool sendOtaFrame(const uint8_t* frame,size_t size,bool channelAccess) {
         uint8_t routed[255];
         if(RF_ROUTE::routedReply()) {
@@ -819,7 +829,14 @@ namespace LoRa_Utils {
             if(!otaFastProfile)changeFreqRx();
             operationDone=false;transmitFlag=false;radio.startReceive();return false;
         }
+        uint32_t estimatedAir=radio.getTimeOnAir(size);
         int result=radio.transmit(const_cast<uint8_t*>(frame),size);
+        if(!isOtaStatsRead(frame,size)) {
+            portENTER_CRITICAL(&otaStatsMux);
+            if(result==RADIOLIB_ERR_NONE) {++otaTxTotals.frames;otaTxTotals.bytes+=size;otaTxTotals.airtimeUs+=estimatedAir;}
+            else ++otaTxTotals.errors;
+            portEXIT_CRITICAL(&otaStatsMux);
+        }
         if (!otaFastProfile) changeFreqRx();
         operationDone=false;
         transmitFlag=false;

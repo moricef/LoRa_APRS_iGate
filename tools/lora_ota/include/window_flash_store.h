@@ -59,8 +59,11 @@ public:
             esp_partition_write(partition,offset,data,n)==ESP_OK;
     }
     bool same(uint32_t offset,const uint8_t* data,size_t n) override {
-        uint8_t back[WINDOW_CHUNK];return partition && n<=sizeof back &&
+        uint8_t back[WindowGeometry::MAX_CHUNK];return partition && n<=sizeof back &&
             esp_partition_read(partition,offset,back,n)==ESP_OK && !memcmp(data,back,n);
+    }
+    bool verifySample(const WindowManifest& manifest) {
+        uint8_t sha[32];return hashPartition(partition,manifest.size,sha) && !memcmp(sha,manifest.sha,32);
     }
     bool finish(const WindowManifest& manifest) override {
         uint8_t sha[32];if(!hashPartition(partition,manifest.size,sha)||memcmp(sha,manifest.sha,32))return false;

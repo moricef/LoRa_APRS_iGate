@@ -7,12 +7,21 @@ PAGE,CHUNK=4096,128
 
 
 def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exercise_relay_restart=False,
-             relay_restart_point='cache'):
+             relay_restart_point='cache',block_size=128,verify_sample=False):
+    maximum=175 if getattr(client,'route',None) else 204
+    if type(block_size) is not int or not 32<=block_size<=maximum:raise ValueError('invalid block size for this topology')
+    if block_size!=128 and (fault_checks or exercise_resume or exercise_relay_restart):
+        raise ValueError('legacy fault injections require 128-byte blocks')
+    chunk=block_size
+    bitmap_bytes=4*((((PAGE+chunk-1)//chunk)+31)//32)
     if relay_restart_point not in ('cache','burst','ack'):raise ValueError('invalid relay restart point')
     if exercise_relay_restart and len(image)<3*PAGE:
         raise ValueError('relay restart test requires at least three pages')
     manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',0x54474732)
+    if chunk!=128:manifest+=struct.pack('>H',chunk)
     initial=client.request(START,0,manifest,timeout=12)
+    if chunk!=128 and initial.get('bitmap_bytes')!=bitmap_bytes:
+        raise RuntimeError('receiver did not negotiate the requested bitmap width')
     position=initial['written']
     if exercise_relay_restart and position!=0:
         raise RuntimeError('relay restart test requires a fresh transfer')
@@ -33,7 +42,7 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exe
     relay_restart_recovered=False
     while position<len(image):
         length=min(PAGE,len(image)-position)
-        mask=(1<<((length+CHUNK-1)//CHUNK))-1
+        mask=(1<<((length+chunk-1)//chunk))-1
         missing=mask
         try:
             if exercise_relay_restart and relay_restart_point!='cache' and not relay_restart_injected and position==2*PAGE:
@@ -41,19 +50,19 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exe
                 relay_restart_injected=True
                 event('relay_restart_armed',point=relay_restart_point,durable=position)
             for attempt in range(16):
-                for index in range(32):
+                for index in range((length+chunk-1)//chunk):
                     if not missing&(1<<index):continue
                     if fault_checks and position==0 and attempt==0 and index==7:
                         event('inject_upstream_loss',block=index)
                         continue
-                    offset=position+index*CHUNK
-                    client.send_unacknowledged(DATA,offset,image[offset:offset+CHUNK])
+                    offset=position+index*chunk
+                    client.send_unacknowledged(DATA,offset,image[offset:min(offset+chunk,position+length)])
                     if exercise_relay_restart and relay_restart_point=='cache' and not relay_restart_injected and position==2*PAGE and index==15:
                         # The first half-page is in relay RAM, not yet forwarded.
                         client.send_unacknowledged(21,0,b'')
                         relay_restart_injected=True
                         event('relay_restart_requested',durable=position,cached_bytes=16*CHUNK)
-                reply=client.request(QUERY,position,struct.pack('>I',mask),timeout=getattr(client,'window_timeout',20),attempts=2)
+                reply=client.request(QUERY,position,mask.to_bytes(bitmap_bytes,'big'),timeout=getattr(client,'window_timeout',20),attempts=2)
                 bitmap=reply['bitmap']
                 if bitmap&~mask or reply['written']>len(image):raise RuntimeError('invalid page bitmap')
                 if bitmap==mask and reply['written']==position+length:break
@@ -90,8 +99,8 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exe
             for attempt in range(4):
                 for index in range(16):
                     if partial_mask&(1<<index):
-                        offset=position+index*CHUNK
-                        client.send_unacknowledged(DATA,offset,image[offset:offset+CHUNK])
+                        offset=position+index*chunk
+                        client.send_unacknowledged(DATA,offset,image[offset:min(offset+chunk,position+length)])
                 partial=client.request(QUERY,position,struct.pack('>I',0xffffffff),timeout=20)
                 if partial['written']!=position or partial['bitmap']&~0xffff:
                     raise RuntimeError('unexpected progress before restart')
@@ -109,7 +118,7 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exe
             resume_exercised=True
     if exercise_relay_restart and not relay_restart_recovered:
         raise RuntimeError('relay restart did not exercise link recovery')
-    result=client.request(FINISH,len(image),timeout=12)
+    result=client.request(26 if verify_sample else FINISH,len(image),timeout=12)
     if result['written']!=len(image):raise RuntimeError('incomplete finished image')
     event('verified',elapsed_s=time.monotonic()-started,recovery_s=recovery_seconds,start_offset=start_offset,
           repairs=repairs,retries=client.retries,reply={k:(v.hex() if isinstance(v,bytes) else v) for k,v in result.items()})

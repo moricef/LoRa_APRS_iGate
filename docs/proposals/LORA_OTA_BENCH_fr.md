@@ -564,3 +564,10 @@ confirme cette reprise après une coupure USB de 22,22 secondes : la page
 partielle est lue avant reprise, le journal retrouve 8 192 octets, puis le
 transfert atteint 16 384 octets exacts en réécrivant la page. Il ne teste pas
 la coupure au milieu d'une opération matérielle d'écriture ou d'effacement.
+
+## Comparaison des tailles de blocs
+
+Le [protocole du banc comparatif](LORA_OTA_BLOCK_BENCH_fr.md) décrit la
+négociation des tailles, les compteurs radio et les séries de mesures.
+Cette extension conserve les pages flash de 4 Ko et le format historique
+à 128 octets ; elle doit être validée sur cartes avant les mesures RF.

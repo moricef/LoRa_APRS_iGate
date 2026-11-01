@@ -26,6 +26,8 @@
 
 
 namespace LoRa_Utils {
+    struct OtaTxStats { uint32_t frames=0,errors=0,bytes=0; uint64_t airtimeUs=0; };
+    OtaTxStats otaTxStats();
 
     struct RxtRxContext {
         bool valid;

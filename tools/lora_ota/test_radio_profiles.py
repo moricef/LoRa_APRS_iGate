@@ -7,7 +7,7 @@ from send_integrated import Client,PREPARE_FAST
 class ConfigurableProfileTests(unittest.TestCase):
     def profiles(self):return load_profiles(Path(__file__).with_name('radio-profiles.example.json'))
     def client(self):
-        c=Client.__new__(Client);c.radio_profiles=self.profiles();c.normal_timeout=35;c.windowed=True
+        c=Client.__new__(Client);c.route=None;c.block_size=128;c.radio_profiles=self.profiles();c.normal_timeout=35;c.windowed=True
         c.event=Mock();c.request=Mock();c.bridge_profile=Mock();return c
     def test_explicit_profile_wire_and_json_validation(self):
         p=self.profiles()['transfer'];self.assertEqual(len(p.encode()),11)
@@ -30,7 +30,7 @@ class ConfigurableProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(TimeoutError,'not acknowledged'):c.enter_fast()
         c.bridge_profile.assert_not_called();sleep.assert_called_once_with(65)
     def test_slow_page_burst_is_rejected_before_any_radio_request(self):
-        c=self.client();c.radio_profiles['transfer']=c.radio_profiles['normal']
+        c=self.client();c.route=object();c.radio_profiles['transfer']=c.radio_profiles['normal']
         with self.assertRaisesRegex(ValueError,'too slow for a page burst'):c.enter_fast()
         c.request.assert_not_called()
 

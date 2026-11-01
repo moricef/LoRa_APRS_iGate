@@ -31,6 +31,7 @@ using namespace labota;
 constexpr uint8_t HELLO=6,CONFIRM=7,GET_STATUS=8,TEST_FAIL_ONCE=9,REACTIVATE=10,PREPARE_FAST=11,RETURN_NORMAL=12,TEST_REBOOT=13,NETWORK_STATUS=14;
 std::atomic<bool> pending{false},armed{false};
 bool radioReady=false,watchdog=false;
+uint32_t statsBootId=0;
 uint32_t bootAt=0,armedAt=0,lastPacket=0,rebootAt=0,helloCounter=0;
 uint8_t nonce[8]{},peer[8]{};
 char serialInput[160];size_t serialLength=0;
@@ -83,7 +84,7 @@ void reply(const uint8_t* request,Status result) {
     memcpy(frame+19,Config.callsign.c_str(),Config.callsign.length());memcpy(frame+27,request+19,8);
     bool windowOp=request[4]>=WINDOW_START && request[4]<=WINDOW_ACTIVATE;
 #ifdef RFOTA_DIAGNOSTICS
-    windowOp=windowOp || request[4]==24;
+    windowOp=windowOp || request[4]==24 || request[4]==26;
 #endif
     frame[35]=request[4];frame[36]=result;put32(frame+37,windowOp?pages.written:session.written);
 #ifdef RFOTA_DIAGNOSTICS
@@ -98,10 +99,21 @@ void reply(const uint8_t* request,Status result) {
     }
 #endif
     if(request[4]==WINDOW_START || request[4]==WINDOW_QUERY) {
-        put32(frame+41,pages.bitmap(get32(request+13)));frame[18]=10;uint8_t digest[32];
-        if(REMOTE_AUTH::otaTag(frame,45,digest)) {
-            memcpy(frame+45,digest,16);LoRa_Utils::sendOtaFrame(frame,61);
+        unsigned width=pages.geometry.bitmapBytes();
+        pages.bitmap(get32(request+13)).encode(frame+41,width);frame[18]=6+width;uint8_t digest[32];
+        if(REMOTE_AUTH::otaTag(frame,41+width,digest)) {
+            memcpy(frame+41+width,digest,16);LoRa_Utils::sendOtaFrame(frame,57+width);
         }
+        return;
+    }
+    if(request[4]==25) {
+        auto stats=LoRa_Utils::otaTxStats();put32(frame+41,statsBootId);
+        put32(frame+45,stats.frames);put32(frame+49,stats.errors);put32(frame+53,stats.bytes);
+        put32(frame+57,uint32_t(stats.airtimeUs>>32));put32(frame+61,uint32_t(stats.airtimeUs));
+        esp_app_desc_t description{};
+        esp_ota_get_partition_description(esp_ota_get_running_partition(),&description);
+        memcpy(frame+65,description.app_elf_sha256,32);frame[18]=62;uint8_t digest[32];
+        if(REMOTE_AUTH::otaTag(frame,97,digest)) {memcpy(frame+97,digest,16);LoRa_Utils::sendOtaFrame(frame,113);}
         return;
     }
     if(request[4]==NETWORK_STATUS) {
@@ -207,7 +219,7 @@ void earlyBoot() {
     }
 }
 void begin() {
-    radioReady=true;
+    radioReady=true;statsBootId=esp_random();
     Serial.printf("[RFOTA] Ready version=%s running=%s pending=%u\n",versionNumber.c_str(),esp_ota_get_running_partition()->label,unsigned(pending.load()));
 }
 bool busy() {return armed||pending||profile.mode!=ProfileLease::NORMAL;}
@@ -338,7 +350,7 @@ bool handle(const uint8_t* f,size_t n) {
         }
     }
     else if(op==RETURN_NORMAL)result=body?FORMAT:labota::OK;
-    else if(op==GET_STATUS || op==NETWORK_STATUS)result=body?FORMAT:labota::OK;
+    else if(op==GET_STATUS || op==NETWORK_STATUS || op==25)result=body?FORMAT:labota::OK;
     else if(op==CONFIRM) {
         uint8_t expected[32],actual[32];uint32_t bytes=0;
         if(!radioReady || body!=32)result=ORDER;
@@ -375,18 +387,27 @@ bool handle(const uint8_t* f,size_t n) {
         else {result=labota::OK;rebootAt=millis()+400;}
     }
     else if(pending)result=labota::BUSY;
+#ifdef RFOTA_DIAGNOSTICS
+    else if(op==26) {
+        // Benchmark only: verify the completed sample by reading inactive flash.
+        // This never marks an image READY and cannot permit activation.
+        result=!body && pages.state==RECEIVING && offset==pages.manifest.size && pages.written==offset &&
+            pageStorage.verifySample(pages.manifest)?labota::OK:VERIFY;
+    }
+#endif
     else if(op==WINDOW_START)result=offset || session.state!=IDLE?ORDER:pages.start(f+35,body);
     else if(op==WINDOW_DATA) {
 #ifdef RFOTA_DIAGNOSTICS
         if(pageStorage.cutPaused)return true;
-        uint32_t bit=uint32_t(1)<<((offset%PAGE_BYTES)/WINDOW_CHUNK);
+        unsigned index=(offset%PAGE_BYTES)/pages.geometry.chunk;
+        uint32_t bit=index<32?uint32_t(1)<<index:0;
         if(dropWindowOnce&bit) {dropWindowOnce&=~bit;return true;}
 #endif
         result=pages.data(offset,f+35,body);
     }
     else if(op==WINDOW_QUERY) {
-        result=body==4 && pages.state!=IDLE && offset%PAGE_BYTES==0 && offset<pages.manifest.size &&
-            get32(f+35)==WindowSession::mask(pages.pageSize(offset))?labota::OK:FORMAT;
+        result=body==pages.geometry.bitmapBytes() && pages.state!=IDLE && offset%PAGE_BYTES==0 && offset<pages.manifest.size &&
+            WindowBits::decode(f+35,body)==pages.geometry.mask(pages.pageSize(offset))?labota::OK:FORMAT;
 #ifdef RFOTA_DIAGNOSTICS
         if(result==labota::OK && pageStorage.cutPaused)result=labota::BUSY;
 #endif

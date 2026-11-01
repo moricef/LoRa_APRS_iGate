@@ -39,8 +39,14 @@ def decode_reply(key,source,target,raw):
     p=raw[35:-16]
     result=dict(nonce=raw[5:13],offset=offset,op=p[0],status=p[1],written=struct.unpack('>I',p[2:6])[0])
     if p[0] in (WINDOW_START,WINDOW_QUERY):
-        if len(p)!=10:return None
-        result['bitmap']=int.from_bytes(p[6:10],'big');return result
+        if len(p) not in (10,14,18,22):return None
+        result['bitmap']=int.from_bytes(p[6:],'big');result['bitmap_bytes']=len(p)-6;return result
+    if p[0]==25:
+        if len(p) not in (30,62):return None
+        boot,frames,errors,wire_bytes,air_us=struct.unpack('>IIIIQ',p[6:30])
+        result.update(stats_boot=boot,tx_frames=frames,tx_errors=errors,tx_bytes=wire_bytes,tx_airtime_us=air_us)
+        if len(p)==62:result['elf_sha256']=p[30:62].hex()
+        return result
     if p[0]==24:
         if len(p)!=13 or p[6]>1:return None
         result.update(power_cut_paused=bool(p[6]),partial_offset=int.from_bytes(p[7:11],'big'),
@@ -66,7 +72,7 @@ class Client:
         self.counter_file=counter_file;self.nonce=bytes(8);self.event=event;self.retries=0
         self.default_timeout=1;self.negotiated=False;self.fast=False
         self.route=None;self.chunk=CHUNK;self.normal_timeout=12
-        self.radio_profiles=None;self.profile_lease=30;self.windowed=False;self.window_timeout=20
+        self.radio_profiles=None;self.block_size=128;self.profile_lease=30;self.windowed=False;self.window_timeout=20
     def set_radio_profiles(self,profiles):
         self.radio_profiles=profiles
         for index,name in enumerate(('normal','transfer')):
@@ -83,7 +89,8 @@ class Client:
             else:raise TimeoutError('bridge does not support configurable profiles')
         self.normal_timeout=max(35 if self.route else 12,4*profiles['normal'].airtime()+5)
         fast=profiles['transfer']
-        self.window_timeout=max(20,32*(fast.airtime(208)+.02)+4*fast.airtime()+5)
+        burst=((4096+self.block_size-1)//self.block_size)*(fast.airtime(80+self.block_size)+.02)
+        self.window_timeout=max(20,(4*burst if self.route else 0)+4*fast.airtime()+5)
         self.event('radio_profiles_configured',**{name:p.mapping() for name,p in profiles.items()})
     def request(self,op,offset=0,payload=b'',expected=0,drop_ack=False,timeout=None,attempts=16):
         if timeout is None:timeout=self.default_timeout
@@ -91,9 +98,15 @@ class Client:
         if self.route:raw=self.route.encode(raw)
         for attempt in range(attempts):
             self.serial.write(b'TX '+raw.hex().encode()+b'\n')
+            self.event('rf_tx',op=op,offset=offset,wire_bytes=len(raw),attempt=attempt+1,fast=self.fast)
             deadline=time.monotonic()+timeout
             while time.monotonic()<deadline:
                 line=self.serial.readline().strip()
+                if line.startswith(b'TXDONE '):
+                    ok=line==b'TXDONE 0'
+                    self.event('rf_tx_done',op=op,offset=offset,wire_bytes=len(raw),attempt=attempt+1,fast=self.fast,ok=ok)
+                    if not ok:raise RuntimeError('controller radio transmission failed')
+                    continue
                 if not line.startswith(b'RX '):continue
                 try:
                     wire=bytes.fromhex(line[3:].decode())
@@ -133,11 +146,13 @@ class Client:
         raw=make_frame(self.key,self.source,self.target,self.nonce,op,offset,payload)
         if self.route:raw=self.route.encode(raw)
         self.serial.write(b'TX '+raw.hex().encode()+b'\n')
+        self.event('rf_tx',op=op,offset=offset,wire_bytes=len(raw),attempt=1,fast=self.fast)
         allowance=max(5,self.radio_profiles['transfer' if self.fast else 'normal'].airtime()+2) if self.radio_profiles else 5
         deadline=time.monotonic()+allowance
         while time.monotonic()<deadline:
             line=self.serial.readline().strip()
             if line==b'TXDONE 0':
+                self.event('rf_tx_done',op=op,offset=offset,wire_bytes=len(raw),attempt=1,fast=self.fast,ok=True)
                 time.sleep(.005);return
             if line.startswith((b'TXDONE ',b'ERROR')):raise RuntimeError('bridge burst transmission failed')
         raise TimeoutError('bridge burst transmission')
@@ -164,7 +179,8 @@ class Client:
         if self.radio_profiles:
             normal=self.radio_profiles['normal'];fast=self.radio_profiles['transfer']
             if 2*normal.airtime()+5>=lease:raise ValueError('normal profile is too slow for the profile lease')
-            if self.windowed and 32*(fast.airtime(208)+.02)+5>=lease:
+            if fast.airtime()+5>=lease:raise ValueError('transfer frame is too slow for the profile lease')
+            if self.windowed and self.route and ((4096+getattr(self,'block_size',128)-1)//getattr(self,'block_size',128))*(fast.airtime(80+getattr(self,'block_size',128))+.02)+5>=lease:
                 raise ValueError('transfer profile is too slow for a page burst within the profile lease')
             payload=bytes([2])+struct.pack('>H',lease)+fast.encode()
         try:self.request(PREPARE_FAST,0,payload,timeout=self.normal_timeout,attempts=1,drop_ack=drop_prepare_ack)
@@ -210,6 +226,7 @@ def main():
     ap.add_argument('--via',help='Relay identity for the test log; requires a configured relay and target')
     ap.add_argument('--route-key-file',type=Path,help='Separate transport key for the controller, relay and target')
     ap.add_argument('--require-offline',action='store_true',help='Require radio-reported Wi-Fi off and no active IP interface before and after updating')
+    ap.add_argument('--block-size',type=int,default=128,help='Window payload bytes, 32..204 direct or 32..175 routed; requires compatible peers')
     ap.add_argument('--windowed',action='store_true',help='Use page bursts, relay repair cache, and persistent page checkpoints')
     ap.add_argument('--exercise-resume',action='store_true',help='Reboot after two pages plus a volatile half-page, then resume')
     ap.add_argument('--exercise-relay-restart',action='store_true',help='Restart diagnostic relay with half a page cached, then require link recovery')
@@ -219,7 +236,10 @@ def main():
     if args.radio_profiles and not args.negotiate_profile:raise ValueError('--radio-profiles requires --negotiate-profile')
     profiles=load_profiles(args.radio_profiles) if args.radio_profiles else None
     if args.via and (not args.route_key_file or not args.negotiate_profile):raise ValueError('relay requires route key and profile negotiation')
-    if args.windowed and (not args.via or args.resume_log):raise ValueError('window mode requires a relay and uses durable target progress, not --resume-log')
+    if args.windowed and args.resume_log:raise ValueError('window mode uses durable target progress, not --resume-log')
+    if args.block_size!=128 and not args.windowed:raise ValueError('block-size requires window mode')
+    if args.block_size!=128 and (args.fault_checks or args.exercise_resume or args.exercise_relay_restart):raise ValueError('legacy fault injections require 128-byte blocks')
+    if not 32<=args.block_size<=(175 if args.via else 204):raise ValueError('block size outside frame capacity')
     if args.exercise_resume and not args.windowed:raise ValueError('resume test requires window mode')
     if args.exercise_relay_restart and not args.windowed:raise ValueError('relay restart test requires window mode')
     if args.relay_restart_point!='cache' and not args.exercise_relay_restart:raise ValueError('restart point requires --exercise-relay-restart')
@@ -238,7 +258,7 @@ def main():
                 route_key=base64.urlsafe_b64decode(args.route_key_file.read_text().strip()+'=')
                 c.route=RouteTransport(route_key,c.source,c.target,args.via.encode());c.chunk=175;c.normal_timeout=35
                 event('route_selected',via=args.via,chunk=c.chunk)
-            c.windowed=args.windowed
+            c.windowed=args.windowed;c.block_size=args.block_size
             if profiles:c.set_radio_profiles(profiles)
             if args.negotiate_profile:c.enable_profiles()
             if args.resume_log:
@@ -259,7 +279,7 @@ def main():
             manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',BOARD)
             if args.windowed:
                 from window_transfer import transfer
-                r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume,args.exercise_relay_restart,args.relay_restart_point)
+                r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume,args.exercise_relay_restart,args.relay_restart_point,block_size=args.block_size)
                 assert r['running']==before['running'] and r['boot']==before['boot']
             else:
                 r=transfer_stop_and_wait(c,args,image,manifest,before,event)
