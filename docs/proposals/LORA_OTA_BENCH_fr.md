@@ -1,5 +1,9 @@
 # Banc OTA LoRa expérimental
 
+Pour lancer les commandes du client intégré :
+[guide opérateur français](../LORA_OTA_GUIDE_fr.md) ·
+[English operator guide](../LORA_OTA_GUIDE.md).
+
 Ce document conserve le banc autonome v1 puis les extensions intégrées à
 l’iGate : armement radio, profil temporaire, relayage et transfert groupé
 avec reprise persistante. Les protocoles expérimentaux v1 et v2 ne sont
