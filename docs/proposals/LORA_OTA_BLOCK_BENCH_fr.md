@@ -8,9 +8,11 @@ par un relais. Le premier critère est le temps d'antenne total ; la durée
 Aucune taille optimale n'est annoncée avant les mesures.
 
 Le protocole décrit ici et son banc sont implémentés sur la branche OTA.
-Les tests sur hôte et les compilations ne constituent pas une validation
-radio de cette extension. Les résultats matériels précédents utilisaient
-les blocs de 128 octets.
+Un [essai matériel du 1 novembre](../tests/2026-11-01/OTA_BLOCK_SIZES_fr.md)
+valide cinq tailles en direct sur le même échantillon de 8 Ko, avec contrôle
+SHA-256 en flash. Il ne remplace pas la matrice comparative ci-dessous.
+Les transferts complets et reprises matériels précédents utilisaient les
+blocs de 128 octets.
 
 ## Variables maintenues et variables comparées
 

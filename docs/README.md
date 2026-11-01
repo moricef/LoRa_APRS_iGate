@@ -39,8 +39,8 @@ Le profil temporaire peut être choisi et activé par commande RF authentifiée 
 un essai court vérifie ce changement et le retour au profil habituel.
 
 [Évaluation de la taille des blocs OTA](proposals/LORA_OTA_BLOCK_BENCH_fr.md) :
-protocole comparatif, tailles négociées, mesures CSV/JSON et limites ; banc
-logiciel à valider sur les cartes avant de lancer la matrice RF.
+protocole comparatif, tailles négociées, mesures CSV/JSON et limites ; cinq
+tailles vérifiées sur cartes en direct, matrice comparative RF à réaliser.
 
 ## Comptes rendus d’essais
 
@@ -61,6 +61,7 @@ spécification actuelle.
 | 31 octobre 2026 | [Reprises OTA sur quatre pages](tests/2026-10-31/OTA_RELAY_RESTART_fr.md) : cache perdu, groupe interrompu, acquittement perdu et coupure physique de la cible avec une page partielle |
 | 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset ; complément APRS signé et bail de 30 secondes |
 | 1 novembre 2026 | [Commandes RXT et profils OTA par radio](tests/2026-11-01/APRS_RXT_OTA_RF_fr.md) : tuples RXT ON/OFF, sauvegarde après reset, échanges sur profil temporaire et retours explicite, après silence et reset |
+| 1 novembre 2026 | [Blocs OTA variables](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md) : cinq tailles sur 8 Ko en direct, SHA-256 en flash, bitmaps et réparations ; contrôle fonctionnel, sans choix d’une taille optimale |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
