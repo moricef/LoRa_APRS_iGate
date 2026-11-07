@@ -6,10 +6,22 @@
 namespace labota {
 // APRS command arguments are decimal Hz, decimal BW Hz, SF, CR denominator,
 // and requested transceiver dBm. No floating-point or partial parsing.
+// Route commands name one station: OTA=RELAY,<target> makes this station the
+// relay of the authenticated controller towards <target>; OTA=VIA,<relay>
+// makes it a target reached through <relay>. The transport key is the network
+// route key installed with the station secret, never sent over the air.
 struct AprsOtaCommand {
-    enum Kind { STATUS, PROFILE, FAST, NORMAL } kind=STATUS;
+    enum Kind { STATUS, PROFILE, FAST, NORMAL, ROUTE_STATUS, ROUTE_OFF, RELAY, VIA } kind=STATUS;
     RadioProfile radio;
     uint16_t lease=0;
+    std::string peer;
+    // Route identities are at most eight characters (callsign-SSID or tactical).
+    static bool station(const std::string& text) {
+        if(text.empty()||text.size()>8)return false;
+        for(char ch:text)
+            if(!((ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9')||ch=='-'))return false;
+        return text.front()!='-' && text.back()!='-';
+    }
     static bool number(const std::string& text,int64_t& result) {
         if(text.empty())return false;
         size_t i=text[0]=='-'?1:0;if(i==text.size())return false;
@@ -24,6 +36,13 @@ struct AprsOtaCommand {
         AprsOtaCommand c;
         if(text=="OTA=?")c.kind=STATUS;
         else if(text=="OTA=NORMAL")c.kind=NORMAL;
+        else if(text=="OTA=ROUTE?")c.kind=ROUTE_STATUS;
+        else if(text=="OTA=ROUTE,OFF")c.kind=ROUTE_OFF;
+        else if(text.compare(0,10,"OTA=RELAY,")==0) {
+            c.peer=text.substr(10);if(!station(c.peer))return false;c.kind=RELAY;
+        } else if(text.compare(0,8,"OTA=VIA,")==0) {
+            c.peer=text.substr(8);if(!station(c.peer))return false;c.kind=VIA;
+        }
         else if(text.compare(0,9,"OTA=FAST,")==0) {
             int64_t value;if(!number(text.substr(9),value)||value<15||value>60)return false;
             c.kind=FAST;c.lease=uint16_t(value);

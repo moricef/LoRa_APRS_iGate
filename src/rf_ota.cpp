@@ -36,6 +36,15 @@ uint32_t bootAt=0,armedAt=0,lastPacket=0,rebootAt=0,helloCounter=0;
 uint8_t nonce[8]{},peer[8]{};
 char serialInput[160];size_t serialLength=0;
 
+// Written just before an image is selected by a radio command. At the next
+// boot it means "this pending image came over the air and needs the radio
+// confirmation". Without it, the pending image was installed locally
+// (ElegantOTA or USB) and is accepted as the stock firmware would.
+bool markRadioActivation() {
+    Preferences p;if(!p.begin("rf-ota",false))return false;
+    bool ok=p.putBool("rf-activated",true)==1;p.end();return ok;
+}
+
 class CandidateStore : public FlashStore {
 public:
     uint8_t digest[32]{};
@@ -48,7 +57,7 @@ public:
         if(!p.begin("rf-ota",false))return false;
         bool ok=p.putUInt("candidate",partition->address)==sizeof(uint32_t) &&
             p.putUInt("size",bytes)==sizeof(uint32_t) && p.putBytes("sha",digest,32)==32;
-        p.end();return ok && FlashStore::activate();
+        p.end();return ok && markRadioActivation() && FlashStore::activate();
     }
 } storage;
 Session session(storage);
@@ -205,6 +214,22 @@ void earlyBoot() {
     esp_ota_img_states_t state;
     pending=esp_ota_get_state_partition(esp_ota_get_running_partition(),&state)==ESP_OK && state==ESP_OTA_IMG_PENDING_VERIFY;
     bootAt=millis();
+    // Read and clear the radio activation mark on every boot, so that a
+    // stale mark never applies to a later image.
+    bool radioActivated=false;
+    {
+        Preferences p;
+        if(p.begin("rf-ota",false)) {
+            radioActivated=p.getBool("rf-activated",false);
+            if(radioActivated)p.remove("rf-activated");
+            p.end();
+        }
+    }
+    if(pending && !radioActivated) {
+        if(esp_ota_mark_app_valid_cancel_rollback()==ESP_OK) {
+            pending=false;Serial.println("[RFOTA] Locally installed application validated");
+        } else Serial.println("[RFOTA] Local application could not be validated");
+    }
     if(pending) {
         // A crash/hang before the main loop must also reach the bootloader.
         esp_task_wdt_init(60,true);watchdog=esp_task_wdt_add(nullptr)==ESP_OK;
@@ -274,12 +299,22 @@ bool handleAprsControl(const String& packet) {
         if(aprsProfileSelected)answer+=" "+String(aprsSelectedProfile.frequencyHz)+","+
             String(aprsSelectedProfile.bandwidthHz)+","+String(aprsSelectedProfile.sf)+","+
             String(aprsSelectedProfile.cr)+","+String(aprsSelectedProfile.power);
+    } else if(command.kind==AprsOtaCommand::ROUTE_STATUS) {
+        char text[64];RF_ROUTE::describeRoute(text,sizeof text);answer="OTA "+String(text);
     } else if(pending || RF_ROUTE::busy())answer="OTA BUSY";
     else if(command.kind==AprsOtaCommand::NORMAL) {
         answer="OTA RETURN NORMAL";returnNormal=true;
     } else if(armed || profile.mode!=ProfileLease::NORMAL || session.state!=IDLE || pages.state!=IDLE)
         answer="OTA BUSY";
-    else if(command.kind==AprsOtaCommand::PROFILE) {
+    else if(command.kind==AprsOtaCommand::RELAY || command.kind==AprsOtaCommand::VIA ||
+            command.kind==AprsOtaCommand::ROUTE_OFF) {
+        // The route controller is the one that signed this command.
+        const char* error=command.kind==AprsOtaCommand::ROUTE_OFF ? RF_ROUTE::clearRadioRoute() :
+            command.kind==AprsOtaCommand::RELAY ? RF_ROUTE::setRadioRelay(controller.c_str(),command.peer.c_str()) :
+            RF_ROUTE::setRadioTarget(controller.c_str(),command.peer.c_str());
+        if(error)answer=error;
+        else {char text[64];RF_ROUTE::describeRoute(text,sizeof text);answer="OTA "+String(text);}
+    } else if(command.kind==AprsOtaCommand::PROFILE) {
         if(!LoRa_Utils::otaProfileSupported(command.radio))answer="OTA UNSUPPORTED PROFILE";
         else {aprsSelectedProfile=command.radio;aprsProfileSelected=true;answer="OTA PROFILE READY (RAM)";}
     } else if(!aprsProfileSelected)answer="OTA SET PROFILE FIRST";
@@ -383,7 +418,7 @@ bool handle(const uint8_t* f,size_t n) {
         auto part=esp_ota_get_next_update_partition(nullptr);
         if(!found || !part || part->address!=addr || memcmp(expected,f+35,32) ||
            !hashPartition(part,bytes,actual) || memcmp(expected,actual,32))result=VERIFY;
-        else if(esp_ota_set_boot_partition(part)!=ESP_OK)result=STORAGE;
+        else if(!markRadioActivation() || esp_ota_set_boot_partition(part)!=ESP_OK)result=STORAGE;
         else {result=labota::OK;rebootAt=millis()+400;}
     }
     else if(pending)result=labota::BUSY;
@@ -413,7 +448,8 @@ bool handle(const uint8_t* f,size_t n) {
 #endif
     }
     else if(op==WINDOW_FINISH)result=body || offset!=pages.manifest.size?FORMAT:pages.finish();
-    else if(op==WINDOW_ACTIVATE)result=body || offset!=pages.manifest.size?FORMAT:pages.activate();
+    else if(op==WINDOW_ACTIVATE)result=body || offset!=pages.manifest.size?FORMAT:
+        markRadioActivation()?pages.activate():STORAGE;
     else if(op==START) {
         WindowManifest saved;uint32_t committed;
         result=pages.state!=IDLE || pageStorage.load(saved,committed)?labota::BUSY:session.accept(op,offset,f+35,body);

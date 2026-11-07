@@ -283,6 +283,14 @@ function loadSettings(settings) {
         settings.remoteManagement.authKeyConfigured
             ? "Authentication key installed"
             : "No authentication key installed";
+    // Shown only by firmware built with radio update routes.
+    document.getElementById("remoteManagement.routeKeyBlock").hidden    = !settings.remoteManagement.routeKeySupported;
+    document.getElementById("remoteManagement.routeKey").value          = "";
+    document.getElementById("remoteManagement.routeKeyClear").checked   = false;
+    document.getElementById("remoteManagement.routeKeyStatus").textContent =
+        settings.remoteManagement.routeKeyConfigured
+            ? "Route key installed"
+            : "No route key installed";
 
     // NTP
     document.getElementById("ntp.server").value                         = settings.ntp.server;
@@ -299,13 +307,13 @@ function loadSettings(settings) {
     updateImage();
 }
 
-function generateRemoteAuthSecret() {
+function generateRemoteAuthSecret(fieldId = "remoteManagement.authSecret") {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     let binary = "";
     bytes.forEach((value) => binary += String.fromCharCode(value));
     const secret = btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-    const input = document.getElementById("remoteManagement.authSecret");
+    const input = document.getElementById(fieldId);
     input.type = "text";
     input.value = secret;
     input.focus();

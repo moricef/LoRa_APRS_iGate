@@ -1380,6 +1380,37 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                             >Remove the installed authentication key</label>
                                     </div>
                                 </div>
+                                <div class="col-12 mt-3" id="remoteManagement.routeKeyBlock" hidden>
+                                    <label for="remoteManagement.routeKey" class="form-label"
+                                        >Radio update route key</label>
+                                    <div class="input-group">
+                                        <input
+                                            type="password"
+                                            name="remoteManagement.routeKey"
+                                            id="remoteManagement.routeKey"
+                                            class="form-control"
+                                            maxlength="43"
+                                            autocomplete="new-password"
+                                            placeholder="Leave blank to keep the installed key"
+                                        />
+                                        <button class="btn btn-outline-secondary" type="button" onclick="generateRemoteAuthSecret('remoteManagement.routeKey')"
+                                            >Generate</button>
+                                    </div>
+                                    <small class="form-text text-muted"
+                                        >Enter the same key on every station that relays or receives radio updates, and in the update application. Relay and target routes are then set by signed commands (OTA=RELAY, OTA=VIA).</small
+                                    >
+                                    <small id="remoteManagement.routeKeyStatus" class="d-block">No route key installed</small>
+                                    <div class="form-check mt-2">
+                                        <input
+                                            type="checkbox"
+                                            name="remoteManagement.routeKeyClear"
+                                            id="remoteManagement.routeKeyClear"
+                                            class="form-check-input"
+                                        />
+                                        <label for="remoteManagement.routeKeyClear" class="form-check-label"
+                                            >Remove the installed route key</label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

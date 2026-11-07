@@ -7,11 +7,17 @@ namespace labota {
 constexpr uint32_t PAGE_BYTES=4096, WINDOW_CHUNK=128, WINDOW_BLOCKS=32;
 constexpr uint8_t WINDOW_START=15, WINDOW_DATA=16, WINDOW_QUERY=17,
                   WINDOW_FINISH=18, WINDOW_ACTIVATE=19;
+// size is the transported stream. With coding 1 it is the compressed
+// container of page_inflater.h, and imageSize/sha describe the decoded image.
 struct WindowManifest {
+    static constexpr uint8_t PLAIN=0,DEFLATE_PAGES=1;
     uint32_t size=0;
     uint8_t sha[32]{};
+    uint8_t coding=PLAIN;
+    uint32_t imageSize=0;
+    uint32_t decodedSize() const {return coding==PLAIN?size:imageSize;}
     bool same(const WindowManifest& other) const {
-        return size==other.size && !memcmp(sha,other.sha,32);
+        return size==other.size && !memcmp(sha,other.sha,32) && coding==other.coding && decodedSize()==other.decodedSize();
     }
 };
 struct WindowStore {
@@ -50,6 +56,11 @@ struct WindowSession {
         WindowGeometry wantedGeometry;
         if(!WindowGeometry::fromManifest(data,n,wantedGeometry) || get32(data+36)!=BOARD)return FORMAT;
         WindowManifest wanted;wanted.size=get32(data);memcpy(wanted.sha,data+4,32);
+        if(n==47) {
+            wanted.coding=data[42];wanted.imageSize=get32(data+43);
+            if(wanted.coding!=WindowManifest::DEFLATE_PAGES || !wanted.imageSize ||
+               wanted.imageSize>store.capacity())return FORMAT;
+        }
         if(!wanted.size || wanted.size>store.capacity())return FORMAT;
         if(state!=IDLE)return manifest.same(wanted) && geometry.chunk==wantedGeometry.chunk?OK:BUSY;
         WindowManifest saved;uint32_t committed=0;

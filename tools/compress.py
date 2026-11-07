@@ -49,6 +49,14 @@ with open('src/LoRa_APRS_iGate.cpp', encoding='utf-8') as cpp_file:
         elif "versionNumber" in line:
           versionNumber = line[start:end]
 
+# The firmware appends RFOTA_LABEL to versionNumber in radio update builds
+# (src/LoRa_APRS_iGate.cpp); show the same version on the web page.
+import re
+build_flags = " ".join(env.GetProjectOption("build_flags", []) or [])
+label = re.search(r'RFOTA_LABEL=\\?"([^"\\]+)', build_flags)
+if label and not versionNumber.endswith("-" + label.group(1)):
+  versionNumber = versionNumber + "-" + label.group(1)
+
 for src in files:
   out = src + ".gz"
 

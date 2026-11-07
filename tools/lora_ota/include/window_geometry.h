@@ -27,8 +27,10 @@ struct WindowGeometry {
     unsigned count(unsigned bytes=PAGE) const {return (bytes+chunk-1)/chunk;}
     unsigned bitmapBytes() const {return 4*((count()+31)/32);}
     WindowBits mask(unsigned bytes) const {WindowBits r;for(unsigned i=0;i<count(bytes);++i)r.set(i);return r;}
+    // 40 bytes: size, SHA-256, board. 42: plus block size. 47: plus coding
+    // (1 = page_inflater.h container) and the decoded image size.
     static bool fromManifest(const uint8_t* p,size_t n,WindowGeometry& g) {
-        if(n!=40&&n!=42)return false;
+        if(n!=40&&n!=42&&n!=47)return false;
         return g.configure(n==40?128:(unsigned(p[40])<<8)|p[41]);
     }
 };

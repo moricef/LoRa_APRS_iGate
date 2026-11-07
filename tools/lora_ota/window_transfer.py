@@ -1,13 +1,26 @@
 """Page bursts, bitmap repair, and authenticated restart from durable progress."""
 import struct
 import time
+import zlib
 
 START,DATA,QUERY,FINISH,ACTIVATE=range(15,20)
 PAGE,CHUNK=4096,128
 
 
+def deflate_pages(image):
+    """Compressed container read by page_inflater.h: for each 4096-byte page,
+    a big-endian 16-bit length then the raw deflate of that page."""
+    out=bytearray()
+    for i in range(0,len(image),PAGE):
+        c=zlib.compressobj(9,zlib.DEFLATED,-15,9)
+        data=c.compress(image[i:i+PAGE])+c.flush()
+        if not 0<len(data)<=PAGE+64:raise ValueError('page does not fit a container record')
+        out+=struct.pack('>H',len(data))+data
+    return bytes(out)
+
+
 def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exercise_relay_restart=False,
-             relay_restart_point='cache',block_size=128,verify_sample=False):
+             relay_restart_point='cache',block_size=128,verify_sample=False,compress=False):
     maximum=175 if getattr(client,'route',None) else 204
     if type(block_size) is not int or not 32<=block_size<=maximum:raise ValueError('invalid block size for this topology')
     if block_size!=128 and (fault_checks or exercise_resume or exercise_relay_restart):
@@ -17,8 +30,16 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exe
     if relay_restart_point not in ('cache','burst','ack'):raise ValueError('invalid relay restart point')
     if exercise_relay_restart and len(image)<3*PAGE:
         raise ValueError('relay restart test requires at least three pages')
+    image_size=len(image)
+    if compress:
+        if fault_checks or exercise_resume or exercise_relay_restart:
+            raise ValueError('compressed transfer does not support the legacy fault injections')
+        # The window protocol carries the container; sha and image_size describe the decoded image.
+        image=deflate_pages(image)
+        event('compressed',image_bytes=image_size,container_bytes=len(image),ratio=round(len(image)/image_size,4))
     manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',0x54474732)
-    if chunk!=128:manifest+=struct.pack('>H',chunk)
+    if chunk!=128 or compress:manifest+=struct.pack('>H',chunk)
+    if compress:manifest+=bytes([1])+struct.pack('>I',image_size)
     initial=client.request(START,0,manifest,timeout=12)
     if chunk!=128 and initial.get('bitmap_bytes')!=bitmap_bytes:
         raise RuntimeError('receiver did not negotiate the requested bitmap width')
@@ -84,7 +105,9 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exe
                 if resumed!=expected:raise RuntimeError('unexpected durable offset after relay restart')
                 relay_restart_recovered=True
                 event('relay_restart_recovered',written=resumed)
-            if resumed<position or resumed>position+length or resumed!=len(image) and resumed%PAGE:
+            # A compressed receiver resumes at the page holding its last whole record.
+            earliest=position-(PAGE if compress else 0)
+            if resumed<max(0,earliest) or resumed>position+length or resumed!=len(image) and resumed%PAGE:
                 raise RuntimeError('unexpected durable offset after link recovery')
             position=resumed
             recovery_seconds+=time.monotonic()-recovery_started

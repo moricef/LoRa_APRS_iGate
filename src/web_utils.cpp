@@ -177,6 +177,12 @@ namespace WEB_Utils {
         data["display"]["alwaysOn"]    = Config.display.alwaysOn;
         data["display"]["timeout"]     = Config.display.timeout;
         data["remoteManagement"]["authKeyConfigured"] = REMOTE_AUTH::configured();
+#ifdef ENABLE_RF_ROUTE
+        data["remoteManagement"]["routeKeySupported"]  = true;
+        data["remoteManagement"]["routeKeyConfigured"] = RF_ROUTE::networkKeyConfigured();
+#else
+        data["remoteManagement"]["routeKeySupported"]  = false;
+#endif
         String responseBody;
         serializeJson(data, responseBody);
         request->send(200, "application/json", responseBody);
@@ -530,8 +536,24 @@ namespace WEB_Utils {
                 }
             }
         }
+#ifdef ENABLE_RF_ROUTE
+        // Network route key for radio updates, installed with the station secret.
+        if (request->hasParam("remoteManagement.routeKeyClear", true)) {
+            if (!RF_ROUTE::clearNetworkKey()) {
+                request->send(500, "text/plain", "Could not clear the route key");
+                return;
+            }
+        } else if (request->hasParam("remoteManagement.routeKey", true)) {
+            String routeKey = request->getParam("remoteManagement.routeKey", true)->value();
+            routeKey.trim();
+            if (routeKey.length() > 0 && !RF_ROUTE::setNetworkKey(routeKey.c_str())) {
+                request->send(400, "text/plain", "Route key must be 32 bytes encoded as 43 Base64URL characters without padding");
+                return;
+            }
+        }
+#endif
 
-        Config.ntp.server                   = getParamStringSafe("ntp.server", Config.ntp.server);
+        Config.ntp.server                  = getParamStringSafe("ntp.server", Config.ntp.server);
         Config.ntp.gmtCorrection            = getParamFloatSafe("ntp.gmtCorrection", Config.ntp.gmtCorrection);
         Config.ntp.timezone                 = getParamStringSafe("ntp.timezone", Config.ntp.timezone);
         Config.ntp.timezone.trim();

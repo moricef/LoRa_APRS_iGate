@@ -228,6 +228,7 @@ def main():
     ap.add_argument('--require-offline',action='store_true',help='Require radio-reported Wi-Fi off and no active IP interface before and after updating')
     ap.add_argument('--block-size',type=int,default=128,help='Window payload bytes, 32..204 direct or 32..175 routed; requires compatible peers')
     ap.add_argument('--windowed',action='store_true',help='Use page bursts, relay repair cache, and persistent page checkpoints')
+    ap.add_argument('--compress',action='store_true',help='With --windowed: send each 4 KB page deflate-compressed; the receiver decodes before writing')
     ap.add_argument('--exercise-resume',action='store_true',help='Reboot after two pages plus a volatile half-page, then resume')
     ap.add_argument('--exercise-relay-restart',action='store_true',help='Restart diagnostic relay with half a page cached, then require link recovery')
     ap.add_argument('--relay-restart-point',choices=['cache','burst','ack'],default='cache',help='Inject before forwarding, during a page burst, or before forwarding a committed-page ACK')
@@ -236,6 +237,7 @@ def main():
     if args.radio_profiles and not args.negotiate_profile:raise ValueError('--radio-profiles requires --negotiate-profile')
     profiles=load_profiles(args.radio_profiles) if args.radio_profiles else None
     if args.via and (not args.route_key_file or not args.negotiate_profile):raise ValueError('relay requires route key and profile negotiation')
+    if args.compress and not args.windowed:raise ValueError('--compress requires --windowed')
     if args.windowed and args.resume_log:raise ValueError('window mode uses durable target progress, not --resume-log')
     if args.block_size!=128 and not args.windowed:raise ValueError('block-size requires window mode')
     if args.block_size!=128 and (args.fault_checks or args.exercise_resume or args.exercise_relay_restart):raise ValueError('legacy fault injections require 128-byte blocks')
@@ -279,13 +281,15 @@ def main():
             manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',BOARD)
             if args.windowed:
                 from window_transfer import transfer
-                r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume,args.exercise_relay_restart,args.relay_restart_point,block_size=args.block_size)
+                r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume,args.exercise_relay_restart,args.relay_restart_point,block_size=args.block_size,compress=args.compress)
                 assert r['running']==before['running'] and r['boot']==before['boot']
             else:
                 r=transfer_stop_and_wait(c,args,image,manifest,before,event)
             if args.negotiate_profile:c.return_normal()
             if args.exercise_rollback:c.request(TEST_FAIL_ONCE)
-            try:c.request(WINDOW_ACTIVATE if args.windowed else ACTIVATE,len(image),attempts=3,timeout=c.normal_timeout if c.negotiated else 3)
+            # A windowed activation names the transported stream: the container when compressed.
+            stream_bytes=r['written'] if args.windowed else len(image)
+            try:c.request(WINDOW_ACTIVATE if args.windowed else ACTIVATE,stream_bytes,attempts=3,timeout=c.normal_timeout if c.negotiated else 3)
             except TimeoutError:event('activation_ack_missing')
             time.sleep(5)
             new=c.hello()

@@ -82,9 +82,13 @@ def preflight(client):
     # FORMAT identifies a peer without the laboratory sample verifier.
     client.request(26,0,expected=4)
     net=client.request(NETWORK_STATUS)
-    if net.get('wifi_mode')!=0 or net.get('active_interface'):
+    if not ALLOW_ONLINE_TARGET and (net.get('wifi_mode')!=0 or net.get('active_interface')):
         raise RuntimeError('target must have Wi-Fi and AP disabled for matched trials')
     return before
+
+
+# Functional checks only: a target on Wi-Fi is not comparable with matched trials.
+ALLOW_ONLINE_TARGET=False
 
 
 def summarize(rows):
@@ -114,6 +118,8 @@ def main():
     p.add_argument('--bridge');p.add_argument('--key-file',type=Path);p.add_argument('--route-key-file',type=Path)
     p.add_argument('--counter-file',type=Path);p.add_argument('--image',type=Path)
     p.add_argument('--sample-bytes',type=int,default=65536)
+    p.add_argument('--compress',action='store_true',help='Send the sample as deflate-compressed pages')
+    p.add_argument('--allow-online-target',action='store_true',help='Functional check with the target Wi-Fi on; not a matched trial')
     p.add_argument('--source',default='F4MLV-2');p.add_argument('--target',default='F4MLV-15')
     args=p.parse_args();profiles=load_profiles(args.radio_profiles)
     trials=plan(args.blocks,args.repeats,args.seed,profiles,bool(args.via))
@@ -124,6 +130,7 @@ def main():
         print(f'{len(trials)} trials planned; no equipment accessed: {args.output}');return
     if not all((args.bridge,args.key_file,args.counter_file,args.image)):p.error('run requires bridge, key-file, counter-file, image')
     if args.via and not all((args.route_key_file,args.relay_status_url)):p.error('routed runs require route-key-file and relay-status-url')
+    global ALLOW_ONLINE_TARGET;ALLOW_ONLINE_TARGET=args.allow_online_target
     if args.output.exists():raise ValueError('output directory already exists; use a new run directory')
     image=args.image.read_bytes()
     if args.sample_bytes<4096 or args.sample_bytes%PAGE or args.sample_bytes>len(image):
@@ -157,7 +164,7 @@ def main():
                 c.enter_fast(60)
                 target_before=c.request(25);relay_before=relay_stats(args.relay_status_url,dict(controller=args.source,target=args.target,via=args.via)) if c.route else None
                 current.clear();started=time.monotonic()
-                result=transfer(c,image,sha,event,block_size=trial['block_bytes'],verify_sample=True)
+                result=transfer(c,image,sha,event,block_size=trial['block_bytes'],verify_sample=True,compress=args.compress)
                 row['duration_s']=time.monotonic()-started
                 target_after=c.request(25);relay_after=relay_stats(args.relay_status_url,dict(controller=args.source,target=args.target,via=args.via)) if c.route else None
                 td=counter_delta(target_before,target_after,'stats_boot')
@@ -165,7 +172,8 @@ def main():
                 tx=[e for e in current if e['event']=='rf_tx_done' and e['op']!=25 and e['ok']]
                 air=sum(profiles['transfer' if e['fast'] else 'normal'].airtime(e['wire_bytes']) for e in tx)
                 data=[e for e in tx if e['op']==16];retrans=len(data)-len({e['offset'] for e in data})
-                if result['written']!=len(image):raise RuntimeError('sample verification did not cover all bytes')
+                # The receiver reports transported bytes: the container when compressed.
+                if not args.compress and result['written']!=len(image):raise RuntimeError('sample verification did not cover all bytes')
                 row.update(success=True,target_elf_sha256=target_before.get('elf_sha256'),
                     relay_elf_sha256=relay_before.get('elf_sha256') if c.route else None,airtime_s=air+(td['tx_airtime_us']+rd['tx_airtime_us'])/1e6,
                     controller_tx_frames=len(tx),target_tx_frames=td['tx_frames'],relay_tx_frames=rd['tx_frames'],

@@ -27,6 +27,10 @@ Ce travail compare les formats et le coût des codecs. Il ne constitue pas
 une décision de format ni une validation de la chaîne complète de relayage.
 Les tailles avec RXT sont des estimations distinctes des essais de codec.
 
+[Mises à jour par LoRa : approche combinée](proposals/LORA_OTA_COMBINED.md) · [PDF](proposals/LORA_OTA_COMBINED.pdf)
+(en anglais) : transport par pages testé, différentiel, disposition de la flash,
+campagnes automatiques ou pilotées. Proposition, pas une décision.
+
 [OTA LoRa expérimental](proposals/LORA_OTA_BENCH_fr.md) : banc autonome,
 puis intégration iGate avec armement radio, confirmation du démarrage
 et retour automatique après changement de profil. Le transfert complet

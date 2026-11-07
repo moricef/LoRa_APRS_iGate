@@ -18,6 +18,19 @@ int main() {
     assert(AprsOtaCommand::parse("OTA=?",c)&&c.kind==AprsOtaCommand::STATUS);
     assert(AprsOtaCommand::parse("OTA=NORMAL",c)&&c.kind==AprsOtaCommand::NORMAL);
     assert(AprsOtaCommand::parse("OTA=FAST,30",c)&&c.lease==30);
+    AprsOtaCommand r;
+    // Route commands: one station name, at most eight characters, upper case.
+    assert(AprsOtaCommand::parse("OTA=ROUTE?",r)&&r.kind==AprsOtaCommand::ROUTE_STATUS);
+    assert(AprsOtaCommand::parse("OTA=ROUTE,OFF",r)&&r.kind==AprsOtaCommand::ROUTE_OFF);
+    assert(AprsOtaCommand::parse("OTA=RELAY,PINAL",r)&&r.kind==AprsOtaCommand::RELAY&&r.peer=="PINAL");
+    assert(AprsOtaCommand::parse("OTA=VIA,F4MLV-10",r)&&r.kind==AprsOtaCommand::VIA&&r.peer=="F4MLV-10");
+    for(const char* s:{"OTA=RELAY,", "OTA=RELAY,TOOLONG-15", "OTA=RELAY,pinal", "OTA=RELAY,PIN AL",
+        "OTA=RELAY,-PINAL", "OTA=RELAY,PINAL-", "OTA=VIA,", "OTA=VIA,A,B", "OTA=ROUTE,ON", "OTA=ROUTE"})
+        assert(!AprsOtaCommand::parse(s,r));
+    // Each accepted command, signed in a !RC1 envelope with a 13-digit counter,
+    // stays within the 67-character APRS message text.
+    for(const char* s:{"OTA=RELAY,F4MLV-15","OTA=VIA,F4MLV-10","OTA=ROUTE,OFF","OTA=ROUTE?"})
+        assert(std::string("!RC1:A:ZZZZZZZZZZZZZ:").size()+std::string(s).size()+1+16<=67);
     ProfileLease lease;
     // Failed response: no prepare call, so no switch. Successful response:
     // prepare is called only after transmit completes, then the two-second delay.

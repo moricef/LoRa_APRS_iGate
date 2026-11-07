@@ -92,13 +92,24 @@ void stop() {
     queuedBlocks=0;queuedQuerySize=0;cache.clear();
     knownBits=0;memset(knownNonce,0,8);
 }
-bool save(uint8_t mode,const char* src,const char* dst,const char* relay,const char* encoded) {
-    if(!src||!dst||!relay||!strlen(src)||!strlen(dst)||!strlen(relay)||strlen(src)>8||strlen(dst)>8||strlen(relay)>8)return false;
-    uint8_t k[32];if(!decodeKey(encoded,k))return false;
+bool validName(const char* s) {return s && strlen(s) && strlen(s)<=8;}
+bool saveKey(uint8_t mode,const char* src,const char* dst,const char* relay,const uint8_t k[32]) {
+    if(!validName(src)||!validName(dst)||!validName(relay))return false;
     Preferences p;if(!p.begin("ota-route",false))return false;
     bool ok=p.putString("controller",src)==strlen(src) && p.putString("target",dst)==strlen(dst) &&
         p.putString("via",relay)==strlen(relay) && p.putBytes("key",k,32)==32 && p.putUChar("role",mode)==1;
-    p.end();memset(k,0,sizeof k);return ok;
+    p.end();return ok;
+}
+bool save(uint8_t mode,const char* src,const char* dst,const char* relay,const char* encoded) {
+    uint8_t k[32];if(!decodeKey(encoded,k))return false;
+    bool ok=saveKey(mode,src,dst,relay,k);memset(k,0,sizeof k);return ok;
+}
+// The network route key lives in its own namespace: clearing or restoring a
+// route must not remove the key installed with the station secret.
+constexpr char kNetKeyNamespace[]="ota-netkey";
+bool loadNetworkKey(uint8_t k[32]) {
+    Preferences p;if(!p.begin(kNetKeyNamespace,true))return false;
+    bool ok=p.getBytesLength("key")==32 && p.getBytes("key",k,32)==32;p.end();return ok;
 }
 bool authenticated(AsyncWebServerRequest* r) {
     if(Config.webadmin.active) {
@@ -141,6 +152,49 @@ bool requiresRelay() {return role==ROLE_TARGET;}
 bool routedReply() {return replyContext;}
 size_t wrapReply(const uint8_t* f,size_t n,uint8_t* out) {return replyContext?encode(routeota::TARGET_RELAY,f,n,out):0;}
 bool configureTarget(const char* src,const char* relay,const char* encoded) {return save(ROLE_TARGET,src,Config.callsign.c_str(),relay,encoded);}
+bool networkKeyConfigured() {uint8_t k[32];bool ok=loadNetworkKey(k);memset(k,0,sizeof k);return ok;}
+bool setNetworkKey(const char* encoded) {
+    uint8_t k[32];if(!encoded||!decodeKey(encoded,k))return false;
+    Preferences p;bool ok=false;
+    if(p.begin(kNetKeyNamespace,false)) {ok=p.putBytes("key",k,32)==32;p.end();}
+    memset(k,0,sizeof k);return ok;
+}
+bool clearNetworkKey() {
+    Preferences p;if(!p.begin(kNetKeyNamespace,false))return false;
+    p.clear();p.end();return !networkKeyConfigured();
+}
+// Applied at once, without a reboot, so a chain can be set up from the
+// controller. Refused while this station relays or receives an image.
+const char* setRadioRoute(uint8_t mode,const char* src,const char* peer) {
+    if(busy()||RF_OTA::busy())return "OTA BUSY";
+    if(mode==ROLE_OFF) {
+        Preferences p;if(!p.begin("ota-route",false))return "OTA ROUTE STORAGE ERROR";
+        p.clear();p.end();
+        role=ROLE_OFF;memset(key,0,sizeof key);controller[0]=target[0]=via[0]=0;
+        Serial.println("[RFROUTE] route cleared by RF");return nullptr;
+    }
+    const char* self=Config.callsign.c_str();
+    if(!validName(src)||!validName(peer))return "OTA ROUTE BAD NAME";
+    if(!validName(self))return "OTA ROUTE CALLSIGN TOO LONG";
+    if(!strcmp(peer,self)||!strcmp(peer,src))return "OTA ROUTE BAD NAME";
+    uint8_t k[32];if(!loadNetworkKey(k))return "OTA ROUTE NO KEY";
+    const char* dst=mode==ROLE_RELAY?peer:self;
+    const char* hop=mode==ROLE_RELAY?self:peer;
+    if(!saveKey(mode,src,dst,hop,k)) {memset(k,0,sizeof k);return "OTA ROUTE STORAGE ERROR";}
+    memcpy(key,k,32);memset(k,0,sizeof k);
+    strcpy(controller,src);strcpy(target,dst);strcpy(via,hop);role=mode;
+    Serial.printf("[RFROUTE] role=%u controller=%s target=%s via=%s set by RF\n",role,controller,target,via);
+    return nullptr;
+}
+const char* setRadioRelay(const char* src,const char* targetName) {return setRadioRoute(ROLE_RELAY,src,targetName);}
+const char* setRadioTarget(const char* src,const char* relayName) {return setRadioRoute(ROLE_TARGET,src,relayName);}
+const char* clearRadioRoute() {return setRadioRoute(ROLE_OFF,nullptr,nullptr);}
+void describeRoute(char* out,size_t n) {
+    const char* keyState=networkKeyConfigured()?"KEY=1":"KEY=0";
+    if(role==ROLE_RELAY)snprintf(out,n,"ROUTE RELAY %s>%s %s",controller,target,keyState);
+    else if(role==ROLE_TARGET)snprintf(out,n,"ROUTE TARGET VIA %s FROM %s %s",via,controller,keyState);
+    else snprintf(out,n,"ROUTE OFF %s",keyState);
+}
 void tick() {
     uint32_t now=millis(),reset=rebootAt.load();
     if(reset && int32_t(now-reset)>=0)ESP.restart();
