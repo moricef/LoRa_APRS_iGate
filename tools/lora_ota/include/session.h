@@ -5,7 +5,12 @@
 
 namespace labota {
 constexpr size_t CHUNK = 204;
-constexpr uint32_t BOARD = 0x54474732; // TTGO LoRa32 V2.1, experimental board id
+// Experimental board id checked in every manifest, so an image for one board
+// is refused by another. Each OTA variant sets its own; TTGO LoRa32 V2.1 by default.
+#ifndef RFOTA_BOARD_ID
+#define RFOTA_BOARD_ID 0x54474732   // "TGG2", TTGO LoRa32 V2.1
+#endif
+constexpr uint32_t BOARD = RFOTA_BOARD_ID;
 enum Op : uint8_t { START=1, DATA=2, FINISH=3, ACTIVATE=4, ABORT=5, ACK=128 };
 enum Status : uint8_t { OK=0, FORMAT=1, ORDER=2, STORAGE=3, VERIFY=4, BUSY=5 };
 enum State { IDLE, RECEIVING, READY, ACTIVATING };
