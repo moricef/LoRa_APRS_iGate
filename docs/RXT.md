@@ -1,5 +1,64 @@
 # RXT telemetry
 
+## Read first: frame types and RXT representations
+
+The RF prefix is three bytes: `3C FF TYPE`. **TYPE selects the packet
+representation, not the RXT version:** `01` is text and `02` is native binary.
+The `01` marker after a zero byte inside a text packet has a different role:
+it identifies the hidden RXT extension.
+
+| Representation | Layout after `3C FF TYPE` | Status |
+| --- | --- | --- |
+| Historical visible RXT v1, type `01` | `SOURCE>DEST,PATH:payload{RFSH}` | Four characters per measurement; historical format |
+| Historical visible RXT v2, type `01` | `SOURCE>DEST,PATH:payload{IRFSH}` | Five characters per measurement; also used internally for text-frame processing |
+| Current text transport, type `01` | `SOURCE>DEST,PATH:payload` followed, only when measurements exist, by `00 01` and 1–3 five-character tuples | Current RF output for text frames; no RXT braces on air |
+| Native draft 0, type `02` | Binary header, address elements, optional indexed RXT block, information fields | Separate binary format; not TNC2 text and not “RXT v2 selected by type 02” |
+
+`I` is a relay-callsign fingerprint; `RFSH` encodes RSSI, SNR, frequency
+offset and time to hop. In native frames the path index associates a
+measurement with its relay, so tuples have four bytes and no `I` character.
+See the [native byte layout](LORA_APRS_NATIVE_FRAME_DRAFT0.md).
+
+Without an RXT extension, the transmitted text frame has neither the zero
+separator nor the extension marker. The 255-byte LoRa payload limit applies
+to the complete frame, including the three-byte prefix, addresses, path,
+information and any extension. A fixed maximum for the information field
+alone cannot express that limit. The current text extension accepts 5, 10 or
+15 tuple characters in the `!` through `z` range; identity-to-path checks
+apply in addition to this syntax.
+
+The information field must not be limited to printable characters: APRS can
+carry binary Mic-E data. The zero separator is a boundary of this particular
+text transport; it does not make it a transparent transport for arbitrary
+binary AX.25 frames. Address rules must also account for identities such as
+`N7UV-44` and `F4MLV-MC`, rather than imposing AX.25's numeric SSID 0–15 on
+every text or native representation.
+
+The [historical RXT v2 proposal](archives/proposals/RXT_V2.md) explains the
+five-character tuple and fingerprint. It is not the specification of the
+current RF envelope.
+
+## Integrity boundary
+
+The firmware enables the LoRa payload CRC with `radio.setCRC(true)` and
+processes a received packet only when `radio.readData(...)` returns
+`RADIOLIB_ERR_NONE`. CRC errors reported by the driver are discarded. The
+LoRa payload CRC is a 16-bit radio-layer check over the transmitted payload,
+including the application prefix and RXT extension. Its bytes are managed
+by the radio and are not part of the layouts above or of `readData`'s payload.
+
+The current text extension and native draft 0 add no application-layer frame
+checksum. The relay fingerprint and its path check are not integrity checks.
+The native encoder's local encode/decode comparison is not a checksum either.
+
+The radio CRC detects transmission errors; it does not protect against a
+packet incorrectly constructed before transmission, a wrong decompression
+reference or later software corruption. A further application-layer check
+is an open design question for the common native/PPM format. Its protected
+bytes, validation points, polynomial and error model must be defined before
+claiming a residual error probability. A CRC-valid radio packet is not proof
+that its APRS content is semantically correct.
+
 ## WebUI control
 
 The **Enable RXT relay telemetry** switch controls whether this digi appends
@@ -26,9 +85,10 @@ rather than passed to the text, JSON or relay pipeline. The RXT build supports
 text type `01` and native type `02`; experimental builds may explicitly add
 other decoders. Unprefixed legacy text remains accepted.
 
-This is RXT v2 (proposal: `docs/archives/proposals/RXT_V2.md`). An RXT-capable digipeater
-adds one five-character tuple to a relayed APRS packet. On air, the tuples
-travel in a hidden block after the text packet:
+This branch uses the five-character RXT v2 measurement tuple. An RXT-capable
+digipeater adds one tuple to an eligible relayed APRS packet. Its current RF
+transport is the hidden extension below, rather than the historical visible
+trailer:
 
 ```text
 <0x3C 0xFF 0x01> SOURCE>DEST,PATH:payload <0x00> <0x01> IRFSH

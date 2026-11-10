@@ -9,7 +9,7 @@ documents déplacés contiennent un lien vers leur nouvel emplacement.
 
 | Sujet | Document | Statut |
 |---|---|---|
-| RXT | [RXT.md](RXT.md) | Transport et comportement du firmware ; point d’entrée pour RXT |
+| RXT | [RXT.md](RXT.md) | Point d’entrée : types texte/natif, représentations historiques et actuelles, contrôle d’intégrité, puis comportement du firmware |
 | Format natif : objectifs | [Français](LORA_APRS_NATIVE_FORMAT_fr.md) · [English](LORA_APRS_NATIVE_FORMAT.md) | Architecture proposée, distincte du périmètre déjà implémenté |
 | Format natif : octets | [Français](LORA_APRS_NATIVE_FRAME_DRAFT0_fr.md) · [English](LORA_APRS_NATIVE_FRAME_DRAFT0.md) | Brouillon 0 implémenté et testé ; format expérimental |
 | Routage retour des messages | [Français](REVERSE_MESSAGE_ROUTING_fr.md) · [English](REVERSE_MESSAGE_ROUTING.md) | Fonctionnement et limites du chemin retour appris |
@@ -40,6 +40,8 @@ spécification actuelle.
 | 13 octobre 2026 | [RXT natif sur l’air](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013_fr.md) · [English](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013.md) |
 | 26 octobre 2026 | [Filtre des types de trame et Bluetooth](tests/2026-10-26/VALIDATION_LORA_FRAME_BT_20261026_fr.md) : comparaison à la compilation, antérieure aux mesures de tas sur carte |
 | 27 octobre 2026 | [Collisions entre relais](tests/2026-10-27/RELAY_COLLISIONS_20261027_fr.md) : expérimentation mise de côté ; branche d’archive indiquée dans le rapport |
+| 29 octobre 2026 | [Position arrondie et comparaison des variantes](tests/2026-10-29/POSITION_ARRONDIE_20261029_fr.md) : banc sur captures, sans essai RF ; complément avec les modèles adaptés et la liste de destinations publiés par Walter |
+| 29 octobre 2026 | [Réseau N7UV : qualité des liaisons, copies multiples et compatibilité RXT](tests/2026-10-29/RESEAU_N7UV_CAPTURE_20261029_fr.md) : observations au collecteur et rapports des relais ; aucune mesure de pertes de bout en bout |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans

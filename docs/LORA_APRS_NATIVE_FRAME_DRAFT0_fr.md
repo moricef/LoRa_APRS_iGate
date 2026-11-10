@@ -37,6 +37,21 @@ journal SD, la liste de la WebUI et le flux JSON.
 
 Les entiers sur plusieurs octets sont en gros-boutiste.
 
+### Type de trame et intégrité
+
+`02` sélectionne cette représentation binaire ; il ne signifie pas « RXT
+v2 ». Le type `01` transporte du texte TNC2, avec éventuellement une extension
+RXT après `00 01`. Les anciennes accolades ne délimitent pas le bloc RXT
+natif. Les représentations sont distinguées dans [RXT.md](RXT.md#read-first-frame-types-and-rxt-representations).
+
+Le firmware active le CRC de charge utile LoRa et rejette les erreurs
+signalées par RadioLib. Ce CRC de 16 bits est géré par la radio, en dehors
+des octets applicatifs représentés ici. Le brouillon 0 n'ajoute pas de CRC
+applicatif ; la vérification locale de l'aller-retour par l'encodeur ne le
+remplace pas. Un contrôle supplémentaire reste à discuter pour le format
+commun, notamment pour couvrir des erreurs de construction ou de décodage
+que le CRC radio ne peut pas détecter. Voir la [frontière d'intégrité](RXT.md#integrity-boundary).
+
 ### Octet d'en-tête
 
 | Bits | Signification |

@@ -35,6 +35,20 @@ SD log, the WebUI list and the JSON stream.
 
 Multi-byte integers are big-endian.
 
+### Frame type and integrity
+
+`02` selects this binary representation; it does not mean “RXT v2”. Type
+`01` carries TNC2 text, optionally followed by an RXT extension after `00 01`.
+Historical braces do not delimit the native RXT block. The representations
+are distinguished in [RXT.md](RXT.md#read-first-frame-types-and-rxt-representations).
+
+The firmware enables the LoRa payload CRC and rejects errors reported by
+RadioLib. This 16-bit check is managed by the radio, outside the application
+bytes shown here. Draft 0 adds no application-layer CRC; the encoder's local
+round-trip check does not replace one. A further check remains open for the
+common format, particularly to cover construction or decoding errors that
+the radio CRC cannot detect. See the [integrity boundary](RXT.md#integrity-boundary).
+
 ### Header byte
 
 | Bits | Meaning |
