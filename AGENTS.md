@@ -51,6 +51,32 @@ remise en état, les essais exploratoires remplacés par des essais concluants e
 les observations sans valeur probante doivent être exclus. Toute conclusion
 doit rester strictement limitée à ce que les observations démontrent.
 
+## Séparer LACF/RXT et OTA radio
+
+Consigne explicite de l'utilisateur, 2 novembre 2026 : le format natif,
+LACF, PPM et RXT constituent un chantier ; l'OTA radio est un chantier
+séparé. Dans une lecture, une analyse ou un échange sur le premier, ne pas
+introduire l'OTA ni comparer les fonctions OTA des firmwares.
+
+La présence d'un Web Flasher ou d'un bouton de mise à jour sur une page LACF
+n'est pas un lien avec le projet OTA radio. Ne rapprocher les deux chantiers
+que sur demande explicite de l'utilisateur ou si une dépendance technique
+concrète est indispensable à la tâche demandée ; dans ce dernier cas,
+expliquer précisément cette dépendance.
+
+## Vocabulaire du chemin et de RXT
+
+Vocabulaire validé par l'utilisateur le 2 novembre 2026 :
+- « élément du chemin » : une entrée du chemin (indicatif ou alias) ;
+- « indice dans le chemin » : le rang de cette entrée, compté depuis zéro
+  dans le masque et le code ; préciser la convention dans les exemples ;
+- « tuple RXT associé » : les quatre mesures RSSI, SNR, FO et TTH,
+  stockées séparément et rattachées à cet élément.
+
+Ne pas employer « position RXT » pour désigner cet indice : cela entretient
+une confusion avec une position géographique. Distinguer le nombre maximal
+de tuples de la plage d'indices que le masque permet de désigner.
+
 ## Organisation documentaire
 
 Consulter `docs/README.md` avant de créer un document. Maintenir une référence

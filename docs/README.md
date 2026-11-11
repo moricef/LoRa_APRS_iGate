@@ -16,6 +16,7 @@ documents déplacés contiennent un lien vers leur nouvel emplacement.
 | Doublons APRS-IS et aprs.fi | [Note de référence](APRS_IS_DUPLICATE_HANDLING_fr.md) | Règles à relire avant toute analyse de doublons |
 | Référence APRS-IS | [Markdown](APRS_IS_REFERENCE.md) · [PDF](APRS_IS_REFERENCE.pdf) | Référence complémentaire |
 | Authentification distante | [Français](REMOTE_CONTROL_AUTH_DRAFT_FR.md) · [English](REMOTE_CONTROL_AUTH_DRAFT.md) | Protocole et commandes RXT signées (`RXT=ON/OFF/?`), sauvegarde explicite ; guide opérateur Graywolf distinct |
+| Interface utilisateur OTA | [PDF français](LORA_OTA_OPERATOR_fr.pdf) · [English PDF](LORA_OTA_OPERATOR.pdf) · Sources : [FR](LORA_OTA_OPERATOR_fr.md) / [EN](LORA_OTA_OPERATOR.md) | Prototype graphique : stations enregistrées, choix du firmware, progression ; tests simulés uniquement |
 | Flasher une cible par LoRa | [PDF français](LORA_OTA_GUIDE_fr.pdf) · [English PDF](LORA_OTA_GUIDE.pdf) · Sources : [FR](LORA_OTA_GUIDE_fr.md) / [EN](LORA_OTA_GUIDE.md) | Commandes opérateur du prototype : préparation, transfert complet direct ou par relais, vérification et reprise |
 
 ## Propositions en discussion
@@ -69,6 +70,7 @@ spécification actuelle.
 | 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset ; complément APRS signé et bail de 30 secondes |
 | 1 novembre 2026 | [Commandes RXT et profils OTA par radio](tests/2026-11-01/APRS_RXT_OTA_RF_fr.md) : tuples RXT ON/OFF, sauvegarde après reset, échanges sur profil temporaire et retours explicite, après silence et reset |
 | 1 novembre 2026 | [Blocs OTA variables](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md) · [English](tests/2026-11-01/OTA_BLOCK_SIZES.md) : cinq tailles en direct, 128/175 par un relais avec et sans atténuateur (820 Ω puis 8,2 kΩ), 8 Ko vérifiés en flash ; comparaison RSSI jusqu’à 82 kΩ, sans choix d’une taille optimale |
+| 8 novembre 2026 | [Blocs OTA sur une liaison relayée et atténuée](tests/2026-11-08/OTA_BLOCK_SIZES_RELAY_ATTENUATED_fr.md) : échantillons de 64 Ko, trois répétitions complètes à 9 dBm, blocs de 128 à 175 octets les plus rapides dans ce montage ; reprise rouverte par un nouveau `HELLO`, puis perte des réponses en profil rapide, cause non déterminée |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
