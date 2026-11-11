@@ -64,6 +64,9 @@ def decode_reply(key,source,target,raw):
                       version=version,image_sha=p[16+vl:].hex())
     return result
 
+class OperatorPause(Exception):
+    """Operator requested a pause before activation; retain durable pages."""
+
 class Client:
     def __init__(self,port,key,source,target,counter_file,event):
         self.serial=open_serial(port)
@@ -92,15 +95,22 @@ class Client:
         burst=((4096+self.block_size-1)//self.block_size)*(fast.airtime(80+self.block_size)+.02)
         self.window_timeout=max(20,(4*burst if self.route else 0)+4*fast.airtime()+5)
         self.event('radio_profiles_configured',**{name:p.mapping() for name,p in profiles.items()})
+    def check_pause(self):
+        path=getattr(self,'pause_file',None)
+        if path and not getattr(self,'activation_started',False) and not getattr(self,'closing',False) and path.exists():
+            raise OperatorPause()
     def request(self,op,offset=0,payload=b'',expected=0,drop_ack=False,timeout=None,attempts=16):
+        self.check_pause()
         if timeout is None:timeout=self.default_timeout
         raw=make_frame(self.key,self.source,self.target,self.nonce if op!=HELLO else bytes(8),op,offset,payload)
         if self.route:raw=self.route.encode(raw)
         for attempt in range(attempts):
+            self.check_pause()
             self.serial.write(b'TX '+raw.hex().encode()+b'\n')
             self.event('rf_tx',op=op,offset=offset,wire_bytes=len(raw),attempt=attempt+1,fast=self.fast)
             deadline=time.monotonic()+timeout
             while time.monotonic()<deadline:
+                self.check_pause()
                 line=self.serial.readline().strip()
                 if line.startswith(b'TXDONE '):
                     ok=line==b'TXDONE 0'
@@ -143,6 +153,7 @@ class Client:
         self.enter_fast(self.profile_lease)
 
     def send_unacknowledged(self,op,offset,payload):
+        self.check_pause()
         raw=make_frame(self.key,self.source,self.target,self.nonce,op,offset,payload)
         if self.route:raw=self.route.encode(raw)
         self.serial.write(b'TX '+raw.hex().encode()+b'\n')
@@ -202,6 +213,7 @@ class Client:
         self.request(STATUS,attempts=4)
         self.event('normal_profile_confirmed')
     def close(self):
+        self.closing=True
         if self.negotiated and self.fast:
             try:self.return_normal()
             except Exception:
@@ -216,6 +228,7 @@ def main():
     ap.add_argument('--bridge',required=True);ap.add_argument('--key-file',required=True,type=Path)
     ap.add_argument('--source',default='F4MLV-2');ap.add_argument('--target',default='F4MLV-15')
     ap.add_argument('--image',type=Path,required=True);ap.add_argument('--log',type=Path,required=True)
+    ap.add_argument('--pause-file',type=Path,help='Operator interface: pause safely before activation when this file exists')
     ap.add_argument('--counter-file',type=Path,help='Persistent counter for this controller/target')
     ap.add_argument('--resume-log',type=Path,help='Resume the same authenticated receiver session from a previous log')
     ap.add_argument('--exercise-rollback',action='store_true')
@@ -255,6 +268,7 @@ def main():
             if kind!='block':print(line,flush=True)
         counter_file=args.counter_file or args.log.parent/(args.target+'.counter')
         c=Client(args.bridge,key,args.source.encode(),args.target.encode(),counter_file,event)
+        c.pause_file=args.pause_file
         try:
             if args.via:
                 route_key=base64.urlsafe_b64decode(args.route_key_file.read_text().strip()+'=')
@@ -286,6 +300,9 @@ def main():
             else:
                 r=transfer_stop_and_wait(c,args,image,manifest,before,event)
             if args.negotiate_profile:c.return_normal()
+            c.check_pause()
+            c.activation_started=True
+            event('activation_starting')
             if args.exercise_rollback:c.request(TEST_FAIL_ONCE)
             # A windowed activation names the transported stream: the container when compressed.
             stream_bytes=r['written'] if args.windowed else len(image)
@@ -323,6 +340,9 @@ def main():
                 net=c.request(NETWORK_STATUS);assert net['wifi_mode']==0 and not net['connected'] and not net['active_interface']
                 event('offline_after_update',reply=printable(net))
             c.request(ABORT)
+        except OperatorPause:
+            event('operator_paused')
+            return 75
         finally:
             c.close()
 
@@ -346,4 +366,4 @@ def transfer_stop_and_wait(c,args,image,manifest,before,event):
     return r
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':raise SystemExit(main())

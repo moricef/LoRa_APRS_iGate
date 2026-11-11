@@ -13,6 +13,7 @@ STYLE = '''<style>
 }
 html { font: 10.5pt Arial, sans-serif; color: #222; }
 body { margin: 0; max-width: none; line-height: 1.3; }
+img { max-width: 100%; height: auto; }
 h1 { font-size: 21pt; } h2 { font-size: 15pt; margin-top: 18pt; }
 h3 { font-size: 12pt; } h1,h2,h3 { break-after: avoid; }
 p { orphans: 3; widows: 3; }
@@ -29,19 +30,22 @@ pre code { white-space: pre-wrap; font-size: 7.4pt; }
 
 
 def main():
-    for lang, stem in [('fr', 'LORA_OTA_GUIDE_fr'), ('en', 'LORA_OTA_GUIDE')]:
+    for lang, stem in [('fr', 'LORA_OTA_GUIDE_fr'), ('en', 'LORA_OTA_GUIDE'),
+                       ('fr', 'LORA_OTA_OPERATOR_fr'), ('en', 'LORA_OTA_OPERATOR')]:
         source = DOCS / (stem + '.md')
         title = source.read_text().splitlines()[0].removeprefix('# ')
         with tempfile.TemporaryDirectory(prefix='ota-guide-') as folder:
             tmp = Path(folder)
             style = tmp / 'style.html'
-            style.write_text(STYLE)
+            style.write_text(STYLE + ("<style>html {font-size:9.5pt} body {padding:0} h1 {font-size:19pt; margin-top:0} h2 {font-size:12pt; margin-top:12pt} figure {margin:8pt 0} figure img {max-width:70%} figcaption {font-size:8pt}</style>" if 'OPERATOR' in stem else ''))
             html = tmp / 'guide.html'
             subprocess.run(['pandoc', str(source), '--standalone', '--section-divs',
                             '--metadata', 'lang=' + lang,
                             '--metadata', 'pagetitle=' + title,
                             '--include-in-header', str(style),
+                            '--resource-path', str(DOCS),
                             '--output', str(html)], check=True)
+            html.write_text(html.read_text().replace('src="presentations/', 'src="' + (DOCS / 'presentations').as_uri() + '/'))
             # Resolve document links against the public branch, not the temporary HTML.
             base = 'https://github.com/moricef/LoRa_APRS_iGate/blob/experiment/lora-ota/docs/'
             html.write_text(re.sub(r'href="([^"]+)"',
