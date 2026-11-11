@@ -104,8 +104,7 @@ caractérise pas une liaison dégradée. Aucune image complète n’est activée
 L’utilisateur a intercalé entre MLV-15 et son antenne un atténuateur en π :
 deux résistances de 51 Ω à la masse et une de 820 Ω en série. Le calcul en
 50 Ω donne 30,665 dB ; cette valeur n’a pas été mesurée à 434,550 MHz.
-L’atténuateur avait été construit pour 431,975 MHz. Son insertion concerne
-la liaison MLV-10 ↔ MLV-15 dans les deux sens.
+Son insertion concerne la liaison MLV-10 ↔ MLV-15 dans les deux sens.
 
 Même fichier de 8 192 octets, mêmes binaires, même trajet et mêmes profils
 que le complément précédent. Aucun reflash ni changement de configuration.

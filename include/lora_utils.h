@@ -71,6 +71,7 @@ namespace LoRa_Utils {
     bool    setOtaFastProfile(bool fast);
     bool    otaProfileSupported(const labota::RadioProfile& profile);
     bool    configureOtaFastProfile(const labota::RadioProfile& profile,bool custom);
+    bool    setBridgeProfile(const labota::RadioProfile& profile);
     bool    sendOtaFrame(const uint8_t* frame,size_t size,bool channelAccess=false);
     bool    sendNewPacket(const String& newPacket, const RxtRxContext* rxtContext = nullptr, bool deferIfBusy = false);
     String  receivePacketFromSleep();

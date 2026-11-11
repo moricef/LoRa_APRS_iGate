@@ -9,6 +9,8 @@
 #include <esp_task_wdt.h>
 #include <esp_system.h>
 #include <atomic>
+#include <cerrno>
+#include <cstdlib>
 #include "configuration.h"
 #include "remote_auth.h"
 #include "lora_utils.h"
@@ -34,7 +36,7 @@ bool radioReady=false,watchdog=false;
 uint32_t statsBootId=0;
 uint32_t bootAt=0,armedAt=0,lastPacket=0,rebootAt=0,helloCounter=0;
 uint8_t nonce[8]{},peer[8]{};
-char serialInput[160];size_t serialLength=0;
+char serialInput[640];size_t serialLength=0;bool serialOverflow=false;
 
 // Written just before an image is selected by a radio command. At the next
 // boot it means "this pending image came over the air and needs the radio
@@ -70,6 +72,85 @@ ProfileLease profile;
 FastProfileRequest proposedFast;
 RadioProfile aprsSelectedProfile;
 bool aprsProfileSelected=false;
+
+// USB bench bridge. The PC runs the transfer client and this node only
+// carries its frames, as the dedicated bridge firmware did. While it is on,
+// the node behaves as busy: no beacon, digipeating or APRS-IS from RF.
+bool bridgeOn=false;int bridgeIndex=-1;uint32_t bridgeLast=0;
+RadioProfile bridgeProfiles[2]={{434100000,125000,12,5,2},{434500000,500000,7,5,2}};
+constexpr uint32_t BRIDGE_IDLE_MS=300000;
+bool nodeTransferActive() {
+    return armed||pending||profile.mode!=ProfileLease::NORMAL||session.state!=IDLE||pages.state!=IDLE||RF_ROUTE::busy();
+}
+bool bridgeApply(int index) {
+    bool ok=!nodeTransferActive() && LoRa_Utils::setBridgeProfile(bridgeProfiles[index]);
+    if(ok) {bridgeOn=true;bridgeIndex=index;bridgeLast=millis();}
+    else if(bridgeOn) {LoRa_Utils::setOtaFastProfile(false);bridgeOn=false;}
+    return ok;
+}
+void bridgeStop() {
+    if(bridgeOn)LoRa_Utils::setOtaFastProfile(false);
+    bridgeOn=false;
+}
+int hexNibble(char c) {
+    if(c>='0'&&c<='9')return c-'0';
+    if(c>='a'&&c<='f')return c-'a'+10;
+    if(c>='A'&&c<='F')return c-'A'+10;
+    return -1;
+}
+size_t fromHex(const char* text,uint8_t* out,size_t capacity) {
+    size_t n=strlen(text);if(n%2 || n/2>capacity)return 0;
+    for(size_t i=0;i<n/2;i++) {
+        int a=hexNibble(text[2*i]),b=hexNibble(text[2*i+1]);if(a<0||b<0)return 0;
+        out[i]=uint8_t(16*a+b);
+    }
+    return n/2;
+}
+bool bridgeCommand(const char* line) {
+    if(!strncmp(line,"OTABRIDGE ",10)) {
+        long baud=strtol(line+10,nullptr,10);
+        bool ok=baud==115200||baud==230400||baud==460800||baud==921600;
+        Serial.printf("OTABRIDGE %s\n",ok?"OK":"ERROR");
+#if ARDUINO_USB_CDC_ON_BOOT
+        // Native USB console: the line speed does not apply.
+#else
+        if(ok) {Serial.flush();Serial.updateBaudRate(baud);}
+#endif
+    } else if(!strcmp(line,"BRIDGE OFF")) {
+        bridgeStop();bridgeIndex=-1;Serial.println("BRIDGE OFF OK");
+    } else if(!strncmp(line,"PROFILEDEF ",11)) {
+        const char* cursor=line+11;long long values[6]{};bool ok=true;
+        for(int i=0;i<6 && ok;i++) {
+            errno=0;char* end;values[i]=strtoll(cursor,&end,10);
+            ok=errno!=ERANGE && end!=cursor && (*end==' '||*end==0);cursor=end;
+        }
+        while(*cursor==' ')++cursor;
+        ok=ok && !*cursor && values[0]>=0 && values[0]<=1 && values[1]>0 && values[1]<=UINT32_MAX &&
+            values[2]>0 && values[2]<=UINT32_MAX && values[3]>=0 && values[3]<=255 &&
+            values[4]>=0 && values[4]<=255 && values[5]>=-128 && values[5]<=127;
+        if(ok) {
+            RadioProfile p{uint32_t(values[1]),uint32_t(values[2]),uint8_t(values[3]),uint8_t(values[4]),int8_t(values[5])};
+            ok=LoRa_Utils::otaProfileSupported(p);
+            if(ok)bridgeProfiles[values[0]]=p;
+        }
+        Serial.printf("PROFILEDEF %lld %s\n",values[0],ok?"OK":"ERROR");
+    } else if(!strcmp(line,"PROFILE 0") || !strcmp(line,"PROFILE 1")) {
+        int index=line[8]=='1';
+        Serial.printf("PROFILE %d %s\n",index,bridgeApply(index)?"OK":"ERROR");
+    } else if(!strncmp(line,"TX ",3) || !strncmp(line,"TXRAW ",6)) {
+        bool raw=line[2]=='R';uint8_t frame[255];size_t n=fromHex(line+(raw?6:3),frame,sizeof frame);
+        // Same frame types as the dedicated bridge: bench OTA frames, or APRS frames for TXRAW.
+        bool valid=raw ? n>=3 && frame[0]==0x3c && frame[1]==0xff && (frame[2]==1||frame[2]==2||frame[2]==0x81) :
+            (n>=51 && !memcmp(frame,"\x3c\xff\x7e",3) && (frame[3]==1||frame[3]==2)) ||
+            (n>=80 && !memcmp(frame,"\x3c\xff\x7d\x01",4));
+        if(!valid) {Serial.println("ERROR frame");return true;}
+        if(!bridgeOn && bridgeIndex>=0)bridgeApply(bridgeIndex);
+        if(!bridgeOn) {Serial.println("ERROR bridge");return true;}
+        bridgeLast=millis();
+        Serial.printf("TXDONE %d\n",LoRa_Utils::sendOtaFrame(frame,n,false)?0:-1);
+    } else return false;
+    return true;
+}
 
 bool equalTag(const uint8_t* f,size_t n) {
     uint8_t digest[32];if(!REMOTE_AUTH::otaTag(f,n-16,digest))return false;
@@ -163,13 +244,15 @@ void rollback() {
     // If no rollback slot is available, reset rather than silently confirm.
     ESP.restart();
 }
-void diagnostics() {
-#ifdef RFOTA_DIAGNOSTICS
+void serialCommands() {
     while(Serial.available()) {
         char c=char(Serial.read());
         if(c=='\n') {
             serialInput[serialLength]=0;
-            if(!strncmp(serialInput,"OTAPROVISION ",13)) {
+            if(serialOverflow) {} // an over-long line is dropped whole, never executed truncated
+            else if(bridgeCommand(serialInput)) {}
+#ifdef RFOTA_DIAGNOSTICS
+            else if(!strncmp(serialInput,"OTAPROVISION ",13)) {
                 char* key=strchr(serialInput+13,' ');
                 if(key) {
                     *key++=0;
@@ -203,10 +286,13 @@ void diagnostics() {
             } else if(!strcmp(serialInput,"OTARESET")) {
                 Serial.flush();ESP.restart();
             }
-            serialLength=0;memset(serialInput,0,sizeof serialInput);
-        } else if(c!='\r' && serialLength+1<sizeof serialInput) serialInput[serialLength++]=c;
-    }
 #endif
+            serialLength=0;serialOverflow=false;memset(serialInput,0,sizeof serialInput);
+        } else if(c!='\r') {
+            if(serialLength+1<sizeof serialInput)serialInput[serialLength++]=c;
+            else serialOverflow=true;
+        }
+    }
 }
 }
 namespace RF_OTA {
@@ -247,7 +333,18 @@ void begin() {
     radioReady=true;statsBootId=esp_random();
     Serial.printf("[RFOTA] Ready version=%s running=%s pending=%u\n",versionNumber.c_str(),esp_ota_get_running_partition()->label,unsigned(pending.load()));
 }
-bool busy() {return armed||pending||profile.mode!=ProfileLease::NORMAL;}
+bool busy() {return armed||pending||profile.mode!=ProfileLease::NORMAL||bridgeOn;}
+bool bridgeActive() {return bridgeOn;}
+bool bridgeFrame(const uint8_t* f,size_t n,float rssi,float snr,float fo) {
+    if(!bridgeOn)return false;
+    static char text[3+2*255+1];
+    memcpy(text,"RX ",3);size_t count=n<255?n:255;
+    for(size_t i=0;i<count;i++)snprintf(text+3+2*i,3,"%02x",f[i]);
+    text[3+2*count]=0;
+    Serial.printf("RXMETA rssi=%.2f snr=%.2f fo=%.0f\n",rssi,snr,fo);Serial.println(text);
+    // Bench frames stop here; other traffic continues to the APRS handlers.
+    return n>=3 && f[0]==0x3c && f[1]==0xff && (f[2]==0x7e||f[2]==0x7d);
+}
 
 bool handleAprsControl(const String& packet) {
     // Only direct RF APRS messages, addressed to this node, from the configured
@@ -344,7 +441,10 @@ void tick() {
         if(previous==ProfileLease::FAST)cancel(); // inactivity abandons the session
         Serial.println("[RFOTA] Configured radio profile restored");
     }
-    diagnostics();
+    if(bridgeOn && uint32_t(millis()-bridgeLast)>BRIDGE_IDLE_MS) {
+        bridgeStop();Serial.println("[RFOTA] Bridge idle: configured radio profile restored");
+    }
+    serialCommands();
 }
 bool handle(const uint8_t* f,size_t n) {
     if(n<3||memcmp(f,"\x3c\xff\x7e",3))return false;

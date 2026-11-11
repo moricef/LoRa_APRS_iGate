@@ -9,10 +9,25 @@ from pathlib import Path
 from urllib.request import urlopen
 from radio_profiles import load_profiles
 from send_integrated import Client,ABORT,NETWORK_STATUS,printable
+from send import open_serial
 from route_transport import RouteTransport
 from window_transfer import transfer
 
 PAGE=4096
+
+
+def igate_bridge(port,baud=921600):
+    """Raise an iGate OTA firmware's console to the bridge speed.
+
+    The iGate starts at 115200 baud; the dedicated bridge firmware already runs
+    at 921600 and ignores this line. Returns True when an iGate answered."""
+    device=open_serial(port)
+    try:
+        device.reset_input_buffer();device.write(b'OTABRIDGE %d\n'%baud);deadline=time.monotonic()+2
+        while time.monotonic()<deadline:
+            if device.readline().strip()==b'OTABRIDGE OK':return True
+        return False
+    finally:device.close()
 DEFAULT_BLOCKS=(32,64,96,128,160,175)
 
 
@@ -145,6 +160,7 @@ def main():
                   bytes=len(image),sha256=sha.hex(),trials=trials,profiles={n:p.mapping() for n,p in profiles.items()},
                   verification='inactive flash prefix SHA-256; no image validation or activation')
     (args.output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+    igate=igate_bridge(args.bridge);event('controller_radio',firmware='igate' if igate else 'bridge')
     c=Client(args.bridge,key,args.source.encode(),args.target.encode(),args.counter_file,event)
     if args.via:
         routekey=base64.urlsafe_b64decode(args.route_key_file.read_text().strip()+'=')
@@ -197,6 +213,10 @@ def main():
             elif session_open:
                 c.bridge_profile(False);event("preflight_refused_checkpoint_preserved_session_expires")
         except Exception as error:event('cleanup_unconfirmed',error=str(error))
+        # An iGate controller returns to its configured profile and normal service.
+        if igate:
+            try:c.serial.write(b'BRIDGE OFF\n');c.serial.flush()
+            except Exception as error:event('bridge_off_unconfirmed',error=str(error))
         c.serial.close();trace.close()
         (args.output/'summary.json').write_text(json.dumps(summarize(all_rows),indent=2)+'\n')
         if all_rows:

@@ -197,7 +197,12 @@ void loop() {
     if(received) {
         received=false;size_t n=radio.getPacketLength();uint8_t frame[255];
         int status=n<=sizeof frame?radio.readData(frame,n):RADIOLIB_ERR_PACKET_TOO_LONG;
-        if(status==RADIOLIB_ERR_NONE && !OTA_RECEIVER) {Serial.print("RX ");printHex(frame,n);Serial.println();}
+        if(status==RADIOLIB_ERR_NONE && !OTA_RECEIVER) {
+            // Bench diagnostics: the following RX hex line identifies the
+            // authenticated peer; these metrics alone do not identify a hop.
+            Serial.printf("RXMETA rssi=%.2f snr=%.2f fo=%.0f\n",radio.getRSSI(),radio.getSNR(),radio.getFrequencyError());
+            Serial.print("RX ");printHex(frame,n);Serial.println();
+        }
         if(status==RADIOLIB_ERR_NONE && OTA_RECEIVER && authenticated(frame,n) && frame[4]!=ACK) {
             lastPacket=millis();auto result=session.accept(frame[4],get32(frame+13),frame+35,n-51);
             reply(frame,result);

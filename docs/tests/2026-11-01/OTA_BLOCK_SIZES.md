@@ -101,9 +101,8 @@ characterise a degraded link. No complete image is activated.
 
 The user inserted a π attenuator between MLV-15 and its antenna: two 51 Ω
 shunt resistors and an 820 Ω series resistor. The 50 Ω calculation gives
-30.665 dB; this value was not measured at 434.550 MHz. The attenuator was
-originally built for 431.975 MHz. Its insertion affects the MLV-10 ↔ MLV-15
-link in both directions.
+30.665 dB; this value was not measured at 434.550 MHz. Its insertion affects the
+MLV-10 ↔ MLV-15 link in both directions.
 
 Same 8,192-byte file, binaries, route and profiles as the preceding test.
 No firmware flash or configuration change. One run per size, 175 then

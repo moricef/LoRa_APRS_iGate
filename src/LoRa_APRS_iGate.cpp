@@ -113,6 +113,9 @@ String firstLine, secondLine, thirdLine, fourthLine, fifthLine, sixthLine, seven
 
 
 void setup() {
+    #ifdef ENABLE_RF_OTA
+        Serial.setRxBufferSize(2048); // bench bridge lines reach 514 characters
+    #endif
     Serial.begin(115200);
     RF_OTA::earlyBoot();
     RF_ROUTE::recoverConfiguration();

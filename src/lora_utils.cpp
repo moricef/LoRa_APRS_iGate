@@ -809,6 +809,11 @@ namespace LoRa_Utils {
         otaFastProfile=fast;otaPowerChanged=fast && otaCustomProfile;
         return ok;
     }
+    // Bench bridge profile, held until setOtaFastProfile(false).
+    bool setBridgeProfile(const labota::RadioProfile& p) {
+        if(!otaProfileSupported(p))return false;
+        otaSelectedProfile=p;otaCustomProfile=true;return setOtaFastProfile(true);
+    }
     static OtaTxStats otaTxTotals;
     static portMUX_TYPE otaStatsMux=portMUX_INITIALIZER_UNLOCKED;
     OtaTxStats otaTxStats() {
@@ -847,6 +852,8 @@ namespace LoRa_Utils {
     }
 
     String packetFromRadio(uint8_t* data, size_t length) {
+        if (RF_OTA::bridgeActive() &&
+            RF_OTA::bridgeFrame(data,length,radio.getRSSI(),radio.getSNR(),radio.getFrequencyError())) return "";
         if (RF_ROUTE::handle(data,length)) return "";
         if (RF_ROUTE::requiresRelay() && length>=3 && !memcmp(data,"\x3c\xff\x7e",3)) return "";
         if (RF_OTA::handle(data,length)) return "";
