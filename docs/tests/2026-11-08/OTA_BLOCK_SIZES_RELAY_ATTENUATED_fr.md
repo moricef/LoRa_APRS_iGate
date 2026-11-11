@@ -90,12 +90,23 @@ ancien nonce réutilisé. Dans les deux échecs, le banc suit déjà cette séqu
    nonce ;
 3. il envoie `PREPARE_FAST` en SF12 et en reçoit l'acquittement ;
 4. il passe le contrôleur au profil BW500/SF7 ;
-5. les huit tentatives de `STATUS` en profil rapide restent sans réponse.
+5. les huit tentatives de `STATUS` en profil rapide restent sans réponse ;
+6. les trois tentatives de `RETURN_NORMAL` dans ce même profil restent aussi
+   sans réponse ;
+7. le contrôleur revient alors au profil normal, mais les quatre tentatives de
+   `STATUS` en SF12 restent sans réponse.
 
 La reprise échoue donc après la réouverture correcte de la session, lors de la
 confirmation du retour au profil rapide. Les traces du contrôleur ne permettent
 pas de déterminer si la cible ou le relais ne bascule pas correctement, si le
 premier `STATUS` ne leur parvient pas, ou si sa réponse est perdue.
+
+Le silence final en SF12 ne démontre pas que la cible est restée en profil
+rapide. La première tentative normale commence alors que son bail rapide peut
+encore être actif. À l'expiration du bail, le firmware revient au profil normal,
+appelle `cancel()` et invalide le nonce ; les tentatives suivantes portant ce
+nonce sont alors ignorées. Seule la console de la cible permettra de dater la
+bascule et l'expiration de session.
 
 ### Cause initiale non établie
 
