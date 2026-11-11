@@ -111,6 +111,7 @@ bool loadNetworkKey(uint8_t k[32]) {
     Preferences p;if(!p.begin(kNetKeyNamespace,true))return false;
     bool ok=p.getBytesLength("key")==32 && p.getBytes("key",k,32)==32;p.end();return ok;
 }
+#if defined(RFOTA_DIAGNOSTICS) || defined(RFOTA_ROUTE_DIAGNOSTICS)
 bool authenticated(AsyncWebServerRequest* r) {
     if(Config.webadmin.active) {
         if(r->authenticate(Config.webadmin.username.c_str(),Config.webadmin.password.c_str()))return true;
@@ -121,6 +122,7 @@ bool authenticated(AsyncWebServerRequest* r) {
     }
     r->requestAuthentication();return false;
 }
+#endif
 }
 namespace RF_ROUTE {
 void recoverConfiguration() {

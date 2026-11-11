@@ -1,5 +1,10 @@
 import unittest
-from unittest.mock import Mock
+import base64
+import json
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import Mock,patch
 from send_integrated import *
 
 class WireTests(unittest.TestCase):
@@ -63,6 +68,29 @@ class WireTests(unittest.TestCase):
         self.assertIsNone(decode_reply(bytes(32),self.source,self.target,f))
         self.assertIsNone(decode_reply(self.key,b'F4MLV-3',self.target,f))
         self.assertIsNone(decode_reply(self.key,self.source,b'F4MLV-14',f))
+    @patch('send_integrated.transfer_stop_and_wait')
+    @patch('send_integrated.Client')
+    def test_no_activate_stops_after_verification(self,client_class,transfer):
+        image=b'\xe9'+bytes(63);client=client_class.return_value
+        client.hello.return_value={'pending':False,'running':65536,'boot':65536}
+        transfer.return_value={'written':len(image)}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);image_path=root/'firmware.bin';key_path=root/'key';log_path=root/'run.jsonl';profiles_path=root/'profiles.json'
+            image_path.write_bytes(image)
+            key_path.write_text(base64.urlsafe_b64encode(self.key).decode().rstrip('='))
+            profiles_path.write_text(json.dumps({
+                'normal':{'frequency_hz':433775000,'bandwidth_hz':125000,'spreading_factor':12,'coding_rate':5,'power_dbm':20},
+                'transfer':{'frequency_hz':434500000,'bandwidth_hz':500000,'spreading_factor':7,'coding_rate':5,'power_dbm':9}}))
+            argv=['send_integrated.py','--bridge','dummy','--key-file',str(key_path),
+                  '--image',str(image_path),'--log',str(log_path),'--no-activate',
+                  '--negotiate-profile','--radio-profiles',str(profiles_path)]
+            with patch.object(sys,'argv',argv):self.assertEqual(main(),0)
+            events=[json.loads(line)['event'] for line in log_path.read_text().splitlines()]
+        self.assertIn('verified_not_activated',events)
+        self.assertNotIn('activation_starting',events)
+        client.request.assert_not_called()
+        client.return_normal.assert_called_once()
+        client.close.assert_called_once()
     def test_metadata_and_malformed_authenticated_replies(self):
         short=bytes([STATUS,0])+struct.pack('>I',408)
         version=b'4.0.2RXT-OTA-B'

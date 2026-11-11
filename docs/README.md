@@ -17,7 +17,7 @@ documents déplacés contiennent un lien vers leur nouvel emplacement.
 | Référence APRS-IS | [Markdown](APRS_IS_REFERENCE.md) · [PDF](APRS_IS_REFERENCE.pdf) | Référence complémentaire |
 | Authentification distante | [Français](REMOTE_CONTROL_AUTH_DRAFT_FR.md) · [English](REMOTE_CONTROL_AUTH_DRAFT.md) | Protocole et commandes RXT signées (`RXT=ON/OFF/?`), sauvegarde explicite ; guide opérateur Graywolf distinct |
 | Interface utilisateur OTA | [PDF français](LORA_OTA_OPERATOR_fr.pdf) · [English PDF](LORA_OTA_OPERATOR.pdf) · Sources : [FR](LORA_OTA_OPERATOR_fr.md) / [EN](LORA_OTA_OPERATOR.md) | Prototype graphique : stations enregistrées, choix du firmware, progression ; tests simulés uniquement |
-| Flasher une cible par LoRa | [PDF français](LORA_OTA_GUIDE_fr.pdf) · [English PDF](LORA_OTA_GUIDE.pdf) · Sources : [FR](LORA_OTA_GUIDE_fr.md) / [EN](LORA_OTA_GUIDE.md) | Commandes opérateur du prototype : préparation, transfert complet direct ou par relais, vérification et reprise |
+| Flasher une cible par LoRa | [PDF français](LORA_OTA_GUIDE_fr.pdf) · [English PDF](LORA_OTA_GUIDE.pdf) · Sources : [FR](LORA_OTA_GUIDE_fr.md) / [EN](LORA_OTA_GUIDE.md) | Firmware iGate OTA unifié configurable comme contrôleur, relais ou cible ; transfert complet direct ou relayé, vérification et reprise |
 
 ## Propositions en discussion
 

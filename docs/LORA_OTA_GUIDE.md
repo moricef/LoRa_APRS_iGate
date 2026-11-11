@@ -22,9 +22,9 @@ PC -- USB -- radio bridge -- LoRa -- relay -- LoRa -- target
 
 | Device | Required role and setup |
 |---|---|
-| USB bridge | `bridge_fast` firmware, controller serial protocol at 921600 baud. No normal iGate Wi-Fi, TNC2 server or APRS command handling. |
-| Target | `ENABLE_RF_OTA` firmware, two application slots and a rollback-compatible bootloader, provisioned REMOTE_AUTH key and controller callsign. |
-| Optional relay | `ENABLE_RF_ROUTE` firmware, provisioned relay role and route. The target must also be configured for this relay. |
+| USB controller | Unified OTA-capable iGate firmware, connected to the PC at 921600 baud. It retains normal iGate functions. |
+| Target | The same unified OTA-capable iGate firmware, two application slots and a rollback-compatible bootloader, provisioned REMOTE_AUTH key and controller callsign. |
+| Optional relay | The same unified OTA-capable iGate firmware, with a provisioned relay role and route. The target must also be configured for this relay. |
 | Image | Application `firmware.bin` compatible with the board and small enough for its inactive slot. It must retain RF OTA and deferred boot confirmation. |
 
 RF transfer updates neither the bootloader nor the partition table. Initial
@@ -65,7 +65,7 @@ export OTA_KEY="$OTA_PRIVATE/target.key"
 export OTA_ROUTE_KEY="$OTA_PRIVATE/route.key"
 export OTA_COUNTER="$OTA_PRIVATE/F4MLV-2--F4MLV-15.counter"
 export OTA_PROFILES="$OTA_PRIVATE/profiles.json"
-export OTA_IMAGE='.pio/build/ttgo-lora32-v21-ota-b/firmware.bin'
+export OTA_IMAGE='.pio/build/ttgo-lora32-v21-ota/firmware.bin'
 export OTA_RUN="logs/radio-ota-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$OTA_PRIVATE" "$OTA_RUN"
 chmod 700 "$OTA_PRIVATE" "$OTA_RUN"
@@ -114,15 +114,23 @@ manually before launching it.
 
 ## 3. Initial installation, only when needed
 
-**Skip this section for boards already running the prepared bench firmware.**
-Do not reflash them between passes of the same test campaign.
+**Skip this section for boards already running the unified OTA-capable iGate
+firmware.** Do not reflash them between passes of the same campaign.
 
-Build the required variants:
+Build the unified OTA-capable iGate firmware:
 
 ```bash
-pio run -e ttgo-lora32-v21-ota-a -e ttgo-lora32-v21-ota-b -e ttgo-lora32-v21-ota-relay
-pio run -d tools/lora_ota -e bridge_fast
+pio run \
+  -e ttgo-lora32-v21-ota \
+  -e heltec_wifi_lora_32_V3_2-ota \
+  -e QRPLabs_LightGateway_Plus_1_0-ota
 ```
+
+Each board necessarily has its own binary, but all three variants provide the
+same USB controller, relay and target roles. Configure the radio role on each
+station; no dedicated bridge or relay firmware is required. The `-ota-a`,
+`-ota-b`, `-ota-relay` variants and `bridge_fast` now remain only for
+reproducing historical tests.
 
 For a TTGO with 4 MiB flash, back up the entire flash before USB installation,
 using the actual target port:
@@ -133,100 +141,47 @@ esptool.py --chip esp32 --port "$OTA_TARGET_USB" --baud 921600 read_flash 0 0x40
 sha256sum "$OTA_RUN/target-before.bin" > "$OTA_RUN/target-before.sha256"
 ```
 
-Also back up configurations and any other board whose firmware will be
-replaced. Flash sizes and offsets must be checked for other hardware.
+Also back up configurations and any other board receiving the unified
+OTA-capable iGate firmware for the first time. Flash sizes and offsets must
+be checked for other hardware.
 
-Install the bridge and initial target firmware:
+Install the initial target firmware:
 
 ```bash
-pio run -d tools/lora_ota -e bridge_fast -t upload --upload-port "$OTA_BRIDGE"
-pio run -e ttgo-lora32-v21-ota-a -t upload --upload-port "$OTA_TARGET_USB"
+pio run -e ttgo-lora32-v21-ota -t upload --upload-port "$OTA_TARGET_USB"
 ```
 
 USB installation also writes the variant's startup and partition artifacts.
 Check compatibility with the existing layout first. Tested boards used two
 1,966,080-byte application slots.
 
-Provision the target key and controller through firmware management.
-Diagnostic variants also provide serial provisioning at 115200 baud:
-
-```bash
-python3 -m serial.tools.miniterm "$OTA_TARGET_USB" 115200 --raw
-```
-
-Exit the monitor with `Ctrl+]` before starting a transfer. Enter the actual
-target key from its private file:
-
-```text
-OTAPROVISION F4MLV-2 <base64url target key>
-```
-
-Expected response: `OTAPROVISIONED`. This saves the controller identity too.
-Do not change the key on an already provisioned target.
-
-Optional diagnostic command `OTAOFFLINE` clears saved Wi-Fi networks,
-disables the AP and saves that choice. Expected response:
-`OTAOFFLINE_SAVED`. It is not merely a temporary Web disconnect.
-`OTARESET` restarts the board after these changes. Opening its USB port
-can reset it; do not open it during a transfer.
+Before disabling network access, provision the target's remote-control key,
+controller callsign and OTA route key through its WebUI. Do not change these
+keys on an already prepared target. Wi-Fi or AP shutdown is a normal station
+setting, not a special firmware variant. Opening its USB port can reset it;
+do not open it during a transfer.
 
 ### Adding a relay
 
-Install the relay variant on the appropriate board once:
-
-```bash
-export OTA_RELAY_USB='/dev/serial/by-id/RELAY_USB_PORT'
-pio run -e ttgo-lora32-v21-ota-relay -t upload --upload-port "$OTA_RELAY_USB"
-```
-
-A Web upload can also be suitable if the bootloader and partitions are
-already compatible. Uploading only an application cannot change their layout.
-
-Create the route through the relay diagnostic API. Its management endpoint
-must actually be reachable from the workstation running this command:
-
-```bash
-export OTA_RELAY_URL='http://RELAY_MANAGEMENT_ADDRESS'
-export OTA_RELAY_WEB_USER='MANAGEMENT_USERNAME'
-python3 - <<'PY'
-import os, base64
-from pathlib import Path
-key = Path(os.environ['OTA_ROUTE_KEY']).read_text().strip()
-assert len(key) == 43 and len(base64.urlsafe_b64decode(key + '=')) == 32
-path = Path(os.environ['OTA_PRIVATE']) / 'route-form.key'
-path.write_text(key)
-path.chmod(0o600)
-PY
-curl --fail --user "$OTA_RELAY_WEB_USER" \
-  --data-urlencode "controller=$OTA_SOURCE" \
-  --data-urlencode "target=$OTA_TARGET" \
-  --data-urlencode "key@$OTA_PRIVATE/route-form.key" \
-  "$OTA_RELAY_URL/lab/ota/route"
-```
-
-Curl prompts for the password. Diagnostic API credentials use Webadmin when
-enabled, otherwise configured OTA credentials, otherwise username `ota-lab`
-and the AP password. Saving the route **reboots the relay**. Without
-`bench_profile=1`, its saved radio configuration is retained.
-
-Configure the target with the same transport key and relay identity:
+The relay uses the same OTA-capable iGate image. Install the same OTA route
+key in the relay and target WebUIs, then send these authenticated APRS
+commands from Graywolf:
 
 ```text
-OTAROUTE F4MLV-10 <base64url transport key>
-OTARESET
+to F4MLV-10: OTA=RELAY,F4MLV-15
+to F4MLV-15: OTA=VIA,F4MLV-10
 ```
 
-Expected response before reset: `OTAROUTE_SAVED`. This target now requires
-its relay: removing `--via` does not turn it into a direct target. A direct
-target must have its route role disabled. There is no implemented serial
-command named `OTAROUTE=OFF`.
+Read both roles back with `OTA=?`. These commands persist the route without
+replacing normal radio settings. This target now requires its relay: removing
+`--via` does not turn it into a direct target.
 
 ## 4. Build the image to transfer
 
 This builds locally and does not flash any board:
 
 ```bash
-pio run -e ttgo-lora32-v21-ota-b
+pio run -e ttgo-lora32-v21-ota
 test -s "$OTA_IMAGE"
 sha256sum "$OTA_IMAGE" | tee "$OTA_RUN/image.sha256"
 ```
@@ -253,6 +208,11 @@ python3 tools/lora_ota/send_integrated.py \
   --windowed --block-size 128 \
   --image "$OTA_IMAGE" --log "$OTA_RUN/transfer.jsonl"
 ```
+
+For a transport trial that must not boot the new firmware, add
+`--no-activate`. The client transfers and verifies the whole image, returns to
+the normal radio profile, records `verified_not_activated`, and exits without
+sending `WINDOW_ACTIVATE`. The image remains in the inactive partition.
 
 Add `--require-offline` only if the target's Wi-Fi and AP are already
 disabled. The client checks this before and after updating; it does not
@@ -379,8 +339,8 @@ PY
 ## 10. APRS commands from Graywolf
 
 Send these as authenticated commands to the correct station, through an
-operational APRS radio. The bench `bridge_fast` does not provide Graywolf's
-usual TNC2 interface.
+operational APRS radio. The unified firmware retains the usual TNC2 interface
+used by Graywolf.
 
 | Command to sign | Effect |
 |---|---|
@@ -388,6 +348,10 @@ usual TNC2 interface.
 | `OTA=PROFILE,434550000,250000,8,6,3` | Prepare the profile in RAM; no switch yet |
 | `OTA=FAST,30` | Switch two seconds after the reply, with a 30-second inactivity lease |
 | `OTA=NORMAL` | Reply on the current profile, then return to the normal profile |
+| `OTA=ROUTE?` | Report the saved OTA role and route |
+| `OTA=RELAY,F4MLV-15` | Configure the addressed station as the relay towards `F4MLV-15` |
+| `OTA=VIA,F4MLV-10` | Configure the addressed station as a target reached through `F4MLV-10` |
+| `OTA=ROUTE,OFF` | Remove this station's OTA role and route |
 
 After FAST, the controlling radio must also use the temporary profile to
 reach the station. Graywolf does not configure it automatically. These

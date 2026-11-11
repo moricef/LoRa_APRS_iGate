@@ -244,6 +244,7 @@ def main():
     ap.add_argument('--source',default='F4MLV-2');ap.add_argument('--target',default='F4MLV-15')
     ap.add_argument('--image',type=Path,required=True);ap.add_argument('--log',type=Path,required=True)
     ap.add_argument('--pause-file',type=Path,help='Operator interface: pause safely before activation when this file exists')
+    ap.add_argument('--no-activate',action='store_true',help='Stop after whole-image verification and normal-profile recovery')
     ap.add_argument('--counter-file',type=Path,help='Persistent counter for this controller/target')
     ap.add_argument('--resume-log',type=Path,help='Resume the same authenticated receiver session from a previous log')
     ap.add_argument('--exercise-rollback',action='store_true')
@@ -274,6 +275,7 @@ def main():
     if args.exercise_relay_restart and not args.windowed:raise ValueError('relay restart test requires window mode')
     if args.relay_restart_point!='cache' and not args.exercise_relay_restart:raise ValueError('restart point requires --exercise-relay-restart')
     if args.exercise_relay_restart and args.exercise_resume:raise ValueError('exercise receiver and relay restarts separately')
+    if args.no_activate and (args.exercise_rollback or args.exercise_confirm_timeout):raise ValueError('activation diagnostics require activation')
     key=base64.urlsafe_b64decode(args.key_file.read_text().strip()+'=')
     if len(key)!=32 or image[:1]!=b'\xe9':raise ValueError('key/image')
     args.log.parent.mkdir(parents=True,exist_ok=True)
@@ -315,6 +317,9 @@ def main():
             else:
                 r=transfer_stop_and_wait(c,args,image,manifest,before,event)
             if args.negotiate_profile:c.return_normal()
+            if args.no_activate:
+                event('verified_not_activated',bytes=len(image),sha256=sha.hex())
+                return 0
             c.check_pause()
             c.activation_started=True
             event('activation_starting')

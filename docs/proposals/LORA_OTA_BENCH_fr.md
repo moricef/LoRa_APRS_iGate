@@ -115,11 +115,16 @@ essayés.
 
 ## Intégration v2 dans l'iGate
 
-Les variantes `ttgo-lora32-v21-ota-a` et `-ota-b` sont des firmwares iGate
-complets, comprenant RXT, le format natif et le décodeur PPM autonome.
-`ENABLE_RF_OTA` y active l'OTA radio ; les autres variantes n'activent
-pas ce service. Ces variantes sont expérimentales et ne sont pas
-publiées sur le flasher.
+Le variant `ttgo-lora32-v21-ota` est un firmware iGate complet, comprenant
+RXT, le format natif, le décodeur PPM autonome, l'OTA et le routage OTA. La
+même image peut servir de contrôleur USB, de relais ou de cible selon sa
+configuration ; elle fonctionne dans l'une ou l'autre partition OTA. Elle
+n'active pas les commandes et injections `RFOTA_DIAGNOSTICS` du banc.
+
+Les anciens variants `-ota-a`, `-ota-b` et `-ota-relay` ne décrivent que les
+essais historiques. L'architecture retenue ne leur attribue aucun rôle en
+exploitation : chaque carte utilise le firmware iGate OTA unifié et reçoit
+son rôle par configuration.
 
 ### Armement et authentification
 
@@ -218,7 +223,11 @@ Le code 9 est également réservé à ces variantes de diagnostic. Les
 tests de l'image complète et du retour arrière sont consignés dans
 le compte rendu, indépendamment de cette description du protocole.
 
-### Reproduire l'essai intégré
+### Reproduire l'ancien essai intégré
+
+Cette procédure conserve la reproductibilité du banc initial. Elle n'est pas
+la procédure de préparation des firmwares actuels et ne doit pas être utilisée
+pour équiper les stations. Le guide opérateur décrit le firmware unifié.
 
 ```sh
 pio run -e ttgo-lora32-v21-ota-a -e ttgo-lora32-v21-ota-b

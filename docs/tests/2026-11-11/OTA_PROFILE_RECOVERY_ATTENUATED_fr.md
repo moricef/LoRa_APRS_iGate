@@ -18,7 +18,8 @@ Le trajet est **MLV-2 -> MLV-10 -> MLV-15** :
 - MLV-10 est le relais ;
 - MLV-15 est la cible et conserve la cascade d'atténuation du 8 novembre ;
 - les blocs utiles font 160 octets ;
-- le profil de contrôle est 434,100 MHz, BW125, SF12, CR4/5, 20 dBm ;
+- le profil de contrôle est 434,100 MHz, BW125, SF12, CR4/5 ; MLV-2 émet à
+  20 dBm, tandis que MLV-10 et MLV-15 utilisent leur profil de base à 2 dBm ;
 - le profil de transfert est 434,500 MHz, BW500, SF7, CR4/5, 9 dBm ;
 - le bail du profil temporaire est de 60 secondes.
 
