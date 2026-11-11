@@ -268,8 +268,10 @@ RETURN_NORMAL (12), sans corps, est acquitté sur le profil rapide ; le
 retour intervient 500 ms après cet acquittement. La session reste active,
 ce qui permet l'activation après réception complète et sa confirmation
 sur le profil initial. Le client vérifie ce retour par STATUS. Une perte
-de cet acquittement n'empêche pas de retrouver le récepteur sur le profil
-initial. ABORT et l'expiration globale de session rétablissent aussi Config.
+de cet acquittement déclenche un retour local au profil initial, l'attente du
+bail augmentée de cinq secondes, puis un nouveau HELLO et un STATUS avec le
+nouveau nonce. ABORT et l'expiration globale de session rétablissent aussi
+Config.
 
 Le client `send_integrated.py --negotiate-profile` effectue ce cycle. Le
 pont possède deux commandes locales, PROFILE 0 et PROFILE 1. Pour les

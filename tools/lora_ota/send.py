@@ -32,10 +32,10 @@ def decode(key,target,nonce,data):
     return data[4],offset,data[35:-16]
 
 def open_serial(port):
-    # Release RTS before DTR. Releasing DTR first leaves RTS asserted alone,
-    # which pulls EN low on the ESP32 auto-reset circuit and reboots the board.
+    # Apply both inactive levels when opening the port. Opening first asserts
+    # the modem lines long enough to reset CH343-connected ESP32 boards.
     device=serial.Serial(port=None,baudrate=115200,timeout=.1)
-    device.port=port;device.open();device.rts=False;device.dtr=False
+    device.rts=False;device.dtr=False;device.port=port;device.open()
     return device
 
 def command(device,text,prefix,timeout=5):

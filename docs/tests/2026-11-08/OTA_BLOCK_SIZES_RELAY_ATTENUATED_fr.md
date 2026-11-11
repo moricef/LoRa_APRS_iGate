@@ -139,3 +139,8 @@ Avant une nouvelle série complète :
 Les traces, résultats CSV/JSON et manifestes de cette campagne sont conservés
 localement dans `logs/block-cascade-20261108/` et
 `logs/link-calibration-20261108/`.
+
+La [campagne ciblée du 11 novembre](../2026-11-11/OTA_PROFILE_RECOVERY_ATTENUATED_fr.md)
+ne reproduit pas l'offset fixe de 36 864 octets. Elle démontre deux reprises
+durables complètes et localise les échecs restants sur les réponses du profil
+rapide dans ce montage atténué.

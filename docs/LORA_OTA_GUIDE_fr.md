@@ -300,6 +300,11 @@ vérification de l’image entière, retour au profil habituel, activation,
 redémarrage, contrôle de la nouvelle partition et de son SHA-256, CONFIRM.
 La cible vérifie de nouveau son image pour la confirmation.
 
+Si l'acquittement de `RETURN_NORMAL` manque, le client revient localement au
+profil habituel, attend l'expiration du bail temporaire augmentée de cinq
+secondes, puis ouvre une nouvelle session par `HELLO` avant de demander
+`STATUS`. Il ne réutilise pas le nonce de la session expirée.
+
 ```bash
 python3 - "$OTA_RUN/transfer.jsonl" <<'PY'
 import json, sys

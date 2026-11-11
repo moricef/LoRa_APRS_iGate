@@ -68,9 +68,12 @@ class OperatorPause(Exception):
     """Operator requested a pause before activation; retain durable pages."""
 
 class Client:
-    def __init__(self,port,key,source,target,counter_file,event):
-        self.serial=open_serial(port)
-        self.serial.baudrate=921600
+    def __init__(self,port,key,source,target,counter_file,event,serial_device=None):
+        if serial_device is None:
+            self.serial=open_serial(port)
+            self.serial.baudrate=921600
+        else:
+            self.serial=serial_device
         self.key,self.source,self.target=key,source,target
         self.counter_file=counter_file;self.nonce=bytes(8);self.event=event;self.retries=0
         self.default_timeout=1;self.negotiated=False;self.fast=False
@@ -207,9 +210,21 @@ class Client:
         self.request(STATUS,attempts=8)
         self.event('fast_profile_confirmed',lease_seconds=lease)
     def return_normal(self):
+        missing=False
         try:self.request(RETURN_NORMAL,attempts=3)
-        except TimeoutError:self.event('return_ack_missing')
-        self.bridge_profile(False);time.sleep(.8)
+        except TimeoutError:
+            missing=True;self.event('return_ack_missing')
+        self.bridge_profile(False)
+        if missing:
+            # The target may already be back on the normal profile while the
+            # relay remains fast until its lease expires.  The old target
+            # session expires at the same time, so recovery needs a new nonce.
+            wait=self.profile_lease+5
+            self.event('waiting_for_profile_recovery',seconds=wait)
+            time.sleep(wait)
+            self.hello(attempts=3)
+        else:
+            time.sleep(.8)
         self.request(STATUS,attempts=4)
         self.event('normal_profile_confirmed')
     def close(self):

@@ -71,6 +71,7 @@ spécification actuelle.
 | 1 novembre 2026 | [Commandes RXT et profils OTA par radio](tests/2026-11-01/APRS_RXT_OTA_RF_fr.md) : tuples RXT ON/OFF, sauvegarde après reset, échanges sur profil temporaire et retours explicite, après silence et reset |
 | 1 novembre 2026 | [Blocs OTA variables](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md) · [English](tests/2026-11-01/OTA_BLOCK_SIZES.md) : cinq tailles en direct, 128/175 par un relais avec et sans atténuateur (820 Ω puis 8,2 kΩ), 8 Ko vérifiés en flash ; comparaison RSSI jusqu’à 82 kΩ, sans choix d’une taille optimale |
 | 8 novembre 2026 | [Blocs OTA sur une liaison relayée et atténuée](tests/2026-11-08/OTA_BLOCK_SIZES_RELAY_ATTENUATED_fr.md) : échantillons de 64 Ko, trois répétitions complètes à 9 dBm, blocs de 128 à 175 octets les plus rapides dans ce montage ; reprise rouverte par un nouveau `HELLO`, puis perte des réponses en profil rapide, cause non déterminée |
+| 11 novembre 2026 | [Reprise OTA sur la liaison relayée et atténuée](tests/2026-11-11/OTA_PROFILE_RECOVERY_ATTENUATED_fr.md) : cinq passages ciblés avec la console de MLV-15 ; deux échantillons de 64 Ko vérifiés après reprise durable, trois échecs sur le trajet retour rapide ; retour au profil normal corrigé et vérifié |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans

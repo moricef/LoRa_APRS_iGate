@@ -20,14 +20,20 @@ def igate_bridge(port,baud=921600):
     """Raise an iGate OTA firmware's console to the bridge speed.
 
     The iGate starts at 115200 baud; the dedicated bridge firmware already runs
-    at 921600 and ignores this line. Returns True when an iGate answered."""
+    at 921600 and ignores this line. Keep the successful connection open: with
+    CH343 boards, closing it before the transfer resets the controller."""
     device=open_serial(port)
-    try:
-        device.reset_input_buffer();device.write(b'OTABRIDGE %d\n'%baud);deadline=time.monotonic()+2
-        while time.monotonic()<deadline:
-            if device.readline().strip()==b'OTABRIDGE OK':return True
-        return False
-    finally:device.close()
+    device.reset_input_buffer();deadline=time.monotonic()+15;next_send=0
+    while time.monotonic()<deadline:
+        if time.monotonic()>=next_send:
+            device.write(b'OTABRIDGE %d\n'%baud);device.flush();next_send=time.monotonic()+1
+        if device.readline().strip()==b'OTABRIDGE OK':
+            device.baudrate=baud
+            time.sleep(1)
+            device.reset_input_buffer()
+            return device
+    device.close()
+    return None
 DEFAULT_BLOCKS=(32,64,96,128,160,175)
 
 
@@ -160,8 +166,9 @@ def main():
                   bytes=len(image),sha256=sha.hex(),trials=trials,profiles={n:p.mapping() for n,p in profiles.items()},
                   verification='inactive flash prefix SHA-256; no image validation or activation')
     (args.output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-    igate=igate_bridge(args.bridge);event('controller_radio',firmware='igate' if igate else 'bridge')
-    c=Client(args.bridge,key,args.source.encode(),args.target.encode(),args.counter_file,event)
+    bridge_device=igate_bridge(args.bridge);igate=bridge_device is not None
+    event('controller_radio',firmware='igate' if igate else 'bridge')
+    c=Client(args.bridge,key,args.source.encode(),args.target.encode(),args.counter_file,event,bridge_device)
     if args.via:
         routekey=base64.urlsafe_b64decode(args.route_key_file.read_text().strip()+'=')
         c.route=RouteTransport(routekey,c.source,c.target,args.via.encode())

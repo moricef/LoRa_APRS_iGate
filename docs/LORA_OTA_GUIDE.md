@@ -289,6 +289,11 @@ whole-image verification, return to the normal radio profile, activation,
 reboot, new partition and SHA-256 checks, and CONFIRM. The target checks
 the image again for confirmation.
 
+If the `RETURN_NORMAL` acknowledgement is missing, the client switches its
+local radio back, waits for the temporary lease plus five seconds, then opens
+a new session with HELLO before requesting STATUS. It does not reuse the nonce
+from the expired session.
+
 ```bash
 python3 - "$OTA_RUN/transfer.jsonl" <<'PY'
 import json, sys

@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock,patch
 from radio_profiles import RadioProfile,load_profiles
-from send_integrated import Client,PREPARE_FAST
+from send_integrated import Client,PREPARE_FAST,RETURN_NORMAL,STATUS
 
 class ConfigurableProfileTests(unittest.TestCase):
     def profiles(self):return load_profiles(Path(__file__).with_name('radio-profiles.example.json'))
@@ -33,5 +33,16 @@ class ConfigurableProfileTests(unittest.TestCase):
         c=self.client();c.route=object();c.radio_profiles['transfer']=c.radio_profiles['normal']
         with self.assertRaisesRegex(ValueError,'too slow for a page burst'):c.enter_fast()
         c.request.assert_not_called()
+    @patch('send_integrated.time.sleep')
+    def test_missing_return_ack_waits_for_lease_and_opens_new_session(self,sleep):
+        c=self.client();c.profile_lease=60;c.hello=Mock()
+        c.request.side_effect=[TimeoutError(),{'status':0}]
+        c.return_normal()
+        self.assertEqual(c.request.call_args_list[0].args,(RETURN_NORMAL,))
+        self.assertEqual(c.request.call_args_list[1].args,(STATUS,))
+        c.bridge_profile.assert_called_once_with(False)
+        sleep.assert_called_once_with(65)
+        c.hello.assert_called_once_with(attempts=3)
+        c.event.assert_any_call('waiting_for_profile_recovery',seconds=65)
 
 if __name__=='__main__':unittest.main()
