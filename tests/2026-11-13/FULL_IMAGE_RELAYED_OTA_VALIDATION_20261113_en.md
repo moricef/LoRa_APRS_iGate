@@ -10,24 +10,28 @@
 The purpose of this test was to transfer a complete firmware image by radio
 from F4MLV-2 to F4MLV-15 through F4MLV-10 over an attenuated link. The test
 also had to exercise recovery after a link loss, verify the image in the
-inactive partition and return every participant to its normal radio profile.
-The received image was not to be activated.
+inactive partition and return every participant to the control radio profile.
+For this test, the image was only written and verified. Activation, booting
+the new image and possible rollback to the previous image were out of scope.
 
 ## Setup and parameters
 
 - controller and USB bridge: F4MLV-2;
 - radio relay: F4MLV-10;
-- offline target: F4MLV-15;
+- target: F4MLV-15, powered and active on radio, but with Wi-Fi and its access
+  point disabled;
 - the attenuation cascade fitted between F4MLV-15 and its antenna on
   8 November was left in place;
 - all three stations ran the same unified iGate OTA firmware:
   `4.0.2RXT-OTA`, build `2026-11-11 15:00:28 UTC`;
 - full uncompressed image: 1,782,064 bytes, SHA-256
   `020e39263efa5d4fc0e5d06f88edc83b0c47928801a8155c5269292a137b0f86`;
-- control profile: 434.100 MHz, BW 125 kHz, SF12, CR 4/5, 20 dBm;
+- control profile, used to open the session and after lease expiry:
+  434.100 MHz, BW 125 kHz, SF12, CR 4/5, 20 dBm;
 - transfer profile: 434.500 MHz, BW 500 kHz, SF7, CR 4/5, 9 dBm;
-- 160-byte blocks and 4,096-byte durable pages;
-- activation explicitly disabled.
+- 160-byte blocks grouped into 4,096-byte pages; the resume point advances
+  only after a complete page has been written to flash;
+- no activation command sent.
 
 ### Attenuation cascade
 
@@ -51,8 +55,9 @@ were still local, uncommitted client changes during this test.
 
 ## Results
 
-The target first confirmed that it was offline. The participants then
-negotiated the fast profile and started the transfer at offset zero.
+The target first confirmed that Wi-Fi was off and no network interface was
+active. The participants then negotiated the fast profile and started the
+transfer at offset zero.
 
 The link was lost after 831,488 bytes had been committed to flash. The client
 waited for the 60-second profile lease to expire, opened a new session with a
@@ -64,17 +69,17 @@ transfer then ran to completion.
 | --- | ---: |
 | Verified bytes | 1,782,064 |
 | Committed pages | 436 |
-| Repair cycles | 15 |
-| Request retries | 9 |
+| Missing-block resend cycles | 15 |
+| Control requests repeated after no reply | 9 |
 | Link losses | 1 |
 | Cumulative recovery time | 103.5 s |
-| Reported transfer duration | 3,608.2 s |
+| Time from transfer start to image verification | 3,608.2 s |
 | Average useful throughput, including recovery | 493.9 bytes/s |
 
-The target accepted the final image verification. The client then confirmed
-the return to the normal radio profile and recorded that no activation had
-taken place. The complete image therefore remains in F4MLV-15's inactive
-partition.
+The target read the complete image back from its inactive partition and
+confirmed its SHA-256 hash. The client then confirmed the return to the
+control profile. Since no activation command was sent, the image remained in
+F4MLV-15's inactive partition and was not booted.
 
 After the test, F4MLV-2 and F4MLV-10 were read back on their 433.775 MHz
 service configuration. F4MLV-10 matched its pre-test backup, with digi mode 2
@@ -83,9 +88,9 @@ profile. The attenuation cascade remains fitted.
 
 ## Conclusion and limits
 
-This run validates a complete relayed transfer, preservation of durable
-progress across a link loss, resumption through a new session and final image
-verification on an offline target.
+In this specific setup, the run demonstrates a complete relayed transfer,
+preservation of durable progress across a link loss, resumption through a new
+session and final image verification on a target with no network access.
 
 It does not validate activation, booting the received firmware or rollback to
 the previous image. It is one complete run over one route and one attenuated

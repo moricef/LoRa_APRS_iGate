@@ -10,24 +10,28 @@
 Vérifier qu'une image de firmware complète peut être transférée par radio de
 F4MLV-2 vers F4MLV-15, via F4MLV-10, malgré une liaison atténuée. L'essai doit
 aussi démontrer la reprise après une perte de liaison, la vérification de
-l'image dans la partition inactive et le retour au profil radio normal. Le
-firmware reçu ne doit pas être activé.
+l'image dans la partition inactive et le retour au profil radio de contrôle.
+Pour cet essai, l'image est seulement écrite et vérifiée : son activation, son
+démarrage et un éventuel retour à l'image précédente restent hors périmètre.
 
 ## Montage et paramètres
 
 - contrôleur et pont USB : F4MLV-2 ;
 - relais radio : F4MLV-10 ;
-- cible hors ligne : F4MLV-15 ;
+- cible : F4MLV-15, alimentée et active en radio, mais avec le Wi-Fi et le
+  point d'accès désactivés ;
 - cascade d'atténuation du 8 novembre maintenue entre F4MLV-15 et son
   antenne ;
 - même firmware iGate OTA unifié sur les trois stations : `4.0.2RXT-OTA`,
   build `2026-11-11 15:00:28 UTC` ;
 - image complète non compressée : 1 782 064 octets, SHA-256
   `020e39263efa5d4fc0e5d06f88edc83b0c47928801a8155c5269292a137b0f86` ;
-- profil de contrôle : 434,100 MHz, BW 125 kHz, SF12, CR 4/5, 20 dBm ;
+- profil de contrôle, utilisé pour ouvrir la session et après expiration du
+  bail : 434,100 MHz, BW 125 kHz, SF12, CR 4/5, 20 dBm ;
 - profil de transfert : 434,500 MHz, BW 500 kHz, SF7, CR 4/5, 9 dBm ;
-- blocs de 160 octets et pages durables de 4 096 octets ;
-- activation désactivée explicitement.
+- blocs de 160 octets, regroupés en pages de 4 096 octets ; le point de
+  reprise n'avance qu'après l'écriture complète d'une page en flash ;
+- commande d'activation non envoyée.
 
 ### Cascade d'atténuation
 
@@ -51,8 +55,9 @@ essai, étaient encore des modifications locales non commitées.
 
 ## Résultats
 
-La cible a d'abord confirmé qu'elle était hors ligne. Le profil rapide a
-ensuite été négocié et le transfert a commencé à l'offset zéro.
+La cible a d'abord confirmé que son Wi-Fi était coupé et qu'aucune interface
+réseau n'était active. Le profil rapide a ensuite été négocié et le transfert
+a commencé à l'offset zéro.
 
 Une perte de liaison est survenue après 831 488 octets écrits durablement.
 Le client a attendu l'expiration du bail de 60 secondes, rouvert une session
@@ -64,16 +69,17 @@ transfert s'est poursuivi jusqu'au bout.
 | --- | ---: |
 | Octets vérifiés | 1 782 064 |
 | Pages validées | 436 |
-| Cycles de réparation | 15 |
-| Répétitions de requêtes | 9 |
+| Cycles de renvoi de blocs manquants | 15 |
+| Requêtes de contrôle répétées après absence de réponse | 9 |
 | Pertes de liaison | 1 |
 | Temps de reprise cumulé | 103,5 s |
-| Durée rapportée du transfert | 3 608,2 s |
+| Durée du début du transfert à la vérification | 3 608,2 s |
 | Débit utile moyen, reprise comprise | 493,9 octets/s |
 
-La cible a accepté la vérification finale de l'image. Le client a ensuite
-confirmé le retour au profil normal et l'absence d'activation. L'image reste
-donc dans la partition inactive de F4MLV-15.
+La cible a relu l'image complète dans sa partition inactive et confirmé son
+SHA-256. Le client a ensuite confirmé le retour au profil de contrôle. Aucune
+commande d'activation n'ayant été envoyée, l'image est restée dans la
+partition inactive de F4MLV-15 et n'a pas été démarrée.
 
 Après l'essai, F4MLV-2 et F4MLV-10 ont été relus sur leur configuration de
 service à 433,775 MHz. La configuration de F4MLV-10 était identique à sa
@@ -83,9 +89,10 @@ place.
 
 ## Conclusion et limites
 
-Cet essai valide un transfert complet, la conservation de l'avancement après
-une perte de liaison, la reprise sur une nouvelle session et la vérification
-de l'image reçue par une cible hors ligne derrière un relais.
+Dans ce montage précis, l'essai démontre un transfert complet, la conservation
+de l'avancement après une perte de liaison, la reprise sur une nouvelle
+session et la vérification de l'image reçue par une cible sans accès réseau,
+derrière un relais.
 
 Il ne valide ni l'activation, ni le démarrage du firmware reçu, ni le retour à
 l'image précédente. Il s'agit d'un seul passage complet sur un trajet et un
