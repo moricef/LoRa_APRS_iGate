@@ -74,8 +74,8 @@
     <p>Connectez la carte par USB, puis choisissez exactement le modèle utilisé.</p>
 
     <div class="board">
-      <h3>TTGO LoRa32 v2.1 avec microSD</h3>
-      <p class="build-time">Build : 13 octobre 2026 à 16:45:52 UTC</p>
+      <h3>TTGO LoRa32 v2.1 avec microSD et OTA LoRa</h3>
+      <p class="build-time">Build : 11 novembre 2026 à 15:00:28 UTC</p>
       <esp-web-install-button class="install-btn" manifest="manifest-ttgo-lora32-v21-sd.json">
         <button slot="activate">Installer ou mettre à jour</button>
         <span slot="unsupported">Navigateur non compatible. Utilisez Chrome, Edge ou Chromium.</span>
@@ -104,9 +104,9 @@
     </div>
   </div>
 
-  <p class="version">Firmware <strong>4.0.2RXT</strong> - builds du 13 octobre 2026 - ESP32 / ESP32-S3 / 433 MHz</p>
+  <p class="version">Firmware TTGO <strong>4.0.2RXT-OTA</strong> du 11 novembre 2026 ; builds Heltec et QRP Labs <strong>4.0.2RXT</strong> du 13 octobre 2026</p>
 
-  <p>Correctif RXT vérifié en radio sur deux TTGO LoRa32 v2.1. Les variantes Heltec et QRP Labs ont été compilées ; elles n’ont pas été testées sur matériel lors de ces essais. <a href="https://github.com/moricef/LoRa_APRS_iGate/blob/rxt/docs/VALIDATION_RXT_NATIVE_RF_20261013.md">RF test report (English)</a> · <a href="https://github.com/moricef/LoRa_APRS_iGate/blob/rxt/docs/VALIDATION_RXT_NATIVE_RF_20261013_fr.md">Compte rendu en français</a>.</p>
+  <p>Le firmware TTGO est l'image exacte installée sur F4MLV-2, F4MLV-10 et F4MLV-15, puis transférée intégralement par LoRa via un relais et vérifiée sans activation. <a href="tests/2026-11-13/FULL_IMAGE_RELAYED_OTA_VALIDATION_20261113_en.md">RF test report (English)</a> · <a href="tests/2026-11-13/VALIDATION_OTA_IMAGE_COMPLETE_20261113_fr.md">Compte rendu en français</a>. Les variantes Heltec et QRP Labs n'intègrent pas encore cette fonction OTA.</p>
 
   <div class="warning">
     <strong>Avant l'installation :</strong>

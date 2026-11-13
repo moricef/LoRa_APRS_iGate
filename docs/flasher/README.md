@@ -4,9 +4,9 @@ Procédure de publication du flasher. Les chemins de commande ci-dessous
 partent de la racine du dépôt. L’[index documentaire](../README.md)
 présente les spécifications et les comptes rendus.
 
-Le flasher publie trois variants de la branche `rxt` :
+Le flasher publie trois variants :
 
-- `ttgo-lora32-v21_SD` (ESP32) ;
+- `ttgo-lora32-v21-ota` (ESP32, étend le variant SD) ;
 - `heltec_wifi_lora_32_V3_2` (ESP32-S3) ;
 - `QRPLabs_LightGateway_Plus_1_0` (ESP32-S3).
 
@@ -27,11 +27,11 @@ laisserait la carte sans bootloader ni table de partitions.
 ## Mettre les binaires à jour
 
 ```sh
-pio run -e ttgo-lora32-v21_SD -e heltec_wifi_lora_32_V3_2 -e QRPLabs_LightGateway_Plus_1_0
+pio run -e ttgo-lora32-v21-ota -e heltec_wifi_lora_32_V3_2 -e QRPLabs_LightGateway_Plus_1_0
 
-cp .pio/build/ttgo-lora32-v21_SD/bootloader.bin docs/firmware/ttgo-lora32-v21_SD/
-cp .pio/build/ttgo-lora32-v21_SD/partitions.bin docs/firmware/ttgo-lora32-v21_SD/
-cp .pio/build/ttgo-lora32-v21_SD/firmware.bin docs/firmware/ttgo-lora32-v21_SD/
+cp .pio/build/ttgo-lora32-v21-ota/bootloader.bin docs/firmware/ttgo-lora32-v21_SD/
+cp .pio/build/ttgo-lora32-v21-ota/partitions.bin docs/firmware/ttgo-lora32-v21_SD/
+cp .pio/build/ttgo-lora32-v21-ota/firmware.bin docs/firmware/ttgo-lora32-v21_SD/
 cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin docs/firmware/ttgo-lora32-v21_SD/
 ```
 

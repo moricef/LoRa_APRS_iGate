@@ -1,6 +1,6 @@
 {
-  "name": "LoRa APRS iGate - TTGO LoRa32 v2.1 SD (RXT)",
-  "version": "4.0.2RXT (2026-10-13 16:45:52 UTC, JSON, HMAC, dedup, CRC metrics, regional aliases, loop guard, compact RXT table, reverse routing, addressed replies, reply-ack, RXT v2, upstream 2026-09-28, native frames draft 0, RXT hidden block, SNR -24..+20 dB, collision-safe RXT attribution, native RXT identity preserved, separate weather telemetry)",
+  "name": "LoRa APRS iGate - TTGO LoRa32 v2.1 SD (RXT + LoRa OTA)",
+  "version": "4.0.2RXT-OTA (2026-11-11 15:00:28 UTC, unified configurable LoRa OTA controller/relay/target, full-image transfer, durable resume, JSON, HMAC, SD logging, APRS telemetry, RXT v2, native frames draft 0)",
   "new_install_prompt_erase": true,
   "builds": [
     {
