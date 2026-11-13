@@ -1,5 +1,7 @@
 # Blocs OTA sur une liaison relayée et atténuée : essais du 8 novembre 2026
 
+[English version](OTA_BLOCK_SIZES_RELAY_ATTENUATED.md)
+
 ## Objet et limites
 
 Cette campagne compare six tailles de blocs OTA sur une liaison relayée et

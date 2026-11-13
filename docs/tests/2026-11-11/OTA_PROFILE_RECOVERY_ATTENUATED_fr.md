@@ -1,5 +1,7 @@
 # Reprise OTA sur une liaison relayée et atténuée : essais du 11 novembre 2026
 
+[English version](OTA_PROFILE_RECOVERY_ATTENUATED.md)
+
 ## Objet
 
 Cette campagne reprend uniquement le cas qui avait interrompu deux passages le
