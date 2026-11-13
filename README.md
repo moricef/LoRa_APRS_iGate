@@ -1,53 +1,126 @@
-# Web Flasher du fork
+# Documentation du fork LoRa APRS iGate
 
-Le flasher publie trois variants de la branche `rxt` :
+Les références techniques sont conservées à la racine pour maintenir leurs
+adresses publiques. Les essais datés, propositions en cours, présentations
+et archives sont classés séparément. Les anciens chemins publics des
+documents déplacés contiennent un lien vers leur nouvel emplacement.
 
-- `ttgo-lora32-v21_SD` (ESP32) ;
-- `heltec_wifi_lora_32_V3_2` (ESP32-S3) ;
-- `QRPLabs_LightGateway_Plus_1_0` (ESP32-S3).
+## Références techniques
 
-Comme le flasher du Tracker, son manifeste contient toujours le bootloader,
-la table de partitions, `boot_app0.bin` et `firmware.bin`, avec
-`new_install_prompt_erase: true`. ESP Web Tools propose ainsi le choix :
+| Sujet | Document | Statut |
+|---|---|---|
+| RXT | [RXT.md](RXT.md) | Transport et comportement du firmware ; point d’entrée pour RXT |
+| Format natif : objectifs | [Français](LORA_APRS_NATIVE_FORMAT_fr.md) · [English](LORA_APRS_NATIVE_FORMAT.md) | Architecture proposée, distincte du périmètre déjà implémenté |
+| Format natif : octets | [Français](LORA_APRS_NATIVE_FRAME_DRAFT0_fr.md) · [English](LORA_APRS_NATIVE_FRAME_DRAFT0.md) | Brouillon 0 implémenté et testé ; format expérimental |
+| Routage retour des messages | [Français](REVERSE_MESSAGE_ROUTING_fr.md) · [English](REVERSE_MESSAGE_ROUTING.md) | Fonctionnement et limites du chemin retour appris |
+| Doublons APRS-IS et aprs.fi | [Note de référence](APRS_IS_DUPLICATE_HANDLING_fr.md) | Règles à relire avant toute analyse de doublons |
+| Référence APRS-IS | [Markdown](APRS_IS_REFERENCE.md) · [PDF](APRS_IS_REFERENCE.pdf) | Référence complémentaire |
+| Authentification distante | [Français](REMOTE_CONTROL_AUTH_DRAFT_FR.md) · [English](REMOTE_CONTROL_AUTH_DRAFT.md) | Protocole et commandes RXT signées (`RXT=ON/OFF/?`), sauvegarde explicite ; guide opérateur Graywolf distinct |
+| Interface utilisateur OTA | [PDF français](LORA_OTA_OPERATOR_fr.pdf) · [English PDF](LORA_OTA_OPERATOR.pdf) · Sources : [FR](LORA_OTA_OPERATOR_fr.md) / [EN](LORA_OTA_OPERATOR.md) | Prototype graphique : stations enregistrées, choix du firmware, progression ; tests simulés uniquement |
+| Flasher une cible par LoRa | [PDF français](LORA_OTA_GUIDE_fr.pdf) · [English PDF](LORA_OTA_GUIDE.pdf) · Sources : [FR](LORA_OTA_GUIDE_fr.md) / [EN](LORA_OTA_GUIDE.md) | Firmware iGate OTA unifié configurable comme contrôleur, relais ou cible ; transfert complet direct ou relayé, vérification et reprise |
 
-- sans effacement, SPIFFS n'est pas écrit et la configuration est conservée ;
-- avec effacement, toute la flash est nettoyée et l'iGate recrée
-  `/igate_conf.json` avec ses valeurs par défaut au premier démarrage.
+## Propositions en discussion
 
-Ne pas ajouter `spiffs.bin` au manifeste : il écraserait la configuration
-même lorsque l'effacement n'est pas demandé. Ne pas proposer non plus un
-manifeste contenant seulement `firmware.bin` : si ESP Web Tools considère
-l'opération comme une nouvelle installation, son effacement préalable
-laisserait la carte sans bootloader ni table de partitions.
+[Format commun natif et PPM : variantes chiffrées](proposals/FORMAT_COMMUN_VARIANTES_fr.md)
+· [English](proposals/COMMON_FORMAT_VARIANTS.md).
 
-## Mettre les binaires à jour
+Ce travail compare les formats et le coût des codecs. Il ne constitue pas
+une décision de format ni une validation de la chaîne complète de relayage.
+Les tailles avec RXT sont des estimations distinctes des essais de codec.
 
-```sh
-pio run -e ttgo-lora32-v21_SD -e heltec_wifi_lora_32_V3_2 -e QRPLabs_LightGateway_Plus_1_0
+[Mises à jour par LoRa : approche combinée](proposals/LORA_OTA_COMBINED.md) · [PDF](proposals/LORA_OTA_COMBINED.pdf)
+(en anglais) : transport par pages testé, différentiel, disposition de la flash,
+campagnes automatiques ou pilotées. Proposition, pas une décision.
 
-cp .pio/build/ttgo-lora32-v21_SD/bootloader.bin docs/firmware/ttgo-lora32-v21_SD/
-cp .pio/build/ttgo-lora32-v21_SD/partitions.bin docs/firmware/ttgo-lora32-v21_SD/
-cp .pio/build/ttgo-lora32-v21_SD/firmware.bin docs/firmware/ttgo-lora32-v21_SD/
-cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin docs/firmware/ttgo-lora32-v21_SD/
-```
+[OTA LoRa expérimental](proposals/LORA_OTA_BENCH_fr.md) : banc autonome,
+puis intégration iGate avec armement radio, confirmation du démarrage
+et retour automatique après changement de profil. Le transfert complet
+par un relais est validé en laboratoire. L'envoi groupé, le cache du relais
+et la reprise persistante ont aussi été validés lors d'un transfert complet
+par un relais, avec reset de la cible pendant le transfert. Aucun de ces prototypes ne constitue
+une garantie de déploiement distant.
+Un essai court sur cartes vérifie aussi la reprise après redémarrage du
+relais, avec conservation des pages durables et refus d'activer l'image incomplète.
+Le profil temporaire peut être choisi et activé par commande RF authentifiée ;
+un essai court vérifie ce changement et le retour au profil habituel.
 
-Répéter les quatre copies dans le répertoire propre à chaque variant. Le
-bootloader ESP32 est flashé à `0x1000`, tandis que les bootloaders ESP32-S3
-sont flashés à `0x0000`. Les autres offsets restent identiques : table de
-partitions à `0x8000`, `boot_app0.bin` à `0xe000` et firmware à `0x10000`.
+[Évaluation de la taille des blocs OTA](proposals/LORA_OTA_BLOCK_BENCH_fr.md)
+· [English](proposals/LORA_OTA_BLOCK_BENCH.md) :
+protocole comparatif, tailles négociées, mesures CSV/JSON et limites ; cinq
+tailles vérifiées en direct, 128 et 175 octets par un relais. Comparaisons
+répétées à plus grande distance et sous conditions RF documentées à réaliser.
 
-Mettre également à jour la version, la date et l'heure UTC exacte de chaque
-build dans `index.html` et dans chacun des trois manifestes. Ces valeurs doivent
-correspondre au champ `Build date` intégré dans la WebUI du binaire concerné.
+## Comptes rendus d’essais
 
-Régénérer ensuite `firmware/ttgo-lora32-v21_SD/SHA256SUMS` avec :
+Chaque compte rendu est daté. Ses conclusions restent limitées aux versions,
+configurations et observations qu’il décrit ; il ne fait pas office de
+spécification actuelle.
 
-```sh
-cd docs/firmware/<variant>
-sha256sum bootloader.bin partitions.bin boot_app0.bin firmware.bin > SHA256SUMS
-```
+| Date | Essais |
+|---|---|
+| 28 septembre 2026 | [Correctifs RF](tests/2026-09-28/VALIDATION_CORRECTIFS_RF_20260928_fr.md) · [English](tests/2026-09-28/RF_FIX_VALIDATION_20260928_en.md) |
+| 29 septembre 2026 | [RXT v2](tests/2026-09-29/VALIDATION_RXT_V2_20260929_fr.md) · [English](tests/2026-09-29/RXT_V2_VALIDATION_20260929_en.md) |
+| 30 septembre 2026 | [Natif et frontière APRS-IS](tests/2026-09-30/ESSAI_NATIF_ET_RXT_APRSIS_20260930_fr.md) · [English](tests/2026-09-30/NATIVE_TRIAL_AND_RXT_APRSIS_20260930_en.md) |
+| 13 octobre 2026 | [RXT natif sur l’air](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013_fr.md) · [English](tests/2026-10-13/VALIDATION_RXT_NATIVE_RF_20261013.md) |
+| 26 octobre 2026 | [Filtre des types de trame et Bluetooth](tests/2026-10-26/VALIDATION_LORA_FRAME_BT_20261026_fr.md) : comparaison à la compilation, antérieure aux mesures de tas sur carte |
+| 27 octobre 2026 | [Collisions entre relais](tests/2026-10-27/RELAY_COLLISIONS_20261027_fr.md) : expérimentation mise de côté ; branche d’archive indiquée dans le rapport |
+| 29 octobre 2026 | [OTA LoRa direct entre deux ESP32](tests/2026-10-29/OTA_LORA_DIRECT_fr.md) : banc autonome puis intégration dans le firmware iGate complet ; armement radio, partition inactive, retour arrière et récupération du profil radio initial |
+| 30 octobre 2026 | [OTA LoRa avec la cible sans Wi-Fi](tests/2026-10-30/OTA_LORA_fr.md) : image complète, confirmation radio et retours arrière en direct puis par F4MLV-10 |
+| 31 octobre 2026 | [Reprises OTA sur quatre pages](tests/2026-10-31/OTA_RELAY_RESTART_fr.md) : cache perdu, groupe interrompu, acquittement perdu et coupure physique de la cible avec une page partielle |
+| 31 octobre 2026 | [Profils OTA configurés par RF](tests/2026-10-31/OTA_RF_PROFILES_fr.md) : profil choisi, refus d'un paramètre incompatible, transfert court et retours après silence, commande et reset ; complément APRS signé et bail de 30 secondes |
+| 1 novembre 2026 | [Commandes RXT et profils OTA par radio](tests/2026-11-01/APRS_RXT_OTA_RF_fr.md) : tuples RXT ON/OFF, sauvegarde après reset, échanges sur profil temporaire et retours explicite, après silence et reset |
+| 1 novembre 2026 | [Blocs OTA variables](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md) · [English](tests/2026-11-01/OTA_BLOCK_SIZES.md) : cinq tailles en direct, 128/175 par un relais avec et sans atténuateur (820 Ω puis 8,2 kΩ), 8 Ko vérifiés en flash ; comparaison RSSI jusqu’à 82 kΩ, sans choix d’une taille optimale |
+| 8 novembre 2026 | [Blocs OTA sur une liaison relayée et atténuée](tests/2026-11-08/OTA_BLOCK_SIZES_RELAY_ATTENUATED_fr.md) · [English](tests/2026-11-08/OTA_BLOCK_SIZES_RELAY_ATTENUATED.md) : échantillons de 64 Ko, trois répétitions complètes à 9 dBm, blocs de 128 à 175 octets les plus rapides dans ce montage ; reprise rouverte par un nouveau `HELLO`, puis perte des réponses en profil rapide, cause non déterminée |
+| 11 novembre 2026 | [Reprise OTA sur la liaison relayée et atténuée](tests/2026-11-11/OTA_PROFILE_RECOVERY_ATTENUATED_fr.md) · [English](tests/2026-11-11/OTA_PROFILE_RECOVERY_ATTENUATED.md) : cinq passages ciblés avec la console de MLV-15 ; deux échantillons de 64 Ko vérifiés après reprise durable, trois échecs sur le trajet retour rapide ; retour au profil normal corrigé et vérifié |
+| 13 novembre 2026 | [Transfert OTA d'une image complète par un relais](tests/2026-11-13/VALIDATION_OTA_IMAGE_COMPLETE_20261113_fr.md) · [English](tests/2026-11-13/FULL_IMAGE_RELAYED_OTA_VALIDATION_20261113_en.md) : image de 1 782 064 octets vérifiée sans activation, avec reprise après une perte de liaison |
 
-## Publication
+Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
+par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
+`logs/bt-20261026/` ; les sauvegardes de configuration peuvent contenir des
+secrets et ne doivent pas être publiées.
 
-GitHub Pages doit publier la branche `gh-pages`, depuis sa racine. Copier le
-contenu de `docs/` à la racine de cette branche après chaque mise à jour.
+Les commandes APRS signées du profil OTA sont décrites dans la
+[proposition OTA](proposals/LORA_OTA_BENCH_fr.md#commandes-aprs-authentifiées--premier-essai-radio).
+Les essais du 1 novembre vérifient les échanges sur le profil temporaire
+et les retours explicite, après silence et après reset en liaison directe.
+
+## Présentations et archives
+
+- OTA LoRa — mise à jour du 31 octobre 2026 :
+  [Français](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon_fr.md)
+  · [PDF français](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon_fr.pdf)
+  · [English](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon.md)
+  · [English PDF](presentations/2026-10-30/LoRa_APRS_Multihop_OTA_for_Jon.pdf).
+  Résultats du transfert par un relais, envoi groupé, reprises après panne,
+  coupure réelle sur page partielle et choix du profil par RF ;
+  commandes RF signées, limites et développements restant à réaliser. Sources, PDF et générateur
+  sont conservés ensemble.
+- [Présentations du 15 octobre 2026](presentations/2026-10-15/) : sources
+  Markdown, documents ODT, PDF et diapositives conservés ensemble. Ils
+  décrivent l’état et les explications de cette date, pas le firmware courant.
+- [Correspondances préparées pour Jon](archives/correspondence/2026-10-15/) :
+  brouillons et exports conservés pour historique ; leur présence ne prouve
+  pas qu’ils ont été envoyés.
+- Proposition historique des tuples RXT v2 :
+  [français](archives/proposals/RXT_V2_fr.md) ·
+  [English](archives/proposals/RXT_V2.md). Le transport actuel est décrit
+  dans [RXT.md](RXT.md).
+
+## Notes locales et inventaire
+
+`docs/local/`, ignoré par Git, contient les reprises historiques, les
+investigations d’authentification et le diagnostic AnyDesk. La note BURNTX
+du 24 octobre est signalée comme une piste abandonnée : le correctif
+firmware qu’elle décrivait a été retiré.
+
+L’inventaire de gestion reste à son chemin prescrit :
+`docs/DEPLOYMENTS_fr.md`. Les consignes de reprise restent dans `AGENTS.md`.
+Ces fichiers locaux et les secrets ne sont pas des documents à publier.
+
+## Web Flasher
+
+[Procédure de compilation et publication](flasher/README.md).
+
+Le flasher conserve ses chemins : `index.html`, `manifest-*.json`,
+`favicon.png` et `firmware/`. La réorganisation documentaire ne remplace
+aucun binaire et ne modifie aucun manifeste.
