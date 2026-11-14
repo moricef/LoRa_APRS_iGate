@@ -8,6 +8,22 @@ from unittest.mock import Mock,patch
 from send_integrated import *
 
 class WireTests(unittest.TestCase):
+    @patch('send_integrated.transfer_stop_and_wait')
+    @patch('send_integrated.Client')
+    def test_cli_target_board_is_forwarded(self,client_class,transfer):
+        for board in (0x54474732,0x484C5633,0x51524C50):
+            client=client_class.return_value
+            client.hello.return_value={'pending':False,'running':65536,'boot':65536}
+            with tempfile.TemporaryDirectory() as folder:
+                root=Path(folder)
+                (root/'image').write_bytes(b'\xe9'+bytes(63))
+                (root/'key').write_text(base64.urlsafe_b64encode(bytes(32)).decode().rstrip('='))
+                argv=['send_integrated.py','--bridge','dummy','--key-file',str(root/'key'),
+                      '--image',str(root/'image'),'--log',str(root/'log'),
+                      '--board-id',hex(board),'--no-activate']
+                with patch.object(sys,'argv',argv):self.assertEqual(main(),0)
+                self.assertEqual(client.board_id,board)
+                self.assertEqual(struct.unpack('>I',transfer.call_args.args[3][36:40])[0],board)
     key=bytes(range(32))
     source=b'F4MLV-2'
     target=b'F4MLV-15'
@@ -17,6 +33,22 @@ class WireTests(unittest.TestCase):
         return make_frame(self.key,self.target,self.source,self.nonce,ACK,204,payload)
     def decode(self,raw):
         return decode_reply(self.key,self.source,self.target,raw)
+    @patch('send_integrated.time.sleep')
+    @patch('send_integrated.open_serial')
+    def test_full_igate_bridge_speed_negotiation(self,open_port,sleep):
+        device=open_port.return_value
+        device.readline.side_effect=[b'',b'OTABRIDGE OK\n']
+        self.assertIs(open_igate_bridge('/dev/test'),device)
+        device.write.assert_called_with(b'OTABRIDGE 921600\n')
+        self.assertEqual(device.baudrate,921600)
+        device.reset_input_buffer.assert_called()
+        sleep.assert_called_once_with(1)
+    def test_close_stops_integrated_bridge(self):
+        client=Client.__new__(Client);client.serial=Mock();client.serial.readline.return_value=b'BRIDGE OFF OK\n'
+        client.negotiated=False;client.fast=False
+        client.close()
+        client.serial.write.assert_called_once_with(b'BRIDGE OFF\n')
+        client.serial.close.assert_called_once()
     def test_network_status(self):
         p=bytes([NETWORK_STATUS,0])+struct.pack('>I',0)+bytes([0,0,0])
         r=self.decode(self.reply(p));self.assertEqual(r['wifi_mode'],0)
@@ -91,6 +123,48 @@ class WireTests(unittest.TestCase):
         client.request.assert_not_called()
         client.return_normal.assert_called_once()
         client.close.assert_called_once()
+    @patch('send_integrated.transfer_stop_and_wait')
+    @patch('send_integrated.Client')
+    def test_replace_existing_discards_candidate_and_reopens_session(self,client_class,transfer):
+        image=b'\xe9'+bytes(63);client=client_class.return_value
+        initial={'pending':False,'running':65536,'boot':65536,'written':0}
+        client.hello.side_effect=[initial,dict(initial)]
+        transfer.return_value={'written':len(image)}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);image_path=root/'firmware.bin';key_path=root/'key';log_path=root/'run.jsonl'
+            image_path.write_bytes(image)
+            key_path.write_text(base64.urlsafe_b64encode(self.key).decode().rstrip('='))
+            argv=['send_integrated.py','--bridge','dummy','--key-file',str(key_path),
+                  '--image',str(image_path),'--log',str(log_path),'--replace-existing','--no-activate']
+            with patch.object(sys,'argv',argv):self.assertEqual(main(),0)
+            events=[json.loads(line)['event'] for line in log_path.read_text().splitlines()]
+        client.request.assert_called_once_with(ABORT)
+        self.assertEqual(client.hello.call_count,2)
+        self.assertIn('previous_candidate_discarded',events)
+    @patch('send_integrated.time.sleep')
+    @patch('send_integrated.transfer_stop_and_wait')
+    @patch('send_integrated.Client')
+    def test_confirmation_timeout_rolls_back_reactivates_and_confirms(self,client_class,transfer,sleep):
+        image=b'\xe9'+bytes(63);sha=hashlib.sha256(image).hexdigest();client=client_class.return_value
+        old={'pending':False,'running':65536,'boot':65536,'written':0,'version':'4.0.2RXT-OTA','image_sha':'0'*64}
+        new={'pending':True,'running':2031616,'boot':2031616,'written':0,'version':'4.0.2RXT-OTA-B','image_sha':sha}
+        confirmed=dict(new,pending=False)
+        client.hello.side_effect=[old,new,old,new,confirmed]
+        transfer.return_value={'written':len(image)}
+        client.request.side_effect=lambda op,*args,**kwargs: {'pending':False} if op==CONFIRM else {}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);image_path=root/'firmware.bin';key_path=root/'key';log_path=root/'run.jsonl'
+            image_path.write_bytes(image)
+            key_path.write_text(base64.urlsafe_b64encode(self.key).decode().rstrip('='))
+            argv=['send_integrated.py','--bridge','dummy','--key-file',str(key_path),
+                  '--image',str(image_path),'--log',str(log_path),'--exercise-confirm-timeout']
+            with patch.object(sys,'argv',argv):self.assertIsNone(main())
+            events=[json.loads(line)['event'] for line in log_path.read_text().splitlines()]
+        operations=[call.args[0] for call in client.request.call_args_list]
+        self.assertEqual(operations,[ACTIVATE,REACTIVATE,CONFIRM,CONFIRM,ABORT,ABORT])
+        self.assertEqual(events.count('boot_pending_confirmation'),2)
+        self.assertLess(events.index('confirmation_timeout_rollback'),events.index('radio_confirmed'))
+        self.assertGreater(events.index('post_install_verified'),events.index('radio_confirmed'))
     def test_metadata_and_malformed_authenticated_replies(self):
         short=bytes([STATUS,0])+struct.pack('>I',408)
         version=b'4.0.2RXT-OTA-B'

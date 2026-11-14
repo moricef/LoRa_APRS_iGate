@@ -7,6 +7,12 @@ from window_transfer import transfer,START,DATA,QUERY
 from send_integrated import make_frame,decode_reply,ACK
 
 class BlockBenchTests(unittest.TestCase):
+    def test_target_board_id_in_window_manifest(self):
+        for board_id in (0x54474732,0x484C5633,0x51524C50):
+            c=Mock(retries=0);c.route=None;c.board_id=board_id
+            c.request.side_effect=[{'written':0},{'written':1,'bitmap':1},{'written':1}]
+            transfer(c,b'\xe9',bytes(32),lambda *a,**k:None)
+            self.assertEqual(struct.unpack('>I',c.request.call_args_list[0].args[2][36:40])[0],board_id)
     def profiles(self):return load_profiles(Path(__file__).with_name('radio-profiles.example.json'))
     def test_geometry_and_wire_limits(self):
         self.assertEqual(geometry(32,False),(128,16))

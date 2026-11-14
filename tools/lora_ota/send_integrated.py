@@ -67,11 +67,21 @@ def decode_reply(key,source,target,raw):
 class OperatorPause(Exception):
     """Operator requested a pause before activation; retain durable pages."""
 
+def open_igate_bridge(port,baud=921600):
+    """Open a full iGate firmware console and switch it to bridge speed."""
+    device=open_serial(port);device.reset_input_buffer()
+    deadline=time.monotonic()+15;next_send=0
+    while time.monotonic()<deadline:
+        if time.monotonic()>=next_send:
+            device.write(b'OTABRIDGE %d\n'%baud);device.flush();next_send=time.monotonic()+1
+        if device.readline().strip()==b'OTABRIDGE OK':
+            device.baudrate=baud;time.sleep(1);device.reset_input_buffer();return device
+    device.close();raise TimeoutError('iGate OTA bridge did not start')
+
 class Client:
     def __init__(self,port,key,source,target,counter_file,event,serial_device=None):
         if serial_device is None:
-            self.serial=open_serial(port)
-            self.serial.baudrate=921600
+            self.serial=open_igate_bridge(port)
         else:
             self.serial=serial_device
         self.key,self.source,self.target=key,source,target
@@ -234,6 +244,13 @@ class Client:
             except Exception:
                 # Receiver has its own lease even if the radio link has failed.
                 self.bridge_profile(False)
+        try:
+            self.serial.write(b'BRIDGE OFF\n');self.serial.flush()
+            deadline=time.monotonic()+2
+            while time.monotonic()<deadline:
+                if self.serial.readline().strip()==b'BRIDGE OFF OK':break
+        except Exception:
+            pass
         self.serial.close()
 
 def printable(reply):return {k:(v.hex() if isinstance(v,bytes) else v) for k,v in reply.items()}
@@ -243,8 +260,12 @@ def main():
     ap.add_argument('--bridge',required=True);ap.add_argument('--key-file',required=True,type=Path)
     ap.add_argument('--source',default='F4MLV-2');ap.add_argument('--target',default='F4MLV-15')
     ap.add_argument('--image',type=Path,required=True);ap.add_argument('--log',type=Path,required=True)
+    ap.add_argument('--board-id',type=lambda value:int(value,0),default=BOARD,
+                    choices=(BOARD,0x484C5633,0x51524C50),
+                    help='Target board: 0x54474732 TTGO (default), 0x484C5633 Heltec V3, 0x51524C50 QRP Labs')
     ap.add_argument('--pause-file',type=Path,help='Operator interface: pause safely before activation when this file exists')
     ap.add_argument('--no-activate',action='store_true',help='Stop after whole-image verification and normal-profile recovery')
+    ap.add_argument('--replace-existing',action='store_true',help='Discard a previous inactive candidate before starting this image')
     ap.add_argument('--counter-file',type=Path,help='Persistent counter for this controller/target')
     ap.add_argument('--resume-log',type=Path,help='Resume the same authenticated receiver session from a previous log')
     ap.add_argument('--exercise-rollback',action='store_true')
@@ -285,6 +306,7 @@ def main():
             if kind!='block':print(line,flush=True)
         counter_file=args.counter_file or args.log.parent/(args.target+'.counter')
         c=Client(args.bridge,key,args.source.encode(),args.target.encode(),counter_file,event)
+        c.board_id=args.board_id
         c.pause_file=args.pause_file
         try:
             if args.via:
@@ -304,12 +326,17 @@ def main():
                 event('hello',**printable(before))
             else:before=c.hello()
             assert not before['pending']
+            if args.replace_existing:
+                c.request(ABORT)
+                event('previous_candidate_discarded')
+                before=c.hello()
+                assert not before['pending'] and before['written']==0
             if args.require_offline:
                 net=c.request(NETWORK_STATUS);assert net['wifi_mode']==0 and not net['connected'] and not net['active_interface']
                 event('offline_before_update',reply=printable(net))
             if args.negotiate_profile:c.enter_fast()
             event('image',bytes=len(image),sha256=sha.hex(),initial=printable(before))
-            manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',BOARD)
+            manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',args.board_id)
             if args.windowed:
                 from window_transfer import transfer
                 r=transfer(c,image,sha,event,args.fault_checks,args.exercise_resume,args.exercise_relay_restart,args.relay_restart_point,block_size=args.block_size,compress=args.compress)
@@ -359,6 +386,11 @@ def main():
             if args.require_offline:
                 net=c.request(NETWORK_STATUS);assert net['wifi_mode']==0 and not net['connected'] and not net['active_interface']
                 event('offline_after_update',reply=printable(net))
+            c.request(ABORT)
+            final=c.hello()
+            assert not final['pending'] and final['running']==new['running'] and final['boot']==new['boot']
+            assert final['version']==new['version'] and final['image_sha']==sha.hex()
+            event('post_install_verified',reply=printable(final))
             c.request(ABORT)
         except OperatorPause:
             event('operator_paused')

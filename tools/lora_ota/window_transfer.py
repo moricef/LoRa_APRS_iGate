@@ -37,7 +37,7 @@ def transfer(client,image,sha,event,fault_checks=False,exercise_resume=False,exe
         # The window protocol carries the container; sha and image_size describe the decoded image.
         image=deflate_pages(image)
         event('compressed',image_bytes=image_size,container_bytes=len(image),ratio=round(len(image)/image_size,4))
-    manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',0x54474732)
+    manifest=struct.pack('>I',len(image))+sha+struct.pack('>I',vars(client).get('board_id',0x54474732))
     if chunk!=128 or compress:manifest+=struct.pack('>H',chunk)
     if compress:manifest+=bytes([1])+struct.pack('>I',image_size)
     initial=client.request(START,0,manifest,timeout=12)
