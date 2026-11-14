@@ -21,6 +21,10 @@ documents déplacés contiennent un lien vers leur nouvel emplacement.
 
 ## Propositions en discussion
 
+La section de coordination des [profils de service differents](LORA_OTA_GUIDE_fr.md#coordination-experimentale-de-profils-de-service-differents)
+decrit l'extension locale du firmware unifie pour Graywolf : tests logiciels
+et compilation seulement, sans validation radio ni publication de ces builds.
+
 [Format commun natif et PPM : variantes chiffrées](proposals/FORMAT_COMMUN_VARIANTES_fr.md)
 · [English](proposals/COMMON_FORMAT_VARIANTS.md).
 

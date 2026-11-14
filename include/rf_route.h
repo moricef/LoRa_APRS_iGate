@@ -9,6 +9,7 @@ void recoverConfiguration();
 void begin();
 void tick();
 bool busy();
+void stopTransfer();
 bool handle(const uint8_t*,size_t);
 bool requiresRelay();
 bool routedReply();
@@ -29,6 +30,7 @@ inline void recoverConfiguration() {}
 inline void begin() {}
 inline void tick() {}
 inline bool busy() {return false;}
+inline void stopTransfer() {}
 inline bool handle(const uint8_t*,size_t) {return false;}
 inline bool requiresRelay() {return false;}
 inline bool routedReply() {return false;}

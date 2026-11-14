@@ -407,3 +407,31 @@ il n’est pas requis par `send_integrated.py` pour envoyer les blocs.
 Références : [protocole et intégration](proposals/LORA_OTA_BENCH_fr.md),
 [résultats matériels](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md),
 [comparaison des blocs](proposals/LORA_OTA_BLOCK_BENCH_fr.md).
+
+## Coordination experimentale de profils de service differents
+
+Le code local ajoute une coordination v1 commune aux trois roles. Elle n'est
+pas encore validee sur radio et n'est pas presente dans les binaires OTA/C
+publies anterieurement. Le client Python de ce guide ne la pilote pas ; cette
+orchestration appartient au moteur Go de Graywolf.
+
+Graywolf conserve le profil de service commun au controleur et au relais,
+ainsi qu'un profil de service distinct pour la cible. Le relais rejoint
+temporairement la cible par un accord HMAC, puis utilise le profil rapide
+pendant le transfert. Le retour du transfert rapide ramene d'abord le relais
+sur le profil de la cible, pour terminer activation et confirmation. Le retour
+final ramene le relais et le controleur a leur service initial, sans reecrire
+la configuration permanente des cartes.
+
+Le rendez-vous est limite a 60 secondes sans maintien authentifie et a
+2 heures au total. Les maintiens du relais ne confirment pas la candidate de
+la cible et ne neutralisent pas son rollback. Une fermeture dediee conserve
+les pages durables, contrairement a ABORT. Un etat interroge par challenge
+HMAC ne reouvre pas de session. Le controle des capacites refuse un ancien
+firmware avant toute bascule distante.
+
+Tests locaux : `make test-ota-rendezvous` et tests du paquet Go `pkg/radioota`
+dans Graywolf. Une premiere installation du nouveau firmware est necessaire
+sur les cartes concernees ; son developpement n'autorise aucun flash implicite.
+Le parcours radio complet et les pertes de liaison restent a valider sur
+materiel avant utilisation sur un site distant.

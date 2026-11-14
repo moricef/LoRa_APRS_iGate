@@ -25,6 +25,7 @@ uint8_t role=ROLE_OFF,key[32]{};char controller[9]{},target[9]{},via[9]{};
 std::atomic<bool> paused{false};std::atomic<int> reportedProfile{0};
 std::atomic<bool> active{false};std::atomic<uint32_t> rebootAt{0};
 uint32_t started=0,lastPacket=0;bool replyContext=false;
+bool stateProbeOnly=false;
 uint32_t bootId=0;
 labota::ProfileLease profile;
 uint8_t expectedNonce[8]{};uint32_t expectedOffset=0;uint8_t expectedOp=0;
@@ -150,6 +151,7 @@ void begin() {
     Serial.printf("[RFROUTE] role=%u controller=%s target=%s\n",role,controller,target);
 }
 bool busy() {return role==ROLE_RELAY && active;}
+void stopTransfer() {stop();}
 bool requiresRelay() {return role==ROLE_TARGET;}
 bool routedReply() {return replyContext;}
 size_t wrapReply(const uint8_t* f,size_t n,uint8_t* out) {return replyContext?encode(routeota::TARGET_RELAY,f,n,out):0;}
@@ -272,6 +274,7 @@ bool handle(const uint8_t* f,size_t n) {
             if(!accepted) {++profileRejections;return true;}
             proposedFast=candidate;
         }
+        stateProbeOnly=inner[4]==32 && !active;
         if(!active) {active=true;started=millis();}
         lastPacket=millis();profile.activity(lastPacket);
         expectedOp=inner[4];expectedOffset=labota::get32(inner+13);memcpy(expectedNonce,inner+5,8);
@@ -327,6 +330,7 @@ bool handle(const uint8_t* f,size_t n) {
             if(expectedOp==11)profile.prepare(millis(),proposedFast.lease);
             if(expectedOp==12)profile.requestReturn(millis());
             if(expectedOp==5)stop();
+            if((expectedOp==32 && stateProbeOnly) || expectedOp==35)stop();
         }
     } else ++wrongPhase;
     return true;

@@ -393,3 +393,28 @@ it to send blocks.
 References: [protocol and integration](proposals/LORA_OTA_BENCH_fr.md),
 [hardware results](tests/2026-11-01/OTA_BLOCK_SIZES.md),
 [block-size comparison](proposals/LORA_OTA_BLOCK_BENCH.md).
+
+## Experimental coordination across service profiles
+
+Local code adds coordination v1 to the unified controller/relay/target firmware.
+It is not radio-validated and is absent from previously published OTA/C images.
+The Python client described above does not orchestrate it; Graywolf's native
+Go engine does.
+
+The controller and relay share one service profile; the target can have a
+different one. An authenticated agreement moves the relay temporarily to the
+target's profile. Fast transfer returns to that rendezvous for activation and
+confirmation, not straight to the relay's own service. Final closure restores
+and checks the original relay and controller service without rewriting Config.
+
+The independent rendezvous lease expires after 60 seconds without a fresh
+authenticated keepalive, and after two hours absolutely. Relay keepalives do
+not confirm the target or prevent its rollback. Dedicated release preserves
+durable image pages, unlike ABORT. A challenge-correlated HMAC state query does
+not open a session. Capability checks reject older firmware before moving a
+remote radio.
+
+Local checks: `make test-ota-rendezvous` and Graywolf's `pkg/radioota` tests.
+The new firmware must initially be installed on the participating devices;
+development does not authorize an implicit flash. Complete RF operation and
+link-loss behavior still need hardware validation before remote deployment.

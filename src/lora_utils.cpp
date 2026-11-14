@@ -759,7 +759,9 @@ namespace LoRa_Utils {
     // behaviour of readData(String&), which stops at the first zero byte.
     static bool otaFastProfile=false;
     static labota::RadioProfile otaSelectedProfile;
-    static bool otaCustomProfile=false,otaPowerChanged=false;
+    static bool otaCustomProfile=false;
+    static bool otaRendezvous=false,otaInnerFast=false,otaProfileKnown=true;
+    static labota::RadioProfile otaRendezvousProfile,otaAppliedProfile;
     bool otaProfileSupported(const labota::RadioProfile& p) {
 #if defined(HAS_SX1278)
         return p.valid(labota::RadioChip::SX1278);
@@ -776,7 +778,7 @@ namespace LoRa_Utils {
 #endif
     }
     bool configureOtaFastProfile(const labota::RadioProfile& p,bool custom) {
-        if(otaFastProfile || (custom && !otaProfileSupported(p)))return false;
+        if(otaInnerFast || (otaFastProfile && !otaRendezvous) || (custom && !otaProfileSupported(p)))return false;
         otaSelectedProfile=custom?p:labota::RadioProfile();otaCustomProfile=custom;return true;
     }
     static labota::RadioProfile otaNormalProfile() {
@@ -786,6 +788,11 @@ namespace LoRa_Utils {
 #endif
         return {uint32_t(Config.loramodule.rxFreq),uint32_t(Config.loramodule.rxSignalBandwidth),
                 uint8_t(Config.loramodule.rxSpreadingFactor),uint8_t(Config.loramodule.rxCodingRate4),int8_t(power)};
+    }
+    labota::RadioProfile otaServiceProfile() {return otaNormalProfile();}
+    bool readOtaProfile(labota::RadioProfile& p) {
+        if(!otaProfileKnown)return false;
+        p=otaFastProfile?otaAppliedProfile:otaNormalProfile();return true;
     }
     static bool applyOtaProfile(const labota::RadioProfile& p,bool power) {
         bool ok=radio.standby()==RADIOLIB_ERR_NONE;
@@ -799,15 +806,28 @@ namespace LoRa_Utils {
         return ok;
     }
     bool setOtaFastProfile(bool fast) {
-        bool ok=applyOtaProfile(fast?otaSelectedProfile:otaNormalProfile(),fast?otaCustomProfile:otaPowerChanged);
+        auto next=fast?otaSelectedProfile:otaRendezvous?otaRendezvousProfile:otaNormalProfile();
+        if(fast && !otaCustomProfile) {
+            labota::RadioProfile current;
+            if(!readOtaProfile(current))return false;
+            next.power=current.power; // legacy fast requests did not change TX power
+        }
+        bool ok=applyOtaProfile(next,true);
         operationDone=false;transmitFlag=false;
         ok=(radio.startReceive()==RADIOLIB_ERR_NONE) && ok;
         if(!ok && fast) {
-            applyOtaProfile(otaNormalProfile(),otaCustomProfile||otaPowerChanged);
-            radio.startReceive();otaFastProfile=false;otaPowerChanged=false;return false;
+            otaProfileKnown=applyOtaProfile(otaNormalProfile(),true);
+            otaProfileKnown=(radio.startReceive()==RADIOLIB_ERR_NONE) && otaProfileKnown;
+            otaFastProfile=false;otaInnerFast=false;return false;
         }
-        otaFastProfile=fast;otaPowerChanged=fast && otaCustomProfile;
+        otaProfileKnown=ok;otaAppliedProfile=next;
+        otaInnerFast=fast;otaFastProfile=fast || otaRendezvous;
         return ok;
+    }
+    bool setRendezvousProfile(const labota::RadioProfile& p,bool enabled) {
+        if(enabled && (otaFastProfile || !otaProfileSupported(p)))return false;
+        otaRendezvous=enabled;otaRendezvousProfile=p;
+        return setOtaFastProfile(false);
     }
     // Bench bridge profile, held until setOtaFastProfile(false).
     bool setBridgeProfile(const labota::RadioProfile& p) {

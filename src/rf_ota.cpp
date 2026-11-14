@@ -17,6 +17,7 @@
 #include "flash_store.h"
 #include "profile_lease.h"
 #include "ota_aprs_control.h"
+#include "ota_rendezvous.h"
 #include "station_utils.h"
 #include "window_flash_store.h"
 
@@ -36,6 +37,9 @@ bool radioReady=false,watchdog=false;
 uint32_t statsBootId=0;
 uint32_t bootAt=0,armedAt=0,lastPacket=0,rebootAt=0,helloCounter=0;
 uint8_t nonce[8]{},peer[8]{};
+Rendezvous rendezvous;
+char rendezvousRecipient[9]{};
+constexpr uint8_t RADIO_STATE=32,RENDEZVOUS=33,MAINTAIN=34,RELEASE=35;
 char serialInput[640];size_t serialLength=0;bool serialOverflow=false;
 
 // Written just before an image is selected by a radio command. At the next
@@ -118,6 +122,15 @@ bool bridgeCommand(const char* line) {
 #endif
     } else if(!strcmp(line,"BRIDGE OFF")) {
         bridgeStop();bridgeIndex=-1;Serial.println("BRIDGE OFF OK");
+    } else if(!strcmp(line,"RADIOSERVICE")) {
+        const auto p=LoRa_Utils::otaServiceProfile();
+        Serial.printf("RADIOSERVICE %lu %lu %u %u %d\n",(unsigned long)p.frequencyHz,
+            (unsigned long)p.bandwidthHz,p.sf,p.cr,p.power);
+    } else if(!strcmp(line,"RADIOPROFILE")) {
+        labota::RadioProfile p;
+        if(LoRa_Utils::readOtaProfile(p))Serial.printf("RADIOPROFILE %lu %lu %u %u %d\n",
+            (unsigned long)p.frequencyHz,(unsigned long)p.bandwidthHz,p.sf,p.cr,p.power);
+        else Serial.println("RADIOPROFILE UNKNOWN");
     } else if(!strncmp(line,"PROFILEDEF ",11)) {
         const char* cursor=line+11;long long values[6]{};bool ok=true;
         for(int i=0;i<6 && ok;i++) {
@@ -167,6 +180,17 @@ bool runningManifest(uint8_t sha[32],uint32_t& bytes) {
     bool ok=p.getUInt("candidate",0)==esp_ota_get_running_partition()->address &&
         p.getBytes("sha",sha,32)==32;
     bytes=p.getUInt("size",0);p.end();return ok && bytes;
+}
+bool radioStateReply(const uint8_t* request,Status result) {
+    uint8_t f[88]{};memcpy(f,"\x3c\xff\x7e\x02",4);f[4]=128;
+    memcpy(f+5,request+5,12);f[18]=37;
+    memcpy(f+19,Config.callsign.c_str(),Config.callsign.length());memcpy(f+27,request+19,8);
+    f[35]=request[4];f[36]=result;
+    RadioProfile effective(0,0,0,0,0);bool known=LoRa_Utils::readOtaProfile(effective);
+    encodeCoordinationState(f+41,rendezvous.phase,armed,RF_ROUTE::busy(),known,
+        LoRa_Utils::otaServiceProfile(),effective,rendezvous.sequence);
+    uint8_t digest[32];if(!REMOTE_AUTH::otaTag(f,72,digest))return false;
+    memcpy(f+72,digest,16);return LoRa_Utils::sendOtaFrame(f,sizeof f);
 }
 void reply(const uint8_t* request,Status result) {
     uint8_t frame[160]{};memcpy(frame,"\x3c\xff\x7e\x02",4);frame[4]=ACK;
@@ -333,7 +357,15 @@ void begin() {
     radioReady=true;statsBootId=esp_random();
     Serial.printf("[RFOTA] Ready version=%s running=%s pending=%u\n",versionNumber.c_str(),esp_ota_get_running_partition()->label,unsigned(pending.load()));
 }
-bool busy() {return armed||pending||profile.mode!=ProfileLease::NORMAL||bridgeOn;}
+bool busy() {return armed||pending||profile.mode!=ProfileLease::NORMAL||bridgeOn||rendezvous.phase!=Rendezvous::SERVICE;}
+bool forwardRendezvousControl(const String& input) {
+    if(rendezvous.phase!=Rendezvous::CONTROL || RF_ROUTE::busy())return false;
+    const String local=Config.tacticalCallsign.isEmpty()?Config.callsign:Config.tacticalCallsign;
+    std::string wire;
+    if(!labota::rendezvousControl(input.c_str(),Config.remoteManagement.authController.c_str(),
+            rendezvousRecipient,local.c_str(),wire))return false;
+    return LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.data()),wire.size(),true);
+}
 bool bridgeActive() {return bridgeOn;}
 bool bridgeFrame(const uint8_t* f,size_t n,float rssi,float snr,float fo) {
     if(!bridgeOn)return false;
@@ -379,7 +411,16 @@ bool handleAprsControl(const String& packet) {
         String to=controller;while(to.length()<9)to+=' ';
         String response=STATION_Utils::localReplyHeader(local,controller,false)+"::"+to+":"+text;
         String wire=String("\x3c\xff\x01")+response;
-        return LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.c_str()),wire.length(),true);
+        if(wire.length()>255)return false;
+        // A relay may be repeating the command this node also heard directly.
+        // Wait for the channel instead of dropping the only application reply.
+        const uint32_t started=millis();
+        for(;;) {
+            if(LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.c_str()),wire.length(),true))return true;
+            if(uint32_t(millis()-started)>=12000U)return false;
+            if(watchdog)esp_task_wdt_reset();
+            delay(200+random(0,200));
+        }
     };
     if(auth.status!=REMOTE_AUTH::Status::Accepted && auth.status!=REMOTE_AUTH::Status::Replay) {
         sendText("AUTH FAILED");return true;
@@ -428,6 +469,16 @@ void tick() {
     if(watchdog)esp_task_wdt_reset();
     if(pending && uint32_t(millis()-bootAt)>180000U)rollback();
     if(rebootAt && int32_t(millis()-rebootAt)>=0) {Serial.flush();ESP.restart();}
+    auto rendezvousEvent=rendezvous.poll(millis());
+    if(rendezvousEvent==Rendezvous::ENTER) {
+        if(!LoRa_Utils::setRendezvousProfile(rendezvous.radio,true)) {
+            rendezvous.reset();cancel();
+        }
+    } else if(rendezvousEvent==Rendezvous::RESTORE) {
+        RF_ROUTE::stopTransfer();cancel();
+        LoRa_Utils::setRendezvousProfile(rendezvous.radio,false);
+        rendezvousRecipient[0]=0;
+    }
     if(armed && (uint32_t(millis()-armedAt)>7200000U || uint32_t(millis()-lastPacket)>60000U)) {
         Serial.println("[RFOTA] Session expired");cancel();
     }
@@ -453,6 +504,8 @@ bool handle(const uint8_t* f,size_t n) {
     if(n!=51+body || !address(f+27,Config.callsign) ||
        !address(f+19,Config.remoteManagement.authController) || !equalTag(f,n))return true;
     uint32_t offset=get32(f+13);uint8_t op=f[4];
+    // A stateless, challenge-correlated proof never arms a new transfer.
+    if(op==RADIO_STATE) {if(!body)radioStateReply(f,labota::OK);return true;}
     if(op==HELLO) {
         if(body||memcmp(f+5,"\0\0\0\0\0\0\0\0",8)||!offset)return true;
         if(armed) {
@@ -468,6 +521,38 @@ bool handle(const uint8_t* f,size_t n) {
         Serial.println("[RFOTA] Authenticated session armed");return true;
     }
     if(!armed||memcmp(f+5,nonce,8)||memcmp(peer,f+19,8))return true;
+    if(op==RENDEZVOUS || op==MAINTAIN || op==RELEASE) {
+        Status result=ORDER;
+        if(op==RENDEZVOUS && !pending && body==19 && offset==0 &&
+           !RF_ROUTE::busy() && session.state==IDLE && pages.state==IDLE &&
+           profile.mode==ProfileLease::NORMAL && rendezvous.phase==Rendezvous::SERVICE) {
+            auto selected=RadioProfile::decode(f+35);
+            char recipient[9]{};memcpy(recipient,f+46,8);
+            if(!AprsOtaCommand::station(recipient) || !LoRa_Utils::otaProfileSupported(selected))result=FORMAT;
+            else {
+                result=labota::OK;
+                // Only a successfully transmitted agreement schedules the switch.
+                if(radioStateReply(f,result)) {
+                    strcpy(rendezvousRecipient,recipient);rendezvous.prepare(millis(),selected);
+                    lastPacket=millis();
+                }
+                return true;
+            }
+        } else if(op==MAINTAIN && !body && rendezvous.keep(millis(),offset)) {
+            result=labota::OK;lastPacket=millis();
+        } else if(op==RELEASE && !body && !offset) {
+            if(RF_ROUTE::busy())result=labota::BUSY;
+            else {
+                if(radioStateReply(f,labota::OK)) {
+                    if(rendezvous.phase!=Rendezvous::SERVICE)rendezvous.leave(millis());
+                    cancel();
+                }
+                return true;
+            }
+        }
+        radioStateReply(f,result);return true;
+    }
+    if(rendezvous.phase!=Rendezvous::SERVICE) {reply(f,labota::BUSY);return true;}
     lastPacket=millis();profile.activity(lastPacket);Status result=FORMAT;
     if(op==PREPARE_FAST) {
         FastProfileRequest candidate;

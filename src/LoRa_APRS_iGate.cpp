@@ -173,7 +173,8 @@ void loop() {
         if (RF_OTA::busy() || RF_ROUTE::busy()) {
             // Keep the radio and network alive, but avoid APRS transmissions
             // and display/sensor work between stop-and-wait OTA blocks.
-            RF_OTA::handleAprsControl(LoRa_Utils::receivePacket());
+            const String controlPacket=LoRa_Utils::receivePacket();
+            if(!RF_OTA::handleAprsControl(controlPacket))RF_OTA::forwardRendezvousControl(controlPacket);
             RF_OTA::tick();RF_ROUTE::tick();
             return;
         }
