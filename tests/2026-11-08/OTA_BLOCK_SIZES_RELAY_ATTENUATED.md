@@ -68,6 +68,14 @@ large enough to offset their overhead. The two-second difference between 128
 and 175 bytes over three repetitions is not sufficient to rank them
 definitively.
 
+### Decision of 14 November 2026
+
+The useful default block size for subsequent OTA transfers is **128 bytes**.
+It produced the best median in this campaign, remains compatible with the
+historical geometry, and does not require the variable-size extension on
+equipment that does not need it. Later 160-byte trials remain valid for the
+mechanisms they tested, but do not define the default block size.
+
 About half of the bench time was spent on roughly ten SF12 control exchanges
 for each run. During an uninterrupted complete update this negotiation occurs
 only once, so its relative cost is much smaller.

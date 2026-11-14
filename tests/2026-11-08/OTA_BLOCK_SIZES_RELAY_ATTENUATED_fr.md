@@ -69,6 +69,15 @@ pas de gain de robustesse compensant leur surcoût. L'écart de deux secondes
 entre 128 et 175 octets, sur trois répétitions, ne suffit pas à les départager
 définitivement.
 
+### Décision du 14 novembre 2026
+
+La taille utile par défaut des prochains transferts OTA est fixée à
+**128 octets**. Elle fournit la meilleure médiane de cette campagne, reste
+compatible avec la géométrie historique et évite d'imposer l'extension de
+taille aux équipements qui n'en ont pas besoin. Les essais ultérieurs à
+160 octets restent valables pour les mécanismes qu'ils vérifient, mais ne
+définissent pas la taille par défaut.
+
 Environ la moitié du temps du banc est consacrée à une dizaine d'échanges de
 contrôle en SF12 pour chaque passage. Dans une mise à jour complète sans
 interruption, cette négociation n'a lieu qu'une fois et son poids relatif est

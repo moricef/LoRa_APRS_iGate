@@ -47,8 +47,9 @@ un essai court vérifie ce changement et le retour au profil habituel.
 [Évaluation de la taille des blocs OTA](proposals/LORA_OTA_BLOCK_BENCH_fr.md)
 · [English](proposals/LORA_OTA_BLOCK_BENCH.md) :
 protocole comparatif, tailles négociées, mesures CSV/JSON et limites ; cinq
-tailles vérifiées en direct, 128 et 175 octets par un relais. Comparaisons
-répétées à plus grande distance et sous conditions RF documentées à réaliser.
+tailles vérifiées en direct, puis six tailles répétées par un relais sur la
+liaison atténuée. La décision du 14 novembre fixe la taille utile par défaut
+à 128 octets ; les autres tailles restent disponibles pour les essais.
 
 ## Comptes rendus d’essais
 
@@ -73,6 +74,7 @@ spécification actuelle.
 | 8 novembre 2026 | [Blocs OTA sur une liaison relayée et atténuée](tests/2026-11-08/OTA_BLOCK_SIZES_RELAY_ATTENUATED_fr.md) · [English](tests/2026-11-08/OTA_BLOCK_SIZES_RELAY_ATTENUATED.md) : échantillons de 64 Ko, trois répétitions complètes à 9 dBm, blocs de 128 à 175 octets les plus rapides dans ce montage ; reprise rouverte par un nouveau `HELLO`, puis perte des réponses en profil rapide, cause non déterminée |
 | 11 novembre 2026 | [Reprise OTA sur la liaison relayée et atténuée](tests/2026-11-11/OTA_PROFILE_RECOVERY_ATTENUATED_fr.md) · [English](tests/2026-11-11/OTA_PROFILE_RECOVERY_ATTENUATED.md) : cinq passages ciblés avec la console de MLV-15 ; deux échantillons de 64 Ko vérifiés après reprise durable, trois échecs sur le trajet retour rapide ; retour au profil normal corrigé et vérifié |
 | 13 novembre 2026 | [Transfert OTA d'une image complète par un relais](tests/2026-11-13/VALIDATION_OTA_IMAGE_COMPLETE_20261113_fr.md) · [English](tests/2026-11-13/FULL_IMAGE_RELAYED_OTA_VALIDATION_20261113_en.md) : image de 1 782 064 octets vérifiée sans activation, avec reprise après une perte de liaison |
+| 14 novembre 2026 | [Cycle OTA complet par un relais](tests/2026-11-14/VALIDATION_CYCLE_OTA_COMPLET_20261114_fr.md) · [English](tests/2026-11-14/FULL_RELAYED_OTA_CYCLE_VALIDATION_20261114_en.md) : montage, préparation, commande du client Python, résultats et preuves horodatées ; image complète vérifiée et activée, rollback automatique, seconde activation et confirmation finale |
 
 Les captures, bancs, binaires et sauvegardes restent dans `logs/`, ignoré
 par Git. Les journaux de l’essai Bluetooth sur carte du 26 octobre sont dans
