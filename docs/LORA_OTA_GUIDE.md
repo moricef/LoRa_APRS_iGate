@@ -41,6 +41,15 @@ Each is 32 bytes, represented as 43 unpadded base64url characters.
 
 ## 2. Prepare the workstation and files
 
+The [Web Flasher](index.html) publishes the three unified OTA variants and a
+[Python client download](firmware/lora-ota-client.zip). The TTGO/SX1278 full
+cycle has been tested on hardware; the Heltec and QRP Labs ports are compiled
+but still need board-specific bench validation before remote deployment.
+Select the target in every client command: `--board-id 0x54474732` for TTGO
+(default), `--board-id 0x484C5633` for Heltec V3.2, or
+`--board-id 0x51524C50` for QRP Labs LightGateway Plus 1.0. This identifies
+the target, not the controller or relay. Use the matching application image.
+
 Use a persistent checkout already on `experiment/lora-ota`. Check its state
 before switching branches or replacing files. Commands require Bash or Zsh,
 PlatformIO, Python 3 and PySerial.
@@ -172,7 +181,7 @@ to F4MLV-10: OTA=RELAY,F4MLV-15
 to F4MLV-15: OTA=VIA,F4MLV-10
 ```
 
-Read both roles back with `OTA=?`. These commands persist the route without
+Read both roles back with `OTA=ROUTE?`. These commands persist the route without
 replacing normal radio settings. This target now requires its relay: removing
 `--via` does not turn it into a direct target.
 
@@ -218,10 +227,11 @@ Add `--require-offline` only if the target's Wi-Fi and AP are already
 disabled. The client checks this before and after updating; it does not
 disable them itself.
 
-128 bytes is the default and was used for validated complete relayed
-transfers. New routed block sizes range from 32 to 175 bytes. Hardware
-trials with 175-byte blocks have so far covered 8 KiB samples, not another
-complete image.
+Since the decision of 14 November 2026, 128 bytes is the default. It produced
+the best median in the repeated measurements of 8 November on this setup.
+The complete cycles of 13 and 14 November still used 160 bytes: they validate
+transport and activation, not the default block size. Explicit routed sizes
+range from 32 to 175 bytes.
 
 ## 6. Direct variant
 

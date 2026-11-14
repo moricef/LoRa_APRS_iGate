@@ -44,6 +44,14 @@ représentées en base64url, soit 43 caractères sans remplissage.
 
 ## 2. Préparer le poste et les fichiers
 
+Le [Web Flasher](index.html) publie les trois variants OTA unifiés et le
+[client Python téléchargeable](firmware/lora-ota-client.zip). Le cycle complet
+TTGO/SX1278 a été vérifié sur cartes ; les ports Heltec et QRP Labs compilent
+mais restent à tester sur leur matériel avant déploiement distant.
+Indiquer le modèle de la cible dans les commandes : `--board-id 0x54474732`
+pour TTGO (défaut), `--board-id 0x484C5633` pour Heltec V3.2 ou
+`--board-id 0x51524C50` pour QRP Labs LightGateway Plus 1.0.
+
 Travailler dans un checkout durable déjà placé sur `experiment/lora-ota`.
 Vérifier son état avant de changer de branche ou de remplacer des fichiers.
 Les commandes de ce guide supposent Bash ou Zsh, PlatformIO, Python 3 et
@@ -181,7 +189,7 @@ vers F4MLV-10 : OTA=RELAY,F4MLV-15
 vers F4MLV-15 : OTA=VIA,F4MLV-10
 ```
 
-Relire les deux rôles avec `OTA=?`. Ces commandes enregistrent la route sans
+Relire les deux rôles avec `OTA=ROUTE?`. Ces commandes enregistrent la route sans
 remplacer les paramètres radio habituels. Une cible ainsi configurée exige le
 passage par son relais : retirer `--via` ne la transforme pas en cible directe.
 
@@ -227,10 +235,11 @@ Ajouter `--require-offline` seulement si le Wi-Fi et l’AP de la cible ont
 déjà été désactivés : le client vérifie cet état avant et après la mise à
 jour. Il ne les désactive pas lui-même.
 
-128 octets est la taille par défaut, déjà utilisée pour les transferts
-complets validés par relais. Les nouvelles tailles vont de 32 à 175 octets
-par relais ; les essais de 175 octets portent pour l’instant sur 8 Ko,
-pas sur une nouvelle image complète.
+Depuis la décision du 14 novembre 2026, 128 octets est la taille par défaut.
+Les mesures répétées du 8 novembre lui donnent la meilleure médiane sur ce
+montage. Les cycles complets des 13 et 14 novembre utilisaient encore
+160 octets : ils valident le transport et l'activation, pas la taille par
+défaut. Les tailles explicites vont de 32 à 175 octets par relais.
 
 ## 6. Variante directe
 

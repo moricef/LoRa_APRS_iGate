@@ -207,11 +207,17 @@ bitmap width reported by the target.
 
 ## Decision after measurements
 
-Retain the sizes that minimise airtime with acceptable reliability, then
-compare their durations and variability. Confirm these choices with
-full-image transfers along the intended deployment route. The
-send_integrated.py client accepts `--windowed --block-size N` for this step;
-full verification and activation remain those of the normal OTA protocol.
+Decision of 14 November 2026: **128 useful bytes is the default block size**.
+The repeated trials of 8 November ranked 128, 175 and 160 bytes first, with
+respective medians of 135, 137 and 144 s for 64 KiB. The difference between
+128 and 175 does not establish a universal advantage, but 128 produced the
+best median and retains the historical geometry.
+
+Other sizes remain available for explicit trials with
+`--windowed --block-size N`. A later complete 128-byte transfer must confirm
+this decision along the deployment route. The complete cycles of 13 and
+14 November used 160 bytes and validate transport, recovery and activation,
+not the optimum block-size choice.
 
 A result from two nearby boards does not by itself select the size for a
 distant relay. This benchmark does not implement automatic block-size

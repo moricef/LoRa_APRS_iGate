@@ -213,12 +213,17 @@ vérifie aussi la largeur du bitmap annoncée par la cible.
 
 ## Décision après mesures
 
-Retenir les tailles qui minimisent le temps d'antenne avec une fiabilité
-acceptable, puis comparer leurs durées et leur dispersion. Confirmer ces
-choix par des transferts d'images complètes avec le chemin de déploiement
-prévu. Le client send_integrated.py accepte `--windowed --block-size N`
-pour cette étape ; sa vérification complète et son activation restent
-celles du protocole OTA normal.
+Décision du 14 novembre 2026 : **128 octets utiles devient la taille par
+défaut**. Les répétitions du 8 novembre ont placé 128, 175 et 160 octets en
+tête, avec les médianes respectives de 135, 137 et 144 s pour 64 Kio. La
+différence entre 128 et 175 ne démontre pas une supériorité générale, mais
+128 obtient la meilleure médiane et conserve la géométrie historique.
+
+Les autres tailles restent disponibles pour des essais explicites avec
+`--windowed --block-size N`. Un transfert complet ultérieur à 128 octets
+devra confirmer ce choix sur le chemin de déploiement ; les cycles complets
+des 13 et 14 novembre ont utilisé 160 octets et valident le transport, la
+reprise et l'activation, pas le choix optimal de taille.
 
 Un résultat sur deux cartes proches ne choisit pas à lui seul la taille
 pour un relais éloigné. L'adaptation automatique de la taille en cours de

@@ -7,8 +7,8 @@ présente les spécifications et les comptes rendus.
 Le flasher publie trois variants :
 
 - `ttgo-lora32-v21-ota` (ESP32, étend le variant SD) ;
-- `heltec_wifi_lora_32_V3_2` (ESP32-S3) ;
-- `QRPLabs_LightGateway_Plus_1_0` (ESP32-S3).
+- `heltec_wifi_lora_32_V3_2-ota` (ESP32-S3) ;
+- `QRPLabs_LightGateway_Plus_1_0-ota` (ESP32-S3).
 
 Comme le flasher du Tracker, son manifeste contient toujours le bootloader,
 la table de partitions, `boot_app0.bin` et `firmware.bin`, avec
@@ -27,7 +27,8 @@ laisserait la carte sans bootloader ni table de partitions.
 ## Mettre les binaires à jour
 
 ```sh
-pio run -e ttgo-lora32-v21-ota -e heltec_wifi_lora_32_V3_2 -e QRPLabs_LightGateway_Plus_1_0
+pio run -e ttgo-lora32-v21-ota -e heltec_wifi_lora_32_V3_2-ota -e QRPLabs_LightGateway_Plus_1_0-ota
+python3 tools/lora_ota/prepare_publication.py
 
 cp .pio/build/ttgo-lora32-v21-ota/bootloader.bin docs/firmware/ttgo-lora32-v21_SD/
 cp .pio/build/ttgo-lora32-v21-ota/partitions.bin docs/firmware/ttgo-lora32-v21_SD/
@@ -57,3 +58,10 @@ GitHub Pages doit publier la branche `gh-pages`, depuis sa racine. Copier le
 contenu publiable de `docs/` à la racine de cette branche après chaque mise à
 jour, en suivant `AGENTS.md`. Exclure les documents locaux, les secrets et
 les sauvegardes ; ne pas copier aveuglément le répertoire de travail entier.
+
+Le script `prepare_publication.py` copie les trois builds, lit leurs dates
+exactes dans la WebUI compressée des binaires et met à jour les manifestes,
+`OTA_BUILDS.json`, les empreintes et l'archive client. Celle-ci est issue
+d'une liste explicite de fichiers sans secrets. Les copies et sommes
+manuelles ci-dessus décrivent les mêmes opérations. Vérifier également les
+dates visibles de `index.html`.
