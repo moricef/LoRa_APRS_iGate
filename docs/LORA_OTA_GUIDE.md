@@ -395,12 +395,12 @@ References: [protocol and integration](proposals/LORA_OTA_BENCH_fr.md),
 [hardware results](tests/2026-11-01/OTA_BLOCK_SIZES.md),
 [block-size comparison](proposals/LORA_OTA_BLOCK_BENCH.md).
 
-## Experimental coordination across service profiles
+## Coordination across service profiles
 
-Local code adds coordination v1 to the unified controller/relay/target firmware.
-It is not radio-validated and is absent from previously published OTA/C images.
-The Python client described above does not orchestrate it; Graywolf's native
-Go engine does.
+The unified firmware `4.0.2RXT-OTA2.2` includes coordination v1 for the
+controller, relay and target roles; earlier OTA images do not. The Python
+client described above does not orchestrate it; Graywolf's native Go engine
+does.
 
 The controller and relay share one service profile; the target can have a
 different one. An authenticated agreement moves the relay temporarily to the
@@ -416,6 +416,13 @@ not open a session. Capability checks reject older firmware before moving a
 remote radio.
 
 Local checks: `make test-ota-rendezvous` and Graywolf's `pkg/radioota` tests.
-The new firmware must initially be installed on the participating devices;
-development does not authorize an implicit flash. Complete RF operation and
-link-loss behavior still need hardware validation before remote deployment.
+The firmware must initially be installed on the participating devices.
+
+Bench run of 14-15 November 2026: three TTGO LoRa32 V2.1, controller and relay
+on 433.775 MHz, target on 434.100 MHz, transfer on 434.500 MHz / BW500 / SF7 /
+9 dBm, about 28 dB observed difference on the relay-to-target link. A
+1,785,408-byte image in 128-byte blocks, resumed the next day from its durable
+point, five link losses recovered automatically, activation, radio
+confirmation and fresh-session readback succeeded; relay and controller were
+read back on their original service. One bench run through one relay: no
+field validation, no Heltec or QRP Labs hardware run.

@@ -21,9 +21,10 @@ documents déplacés contiennent un lien vers leur nouvel emplacement.
 
 ## Propositions en discussion
 
-La section de coordination des [profils de service differents](LORA_OTA_GUIDE_fr.md#coordination-experimentale-de-profils-de-service-differents)
-decrit l'extension locale du firmware unifie pour Graywolf : tests logiciels
-et compilation seulement, sans validation radio ni publication de ces builds.
+La section de coordination des [profils de service differents](LORA_OTA_GUIDE_fr.md#coordination-de-profils-de-service-differents)
+decrit le rendez-vous du relais, pilote par Graywolf, du firmware unifie
+`4.0.2RXT-OTA2.2` : un passage de banc reussi les 14 et 15 novembre 2026, sans
+validation terrain.
 
 [Format commun natif et PPM : variantes chiffrées](proposals/FORMAT_COMMUN_VARIANTES_fr.md)
 · [English](proposals/COMMON_FORMAT_VARIANTS.md).
