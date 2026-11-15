@@ -373,6 +373,7 @@ habituelle utilisable par Graywolf.
 | `OTA=NORMAL` | Répond sur le profil courant puis revient au profil habituel |
 | `OTA=ROUTE?` | Affiche le rôle et la route OTA enregistrés |
 | `OTA=RELAY,F4MLV-15` | Configure la station destinataire de la commande comme relais vers `F4MLV-15` |
+| `OTA=RELAY,F4MLV-15,<amont>,<aval>` | Relais d'une chaîne : `<amont>` est le contrôleur ou le relais précédent, `<aval>` le relais suivant ou la cible ; réponse `OTA ROUTE RELAY C>T FROM <amont> TO <aval> KEY=1` (firmware `4.0.2RXT-OTA2.2` ou ultérieur) |
 | `OTA=VIA,F4MLV-10` | Configure la station destinataire de la commande comme cible atteinte via `F4MLV-10` |
 | `OTA=ROUTE,OFF` | Supprime le rôle et la route OTA de cette station |
 
@@ -407,3 +408,39 @@ il n’est pas requis par `send_integrated.py` pour envoyer les blocs.
 Références : [protocole et intégration](proposals/LORA_OTA_BENCH_fr.md),
 [résultats matériels](tests/2026-11-01/OTA_BLOCK_SIZES_fr.md),
 [comparaison des blocs](proposals/LORA_OTA_BLOCK_BENCH_fr.md).
+
+## Coordination de profils de service differents
+
+Le firmware unifie `4.0.2RXT-OTA2.2` comprend une coordination v1 commune aux
+trois roles ; les binaires OTA anterieurs ne l'ont pas. Le client Python de ce
+guide ne la pilote pas ; cette orchestration appartient au moteur Go de
+Graywolf.
+
+Graywolf conserve le profil de service commun au controleur et au relais,
+ainsi qu'un profil de service distinct pour la cible. Le relais rejoint
+temporairement la cible par un accord HMAC, puis utilise le profil rapide
+pendant le transfert. Le retour du transfert rapide ramene d'abord le relais
+sur le profil de la cible, pour terminer activation et confirmation. Le retour
+final ramene le relais et le controleur a leur service initial, sans reecrire
+la configuration permanente des cartes.
+
+Le rendez-vous est limite a 60 secondes sans maintien authentifie et a
+2 heures au total. Les maintiens du relais ne confirment pas la candidate de
+la cible et ne neutralisent pas son rollback. Une fermeture dediee conserve
+les pages durables, contrairement a ABORT. Un etat interroge par challenge
+HMAC ne reouvre pas de session. Le controle des capacites refuse un ancien
+firmware avant toute bascule distante.
+
+Tests locaux : `make test-ota-rendezvous` et tests du paquet Go `pkg/radioota`
+dans Graywolf. Une premiere installation du firmware est necessaire sur les
+cartes concernees.
+
+Essai sur cartes des 14 et 15 novembre 2026 : trois TTGO LoRa32 V2.1,
+controleur et relais a 433,775 MHz, cible a 434,100 MHz, transfert a
+434,500 MHz / BW500 / SF7 / 9 dBm, environ 28 dB d'ecart observe sur la
+liaison du relais vers la cible. Image de 1 785 408 octets en blocs de
+128 octets, reprise le lendemain au point durable, cinq pertes de liaison
+reprises automatiquement, activation, confirmation radio et relecture en
+nouvelle session reussies ; relais et controleur relus sur leur service
+initial. Un seul passage de banc, un seul relais : pas de validation terrain
+ni Heltec ou QRP Labs.

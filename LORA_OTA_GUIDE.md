@@ -360,6 +360,7 @@ used by Graywolf.
 | `OTA=NORMAL` | Reply on the current profile, then return to the normal profile |
 | `OTA=ROUTE?` | Report the saved OTA role and route |
 | `OTA=RELAY,F4MLV-15` | Configure the addressed station as the relay towards `F4MLV-15` |
+| `OTA=RELAY,F4MLV-15,<previous>,<next>` | Relay of a chain: `<previous>` is the controller or the relay before it, `<next>` the relay after it or the target; answers `OTA ROUTE RELAY C>T FROM <previous> TO <next> KEY=1` (firmware `4.0.2RXT-OTA2.2` or later) |
 | `OTA=VIA,F4MLV-10` | Configure the addressed station as a target reached through `F4MLV-10` |
 | `OTA=ROUTE,OFF` | Remove this station's OTA role and route |
 
@@ -393,3 +394,35 @@ it to send blocks.
 References: [protocol and integration](proposals/LORA_OTA_BENCH_fr.md),
 [hardware results](tests/2026-11-01/OTA_BLOCK_SIZES.md),
 [block-size comparison](proposals/LORA_OTA_BLOCK_BENCH.md).
+
+## Coordination across service profiles
+
+The unified firmware `4.0.2RXT-OTA2.2` includes coordination v1 for the
+controller, relay and target roles; earlier OTA images do not. The Python
+client described above does not orchestrate it; Graywolf's native Go engine
+does.
+
+The controller and relay share one service profile; the target can have a
+different one. An authenticated agreement moves the relay temporarily to the
+target's profile. Fast transfer returns to that rendezvous for activation and
+confirmation, not straight to the relay's own service. Final closure restores
+and checks the original relay and controller service without rewriting Config.
+
+The independent rendezvous lease expires after 60 seconds without a fresh
+authenticated keepalive, and after two hours absolutely. Relay keepalives do
+not confirm the target or prevent its rollback. Dedicated release preserves
+durable image pages, unlike ABORT. A challenge-correlated HMAC state query does
+not open a session. Capability checks reject older firmware before moving a
+remote radio.
+
+Local checks: `make test-ota-rendezvous` and Graywolf's `pkg/radioota` tests.
+The firmware must initially be installed on the participating devices.
+
+Bench run of 14-15 November 2026: three TTGO LoRa32 V2.1, controller and relay
+on 433.775 MHz, target on 434.100 MHz, transfer on 434.500 MHz / BW500 / SF7 /
+9 dBm, about 28 dB observed difference on the relay-to-target link. A
+1,785,408-byte image in 128-byte blocks, resumed the next day from its durable
+point, five link losses recovered automatically, activation, radio
+confirmation and fresh-session readback succeeded; relay and controller were
+read back on their original service. One bench run through one relay: no
+field validation, no Heltec or QRP Labs hardware run.
