@@ -13,6 +13,27 @@ inline bool parse(const uint8_t* f,size_t n,View& v) {
     size_t body=(size_t(v.inner[17])<<8)|v.inner[18];
     return v.size==51+body;
 }
+inline bool named(const uint8_t* field,const char* station) {
+    uint8_t b[8]{};size_t n=strlen(station);if(!n||n>8)return false;memcpy(b,station,n);return !memcmp(b,field,8);
+}
+// A relay stands between two neighbours. Downstream frames are accepted only
+// from the previous hop (the controller itself, or the relay before this one)
+// and upstream frames only from the next hop (the target itself, or the relay
+// after this one). Every relay re-emits with its own name as hop source, so a
+// frame overheard from any other station of the chain is ignored.
+inline bool downstreamFrom(const View& v,const char* controller,const char* previous) {
+    return v.phase==(strcmp(previous,controller)?RELAY_TARGET:CONTROLLER_RELAY) && named(v.hopSource,previous);
+}
+inline bool upstreamFrom(const View& v,const char* target,const char* next) {
+    return v.phase==(strcmp(next,target)?RELAY_CONTROLLER:TARGET_RELAY) && named(v.hopSource,next);
+}
+// Neighbours of a relay must be two distinct stations, neither being itself;
+// the controller can only be upstream and the target only downstream.
+inline bool validNeighbours(const char* self,const char* controller,const char* target,
+        const char* previous,const char* next) {
+    return strcmp(previous,self) && strcmp(next,self) && strcmp(previous,next) &&
+        strcmp(previous,target) && strcmp(next,controller);
+}
 inline size_t envelope(uint8_t phase,const uint8_t* hopSource,const uint8_t* inner,size_t size,uint8_t* output) {
     if(phase>3 || size<51 || size>MAX_INNER)return 0;
     memcpy(output,"\x3c\xff\x7d\x01",4);output[4]=phase;

@@ -373,6 +373,7 @@ habituelle utilisable par Graywolf.
 | `OTA=NORMAL` | Répond sur le profil courant puis revient au profil habituel |
 | `OTA=ROUTE?` | Affiche le rôle et la route OTA enregistrés |
 | `OTA=RELAY,F4MLV-15` | Configure la station destinataire de la commande comme relais vers `F4MLV-15` |
+| `OTA=RELAY,F4MLV-15,<amont>,<aval>` | Relais d'une chaîne : `<amont>` est le contrôleur ou le relais précédent, `<aval>` le relais suivant ou la cible ; réponse `OTA ROUTE RELAY C>T FROM <amont> TO <aval> KEY=1` (firmware `4.0.2RXT-OTA2.2` ou ultérieur) |
 | `OTA=VIA,F4MLV-10` | Configure la station destinataire de la commande comme cible atteinte via `F4MLV-10` |
 | `OTA=ROUTE,OFF` | Supprime le rôle et la route OTA de cette station |
 

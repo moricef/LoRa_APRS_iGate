@@ -8,19 +8,39 @@ namespace labota {
 // and requested transceiver dBm. No floating-point or partial parsing.
 // Route commands name one station: OTA=RELAY,<target> makes this station the
 // relay of the authenticated controller towards <target>; OTA=VIA,<relay>
-// makes it a target reached through <relay>. The transport key is the network
-// route key installed with the station secret, never sent over the air.
+// makes it a target reached through <relay>. In a chain of relays,
+// OTA=RELAY,<target>,<previous>,<next> names the neighbours of this relay:
+// <previous> is the controller or the relay before it, <next> the relay after
+// it or the target. The transport key is the network route key installed with
+// the station secret, never sent over the air.
 struct AprsOtaCommand {
     enum Kind { STATUS, PROFILE, FAST, NORMAL, ROUTE_STATUS, ROUTE_OFF, RELAY, VIA } kind=STATUS;
     RadioProfile radio;
     uint16_t lease=0;
-    std::string peer;
+    std::string peer,previous,next; // previous/next empty: controller and target
     // Route identities are at most eight characters (callsign-SSID or tactical).
     static bool station(const std::string& text) {
         if(text.empty()||text.size()>8)return false;
         for(char ch:text)
             if(!((ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9')||ch=='-'))return false;
         return text.front()!='-' && text.back()!='-';
+    }
+    // header is the TNC2 text between '>' and ':' (destination, then path).
+    // True when the path names a station that has not repeated the packet yet:
+    // that relay will transmit it again right now, so an immediate answer from
+    // a station that also heard the original would collide with the repeat.
+    static bool awaitsRelay(const std::string& header) {
+        size_t start=header.find(',');
+        while(start!=std::string::npos) {
+            const size_t end=header.find(',',start+1);
+            const std::string element=header.substr(start+1,end==std::string::npos?std::string::npos:end-start-1);
+            start=end;
+            if(element.empty() || element.back()=='*')continue;
+            if(element=="RFONLY"||element=="NOGATE"||element=="TCPIP"||element=="TCPXX"||
+               element.compare(0,4,"WIDE")==0||element.compare(0,5,"TRACE")==0)continue;
+            if(station(element))return true;
+        }
+        return false;
     }
     static bool number(const std::string& text,int64_t& result) {
         if(text.empty())return false;
@@ -39,7 +59,17 @@ struct AprsOtaCommand {
         else if(text=="OTA=ROUTE?")c.kind=ROUTE_STATUS;
         else if(text=="OTA=ROUTE,OFF")c.kind=ROUTE_OFF;
         else if(text.compare(0,10,"OTA=RELAY,")==0) {
-            c.peer=text.substr(10);if(!station(c.peer))return false;c.kind=RELAY;
+            const std::string rest=text.substr(10);
+            const size_t first=rest.find(',');
+            if(first==std::string::npos)c.peer=rest;
+            else {
+                const size_t second=rest.find(',',first+1);
+                if(second==std::string::npos || rest.find(',',second+1)!=std::string::npos)return false;
+                c.peer=rest.substr(0,first);c.previous=rest.substr(first+1,second-first-1);c.next=rest.substr(second+1);
+                if(!station(c.previous)||!station(c.next))return false;
+            }
+            if(!station(c.peer))return false;
+            c.kind=RELAY;
         } else if(text.compare(0,8,"OTA=VIA,")==0) {
             c.peer=text.substr(8);if(!station(c.peer))return false;c.kind=VIA;
         }

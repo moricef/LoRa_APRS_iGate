@@ -20,7 +20,8 @@ bool networkKeyConfigured();
 bool setNetworkKey(const char* encodedKey);
 bool clearNetworkKey();
 // Route set by a signed RF command; nullptr on success, otherwise the reply text.
-const char* setRadioRelay(const char* controller,const char* target);
+// previous/next empty or null: the controller and the target themselves.
+const char* setRadioRelay(const char* controller,const char* target,const char* previous=nullptr,const char* next=nullptr);
 const char* setRadioTarget(const char* controller,const char* relay);
 const char* clearRadioRoute();
 void describeRoute(char* out,size_t size);
@@ -39,7 +40,7 @@ inline bool configureTarget(const char*,const char*,const char*) {return false;}
 inline bool networkKeyConfigured() {return false;}
 inline bool setNetworkKey(const char*) {return false;}
 inline bool clearNetworkKey() {return false;}
-inline const char* setRadioRelay(const char*,const char*) {return "OTA ROUTE UNSUPPORTED";}
+inline const char* setRadioRelay(const char*,const char*,const char* =nullptr,const char* =nullptr) {return "OTA ROUTE UNSUPPORTED";}
 inline const char* setRadioTarget(const char*,const char*) {return "OTA ROUTE UNSUPPORTED";}
 inline const char* clearRadioRoute() {return "OTA ROUTE UNSUPPORTED";}
 inline void describeRoute(char* out,size_t size) {if(size)snprintf(out,size,"ROUTE UNSUPPORTED");}

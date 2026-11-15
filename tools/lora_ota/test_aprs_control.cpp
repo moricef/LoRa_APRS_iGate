@@ -24,6 +24,23 @@ int main() {
     assert(AprsOtaCommand::parse("OTA=ROUTE,OFF",r)&&r.kind==AprsOtaCommand::ROUTE_OFF);
     assert(AprsOtaCommand::parse("OTA=RELAY,PINAL",r)&&r.kind==AprsOtaCommand::RELAY&&r.peer=="PINAL");
     assert(AprsOtaCommand::parse("OTA=VIA,F4MLV-10",r)&&r.kind==AprsOtaCommand::VIA&&r.peer=="F4MLV-10");
+    // A relay still to repeat the command is a named, unmarked path element.
+    assert(AprsOtaCommand::awaitsRelay("APGRWO,F4MLV-10,RFONLY"));
+    assert(!AprsOtaCommand::awaitsRelay("APGRWO,F4MLV-10*,RFONLY"));
+    assert(!AprsOtaCommand::awaitsRelay("APGRWO,RFONLY"));
+    assert(!AprsOtaCommand::awaitsRelay("APGRWO"));
+    assert(!AprsOtaCommand::awaitsRelay("APLRG1,WIDE1-1,WIDE2-2"));
+    assert(!AprsOtaCommand::awaitsRelay("APLRG1,F4MLV-2*,WIDE1*,WIDE2-1"));
+    assert(AprsOtaCommand::awaitsRelay("APLRG1,F4MLV-2*,F4MLV-7"));
+    assert(!AprsOtaCommand::awaitsRelay("APLRG1,TCPIP,NOGATE"));
+    // Relay chain: target, then the hop before and the hop after this relay.
+    assert(AprsOtaCommand::parse("OTA=RELAY,PINAL",r)&&r.previous.empty()&&r.next.empty());
+    assert(AprsOtaCommand::parse("OTA=RELAY,F4MLV-15,F4MLV-2,F4MLV-11",r)&&r.kind==AprsOtaCommand::RELAY&&
+        r.peer=="F4MLV-15"&&r.previous=="F4MLV-2"&&r.next=="F4MLV-11");
+    for(const char* s:{"OTA=RELAY,F4MLV-15,F4MLV-2", "OTA=RELAY,F4MLV-15,F4MLV-2,", "OTA=RELAY,F4MLV-15,,F4MLV-11",
+        "OTA=RELAY,F4MLV-15,F4MLV-2,F4MLV-11,X", "OTA=RELAY,,F4MLV-2,F4MLV-11", "OTA=RELAY,F4MLV-15,f4mlv-2,F4MLV-11",
+        "OTA=RELAY,F4MLV-15,F4MLV-2,TOOLONG-11"})
+        assert(!AprsOtaCommand::parse(s,r));
     for(const char* s:{"OTA=RELAY,", "OTA=RELAY,TOOLONG-15", "OTA=RELAY,pinal", "OTA=RELAY,PIN AL",
         "OTA=RELAY,-PINAL", "OTA=RELAY,PINAL-", "OTA=VIA,", "OTA=VIA,A,B", "OTA=ROUTE,ON", "OTA=ROUTE"})
         assert(!AprsOtaCommand::parse(s,r));

@@ -22,6 +22,9 @@ extern Configuration Config;
 namespace {
 constexpr uint8_t ROLE_OFF=0,ROLE_RELAY=1,ROLE_TARGET=2;
 uint8_t role=ROLE_OFF,key[32]{};char controller[9]{},target[9]{},via[9]{};
+// Neighbours of a relay in a chain: the hop it listens to on the way down
+// and the hop it forwards to. A single relay has the controller and the target.
+char previousHop[9]{},nextHop[9]{};
 std::atomic<bool> paused{false};std::atomic<int> reportedProfile{0};
 std::atomic<bool> active{false};std::atomic<uint32_t> rebootAt{0};
 uint32_t started=0,lastPacket=0;bool replyContext=false;
@@ -94,11 +97,16 @@ void stop() {
     knownBits=0;memset(knownNonce,0,8);
 }
 bool validName(const char* s) {return s && strlen(s) && strlen(s)<=8;}
-bool saveKey(uint8_t mode,const char* src,const char* dst,const char* relay,const uint8_t k[32]) {
+bool saveKey(uint8_t mode,const char* src,const char* dst,const char* relay,const uint8_t k[32],
+        const char* before=nullptr,const char* after=nullptr) {
     if(!validName(src)||!validName(dst)||!validName(relay))return false;
+    if(!before)before=src;
+    if(!after)after=dst;
+    if(!validName(before)||!validName(after))return false;
     Preferences p;if(!p.begin("ota-route",false))return false;
     bool ok=p.putString("controller",src)==strlen(src) && p.putString("target",dst)==strlen(dst) &&
-        p.putString("via",relay)==strlen(relay) && p.putBytes("key",k,32)==32 && p.putUChar("role",mode)==1;
+        p.putString("via",relay)==strlen(relay) && p.putString("prev",before)==strlen(before) &&
+        p.putString("next",after)==strlen(after) && p.putBytes("key",k,32)==32 && p.putUChar("role",mode)==1;
     p.end();return ok;
 }
 bool save(uint8_t mode,const char* src,const char* dst,const char* relay,const char* encoded) {
@@ -146,9 +154,16 @@ void begin() {
     uint8_t r=p.getUChar("role",0);String src=p.getString("controller",""),dst=p.getString("target",""),hop=p.getString("via","");
     if((r==ROLE_RELAY||r==ROLE_TARGET) && src.length() && src.length()<=8 && dst.length() && dst.length()<=8 && hop.length() && hop.length()<=8 && p.getBytes("key",key,32)==32) {
         strcpy(controller,src.c_str());strcpy(target,dst.c_str());strcpy(via,hop.c_str());role=r;
+        // Routes saved before relay chains existed have no neighbours stored.
+        // isKey() first: Preferences logs an error for every missing string key.
+        String before=p.isKey("prev")?p.getString("prev",src):src;
+        String after=p.isKey("next")?p.getString("next",dst):dst;
+        if(!before.length() || before.length()>8)before=src;
+        if(!after.length() || after.length()>8)after=dst;
+        strcpy(previousHop,before.c_str());strcpy(nextHop,after.c_str());
     }
     p.end();
-    Serial.printf("[RFROUTE] role=%u controller=%s target=%s\n",role,controller,target);
+    Serial.printf("[RFROUTE] role=%u controller=%s target=%s previous=%s next=%s\n",role,controller,target,previousHop,nextHop);
 }
 bool busy() {return role==ROLE_RELAY && active;}
 void stopTransfer() {stop();}
@@ -169,33 +184,44 @@ bool clearNetworkKey() {
 }
 // Applied at once, without a reboot, so a chain can be set up from the
 // controller. Refused while this station relays or receives an image.
-const char* setRadioRoute(uint8_t mode,const char* src,const char* peer) {
+const char* setRadioRoute(uint8_t mode,const char* src,const char* peer,const char* before=nullptr,const char* after=nullptr) {
     if(busy()||RF_OTA::busy())return "OTA BUSY";
     if(mode==ROLE_OFF) {
         Preferences p;if(!p.begin("ota-route",false))return "OTA ROUTE STORAGE ERROR";
         p.clear();p.end();
-        role=ROLE_OFF;memset(key,0,sizeof key);controller[0]=target[0]=via[0]=0;
+        role=ROLE_OFF;memset(key,0,sizeof key);controller[0]=target[0]=via[0]=previousHop[0]=nextHop[0]=0;
         Serial.println("[RFROUTE] route cleared by RF");return nullptr;
     }
     const char* self=Config.callsign.c_str();
     if(!validName(src)||!validName(peer))return "OTA ROUTE BAD NAME";
     if(!validName(self))return "OTA ROUTE CALLSIGN TOO LONG";
     if(!strcmp(peer,self)||!strcmp(peer,src))return "OTA ROUTE BAD NAME";
-    uint8_t k[32];if(!loadNetworkKey(k))return "OTA ROUTE NO KEY";
     const char* dst=mode==ROLE_RELAY?peer:self;
     const char* hop=mode==ROLE_RELAY?self:peer;
-    if(!saveKey(mode,src,dst,hop,k)) {memset(k,0,sizeof k);return "OTA ROUTE STORAGE ERROR";}
+    if(!before || !*before)before=src;
+    if(!after || !*after)after=dst;
+    if(mode==ROLE_RELAY) {
+        if(!validName(before)||!validName(after)||!routeota::validNeighbours(self,src,dst,before,after))
+            return "OTA ROUTE BAD NAME";
+    } else {before=src;after=dst;}
+    uint8_t k[32];if(!loadNetworkKey(k))return "OTA ROUTE NO KEY";
+    if(!saveKey(mode,src,dst,hop,k,before,after)) {memset(k,0,sizeof k);return "OTA ROUTE STORAGE ERROR";}
     memcpy(key,k,32);memset(k,0,sizeof k);
-    strcpy(controller,src);strcpy(target,dst);strcpy(via,hop);role=mode;
-    Serial.printf("[RFROUTE] role=%u controller=%s target=%s via=%s set by RF\n",role,controller,target,via);
+    strcpy(controller,src);strcpy(target,dst);strcpy(via,hop);strcpy(previousHop,before);strcpy(nextHop,after);role=mode;
+    Serial.printf("[RFROUTE] role=%u controller=%s target=%s via=%s previous=%s next=%s set by RF\n",
+        role,controller,target,via,previousHop,nextHop);
     return nullptr;
 }
-const char* setRadioRelay(const char* src,const char* targetName) {return setRadioRoute(ROLE_RELAY,src,targetName);}
+const char* setRadioRelay(const char* src,const char* targetName,const char* before,const char* after) {
+    return setRadioRoute(ROLE_RELAY,src,targetName,before,after);
+}
 const char* setRadioTarget(const char* src,const char* relayName) {return setRadioRoute(ROLE_TARGET,src,relayName);}
 const char* clearRadioRoute() {return setRadioRoute(ROLE_OFF,nullptr,nullptr);}
 void describeRoute(char* out,size_t n) {
     const char* keyState=networkKeyConfigured()?"KEY=1":"KEY=0";
-    if(role==ROLE_RELAY)snprintf(out,n,"ROUTE RELAY %s>%s %s",controller,target,keyState);
+    if(role==ROLE_RELAY && (strcmp(previousHop,controller) || strcmp(nextHop,target)))
+        snprintf(out,n,"ROUTE RELAY %s>%s FROM %s TO %s %s",controller,target,previousHop,nextHop,keyState);
+    else if(role==ROLE_RELAY)snprintf(out,n,"ROUTE RELAY %s>%s %s",controller,target,keyState);
     else if(role==ROLE_TARGET)snprintf(out,n,"ROUTE TARGET VIA %s FROM %s %s",via,controller,keyState);
     else snprintf(out,n,"ROUTE OFF %s",keyState);
 }
@@ -245,7 +271,7 @@ bool handle(const uint8_t* f,size_t n) {
         if(v.phase!=routeota::RELAY_TARGET || !address(v.hopSource,via) || !address(inner+19,controller) || !address(inner+27,target) || inner[4]==128) {++wrongPhase;return true;}
         ++requests;replyContext=true;RF_OTA::handle(inner,v.size);replyContext=false;return true;
     }
-    if(v.phase==routeota::CONTROLLER_RELAY && address(v.hopSource,controller) && address(inner+19,controller) && address(inner+27,target) && inner[4]!=128) {
+    if(routeota::downstreamFrom(v,controller,previousHop) && address(inner+19,controller) && address(inner+27,target) && inner[4]!=128) {
         if(inner[4]==routeota::TEST_RELAY_FAULT) {
 #ifdef RFOTA_ROUTE_DIAGNOSTICS
             if(fault.arm(inner,v.size,active.load(),expectedNonce))++faultArms;else ++wrongPhase;
@@ -303,7 +329,7 @@ bool handle(const uint8_t* f,size_t n) {
         }
         uint8_t out[255];size_t count=encode(routeota::RELAY_TARGET,inner,v.size,out);
         if(!count||!LoRa_Utils::sendOtaFrame(out,count))++txErrors;else ++requests;
-    } else if(v.phase==routeota::TARGET_RELAY && address(v.hopSource,target) && active && address(inner+19,target) && address(inner+27,controller) &&
+    } else if(routeota::upstreamFrom(v,target,nextHop) && active && address(inner+19,target) && address(inner+27,controller) &&
               inner[4]==128 && v.size>=57 && inner[35]==expectedOp && labota::get32(inner+13)==expectedOffset &&
               (expectedOp==6 || !memcmp(inner+5,expectedNonce,8))) {
         lastPacket=millis();profile.activity(lastPacket);

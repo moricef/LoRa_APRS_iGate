@@ -405,6 +405,7 @@ bool handleAprsControl(const String& packet) {
     String controller=packet.substring(0,gt);
     if(controller!=Config.remoteManagement.authController || !Config.loramodule.txActive ||
        Config.digi.ecoMode!=0 || isUpdatingOTA)return true;
+    const bool relayExpected=AprsOtaCommand::awaitsRelay(std::string(packet.substring(gt+1,info).c_str()));
     auto auth=REMOTE_AUTH::verifyAndConsume(envelope,controller,
         Config.remoteManagement.authController,Config.callsign);
     auto sendText=[&](const String& text) {
@@ -412,12 +413,26 @@ bool handleAprsControl(const String& packet) {
         String response=STATION_Utils::localReplyHeader(local,controller,false)+"::"+to+":"+text;
         String wire=String("\x3c\xff\x01")+response;
         if(wire.length()>255)return false;
-        // A relay may be repeating the command this node also heard directly.
+        // This node heard the command directly while a relay named in its path
+        // is about to repeat it. Both would start at the same instant and both
+        // channel checks would see a free channel. Let the relay start first;
+        // the channel check below then defers this reply until it has finished.
+        if(relayExpected) {
+            const uint32_t until=millis()+1500+uint32_t(random(0,500));
+            while(int32_t(millis()-until)<0) {if(watchdog)esp_task_wdt_reset();delay(50);}
+        }
         // Wait for the channel instead of dropping the only application reply.
         const uint32_t started=millis();
-        for(;;) {
-            if(LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.c_str()),wire.length(),true))return true;
-            if(uint32_t(millis()-started)>=12000U)return false;
+        for(unsigned attempt=1;;++attempt) {
+            if(LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.c_str()),wire.length(),true)) {
+                Serial.printf("[RFOTA] Reply sent to %s attempt=%u after=%lums tx=%lu power=%d \"%s\"\n",controller.c_str(),
+                    attempt,(unsigned long)(millis()-started),(unsigned long)Config.loramodule.txFreq,Config.loramodule.power,text.c_str());
+                return true;
+            }
+            if(uint32_t(millis()-started)>=12000U) {
+                Serial.printf("[RFOTA] Reply NOT sent to %s after %u attempts \"%s\"\n",controller.c_str(),attempt,text.c_str());
+                return false;
+            }
             if(watchdog)esp_task_wdt_reset();
             delay(200+random(0,200));
         }
@@ -448,10 +463,11 @@ bool handleAprsControl(const String& packet) {
             command.kind==AprsOtaCommand::ROUTE_OFF) {
         // The route controller is the one that signed this command.
         const char* error=command.kind==AprsOtaCommand::ROUTE_OFF ? RF_ROUTE::clearRadioRoute() :
-            command.kind==AprsOtaCommand::RELAY ? RF_ROUTE::setRadioRelay(controller.c_str(),command.peer.c_str()) :
+            command.kind==AprsOtaCommand::RELAY ? RF_ROUTE::setRadioRelay(controller.c_str(),command.peer.c_str(),
+                command.previous.c_str(),command.next.c_str()) :
             RF_ROUTE::setRadioTarget(controller.c_str(),command.peer.c_str());
         if(error)answer=error;
-        else {char text[64];RF_ROUTE::describeRoute(text,sizeof text);answer="OTA "+String(text);}
+        else {char text[72];RF_ROUTE::describeRoute(text,sizeof text);answer="OTA "+String(text);}
     } else if(command.kind==AprsOtaCommand::PROFILE) {
         if(!LoRa_Utils::otaProfileSupported(command.radio))answer="OTA UNSUPPORTED PROFILE";
         else {aprsSelectedProfile=command.radio;aprsProfileSelected=true;answer="OTA PROFILE READY (RAM)";}

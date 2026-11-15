@@ -853,11 +853,13 @@ namespace LoRa_Utils {
         if (!Config.loramodule.txActive || size>255) return false;
         if (!otaFastProfile) changeFreqTx();
         if(channelAccess && Config.loramodule.cadActive && !tryChannelAccess()) {
+            Serial.println("[LORA] OTA frame deferred: channel busy");
             if(!otaFastProfile)changeFreqRx();
             operationDone=false;transmitFlag=false;radio.startReceive();return false;
         }
         uint32_t estimatedAir=radio.getTimeOnAir(size);
         int result=radio.transmit(const_cast<uint8_t*>(frame),size);
+        if(result!=RADIOLIB_ERR_NONE)Serial.printf("[LORA] OTA frame transmit error %d\n",result);
         if(!isOtaStatsRead(frame,size)) {
             portENTER_CRITICAL(&otaStatsMux);
             if(result==RADIOLIB_ERR_NONE) {++otaTxTotals.frames;otaTxTotals.bytes+=size;otaTxTotals.airtimeUs+=estimatedAir;}

@@ -360,6 +360,7 @@ used by Graywolf.
 | `OTA=NORMAL` | Reply on the current profile, then return to the normal profile |
 | `OTA=ROUTE?` | Report the saved OTA role and route |
 | `OTA=RELAY,F4MLV-15` | Configure the addressed station as the relay towards `F4MLV-15` |
+| `OTA=RELAY,F4MLV-15,<previous>,<next>` | Relay of a chain: `<previous>` is the controller or the relay before it, `<next>` the relay after it or the target; answers `OTA ROUTE RELAY C>T FROM <previous> TO <next> KEY=1` (firmware `4.0.2RXT-OTA2.2` or later) |
 | `OTA=VIA,F4MLV-10` | Configure the addressed station as a target reached through `F4MLV-10` |
 | `OTA=ROUTE,OFF` | Remove this station's OTA role and route |
 

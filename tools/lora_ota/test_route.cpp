@@ -42,5 +42,57 @@ int main() {
     assert(!fault.afterBitmap(4096,nonce,12288,0xffffffffU));
     assert(fault.afterBitmap(8192,nonce,12288,0xffffffffU));
     fault.clear();assert(!fault.afterBitmap(8192,nonce,12288,0xffffffffU));
-    puts("route framing: all four phases, limits and malformed lengths passed");
+    // Chain C -> R1 -> R2 -> T. Each frame on the air must be taken by exactly
+    // the next station of its direction, whoever else overhears it.
+    {
+        const char *C="F4MLV-2",*R1="F4MLV-10",*R2="F4MLV-11",*T="F4MLV-15";
+        struct Station {const char* name;const char* previous;const char* next;bool target;};
+        const Station stations[]={{R1,C,R2,false},{R2,R1,T,false},{T,R2,nullptr,true}};
+        auto listeners=[&](uint8_t phase,const char* from,bool down,const char*& taker) {
+            uint8_t source[8]{};memcpy(source,from,strlen(from));
+            memcpy(inner,"\x3c\xff\x7e\x02",4);inner[17]=0;inner[18]=0;
+            auto n=routeota::envelope(phase,source,inner,51,out);assert(n);
+            assert(routeota::parse(out,n+16,view));
+            int count=0;taker=nullptr;
+            for(const auto& s:stations) {
+                bool takes=false;
+                if(s.target)takes=down && view.phase==routeota::RELAY_TARGET && routeota::named(view.hopSource,s.previous);
+                else takes=down?routeota::downstreamFrom(view,C,s.previous):routeota::upstreamFrom(view,T,s.next);
+                if(takes) {++count;taker=s.name;}
+            }
+            return count;
+        };
+        const char* taker=nullptr;
+        // Down: controller, then each relay re-emitting under its own name.
+        assert(listeners(routeota::CONTROLLER_RELAY,C,true,taker)==1 && !strcmp(taker,R1));
+        assert(listeners(routeota::RELAY_TARGET,R1,true,taker)==1 && !strcmp(taker,R2));
+        assert(listeners(routeota::RELAY_TARGET,R2,true,taker)==1 && !strcmp(taker,T));
+        // Up: target, then each relay; the last frame is for the controller only.
+        assert(listeners(routeota::TARGET_RELAY,T,false,taker)==1 && !strcmp(taker,R2));
+        assert(listeners(routeota::RELAY_CONTROLLER,R2,false,taker)==1 && !strcmp(taker,R1));
+        assert(listeners(routeota::RELAY_CONTROLLER,R1,false,taker)==0);
+        // A frame never travels against its direction or skips a hop.
+        assert(listeners(routeota::RELAY_TARGET,R1,false,taker)==0);
+        assert(listeners(routeota::RELAY_CONTROLLER,R2,true,taker)==0);
+        assert(listeners(routeota::CONTROLLER_RELAY,R1,true,taker)==0);
+        assert(listeners(routeota::TARGET_RELAY,R2,false,taker)==0);
+        // A single relay keeps today's behaviour: controller and target as neighbours.
+        uint8_t source[8]{};memcpy(source,C,strlen(C));
+        auto n=routeota::envelope(routeota::CONTROLLER_RELAY,source,inner,51,out);
+        assert(routeota::parse(out,n+16,view) && routeota::downstreamFrom(view,C,C));
+        memset(source,0,8);memcpy(source,T,strlen(T));
+        n=routeota::envelope(routeota::TARGET_RELAY,source,inner,51,out);
+        assert(routeota::parse(out,n+16,view) && routeota::upstreamFrom(view,T,T));
+        assert(!routeota::upstreamFrom(view,T,R2) && !routeota::downstreamFrom(view,C,C));
+        // Neighbour sanity of a relay.
+        assert(routeota::validNeighbours(R1,C,T,C,T));
+        assert(routeota::validNeighbours(R1,C,T,C,R2));
+        assert(routeota::validNeighbours(R2,C,T,R1,T));
+        assert(!routeota::validNeighbours(R1,C,T,R1,T));  // itself upstream
+        assert(!routeota::validNeighbours(R1,C,T,C,R1));  // itself downstream
+        assert(!routeota::validNeighbours(R1,C,T,R2,R2)); // same neighbour twice
+        assert(!routeota::validNeighbours(R1,C,T,T,R2));  // target upstream
+        assert(!routeota::validNeighbours(R1,C,T,R2,C));  // controller downstream
+    }
+    puts("route framing: all four phases, limits, malformed lengths and relay chain passed");
 }
