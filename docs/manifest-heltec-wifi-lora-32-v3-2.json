@@ -1,6 +1,6 @@
 {
   "name": "LoRa APRS iGate - Heltec WiFi LoRa 32 V3.2 (RXT + LoRa OTA)",
-  "version": "4.0.2RXT-OTA (2026-11-14 16:31:09 UTC, unified configurable OTA controller/relay/target, RXT v2, durable resume, authenticated activation and confirmation)",
+  "version": "4.0.2RXT-OTA2.2 (2026-11-15 12:56:05 UTC, unified configurable OTA controller/relay/target, RXT v2, durable resume, authenticated activation and confirmation)",
   "new_install_prompt_erase": true,
   "builds": [
     {

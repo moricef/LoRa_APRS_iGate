@@ -31,7 +31,10 @@ def main():
             found = re.search(rb'Firmware: ([^<]+).*?Build date: ([^<]+)', content)
             if found:
                 info.append(tuple(x.decode('ascii') for x in found.groups()))
-        if len(info) != 1 or info[0][0] != '4.0.2RXT-OTA':
+        # Unified builds carry 4.0.2RXT-OTA, optionally followed by a revision
+        # label (OTA2.2); the three boards must publish the same version.
+        if len(info) != 1 or not re.fullmatch(r'4\.0\.2RXT-OTA[0-9.]*', info[0][0]) or \
+           (metadata and info[0][0] != metadata[0]['version']):
             raise RuntimeError(f'{env}: missing or unexpected embedded WebUI metadata: {info}')
         version, date = info[0]
         destination = docs / 'firmware' / folder
