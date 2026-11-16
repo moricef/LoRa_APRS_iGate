@@ -76,6 +76,7 @@ namespace LoRa_Utils {
     bool    readOtaProfile(labota::RadioProfile& profile);
     bool    setRendezvousProfile(const labota::RadioProfile& profile,bool enabled);
     bool    sendOtaFrame(const uint8_t* frame,size_t size,bool channelAccess=false);
+    uint32_t otaTimeOnAirMs(size_t size); // on the radio profile applied now
     bool    sendNewPacket(const String& newPacket, const RxtRxContext* rxtContext = nullptr, bool deferIfBusy = false);
     String  receivePacketFromSleep();
     String  receivePacket(String* jsonPacket = nullptr);

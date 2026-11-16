@@ -378,6 +378,46 @@ bool bridgeFrame(const uint8_t* f,size_t n,float rssi,float snr,float fo) {
     return n>=3 && f[0]==0x3c && f[1]==0xff && (f[2]==0x7e||f[2]==0x7d);
 }
 
+// Sends one APRS message line to the controller, waiting for a free channel
+// rather than dropping the only application reply.
+bool sendControlText(const String& controller,const String& local,const String& text) {
+    String to=controller;while(to.length()<9)to+=' ';
+    String response=STATION_Utils::localReplyHeader(local,controller,false)+"::"+to+":"+text;
+    String wire=String("\x3c\xff\x01")+response;
+    if(wire.length()>255)return false;
+    const uint32_t started=millis();
+    for(unsigned attempt=1;;++attempt) {
+        if(LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.c_str()),wire.length(),true)) {
+            Serial.printf("[RFOTA] Reply sent to %s attempt=%u after=%lums tx=%lu power=%d \"%s\"\n",controller.c_str(),
+                attempt,(unsigned long)(millis()-started),(unsigned long)Config.loramodule.txFreq,Config.loramodule.power,text.c_str());
+            return true;
+        }
+        if(uint32_t(millis()-started)>=12000U) {
+            Serial.printf("[RFOTA] Reply NOT sent to %s after %u attempts \"%s\"\n",controller.c_str(),attempt,text.c_str());
+            return false;
+        }
+        if(watchdog)esp_task_wdt_reset();
+        delay(200+random(0,200));
+    }
+}
+// A command heard directly while a relay named in its path has still to
+// repeat it is answered after that repeat, never during it: both stations
+// would start at once and collide at the controller. The answer waits for the
+// repeated copy, or for a deadline if this node does not hear the relay.
+struct PendingReply {
+    bool active=false,switchFast=false,returnNormal=false;
+    uint16_t lease=0;uint32_t deadline=0;
+    String controller,local,ackId,answer,envelope;
+} pendingReply;
+void flushPendingReply(const char* why) {
+    if(!pendingReply.active)return;
+    PendingReply r=pendingReply;pendingReply.active=false;
+    Serial.printf("[RFOTA] Deferred reply released: %s\n",why);
+    if(r.ackId.length())sendControlText(r.controller,r.local,"ack"+r.ackId);
+    bool sent=sendControlText(r.controller,r.local,r.answer);
+    if(sent && r.switchFast)profile.prepare(millis(),r.lease);
+    if(sent && r.returnNormal)cancel();
+}
 bool handleAprsControl(const String& packet) {
     // Only direct RF APRS messages, addressed to this node, from the configured
     // controller. Other traffic is left to the ordinary APRS handlers.
@@ -408,41 +448,21 @@ bool handleAprsControl(const String& packet) {
     const bool relayExpected=AprsOtaCommand::awaitsRelay(std::string(packet.substring(gt+1,info).c_str()));
     auto auth=REMOTE_AUTH::verifyAndConsume(envelope,controller,
         Config.remoteManagement.authController,Config.callsign);
-    auto sendText=[&](const String& text) {
-        String to=controller;while(to.length()<9)to+=' ';
-        String response=STATION_Utils::localReplyHeader(local,controller,false)+"::"+to+":"+text;
-        String wire=String("\x3c\xff\x01")+response;
-        if(wire.length()>255)return false;
-        // This node heard the command directly while a relay named in its path
-        // is about to repeat it. Both would start at the same instant and both
-        // channel checks would see a free channel. Let the relay start first;
-        // the channel check below then defers this reply until it has finished.
-        if(relayExpected) {
-            const uint32_t until=millis()+1500+uint32_t(random(0,500));
-            while(int32_t(millis()-until)<0) {if(watchdog)esp_task_wdt_reset();delay(50);}
-        }
-        // Wait for the channel instead of dropping the only application reply.
-        const uint32_t started=millis();
-        for(unsigned attempt=1;;++attempt) {
-            if(LoRa_Utils::sendOtaFrame(reinterpret_cast<const uint8_t*>(wire.c_str()),wire.length(),true)) {
-                Serial.printf("[RFOTA] Reply sent to %s attempt=%u after=%lums tx=%lu power=%d \"%s\"\n",controller.c_str(),
-                    attempt,(unsigned long)(millis()-started),(unsigned long)Config.loramodule.txFreq,Config.loramodule.power,text.c_str());
-                return true;
-            }
-            if(uint32_t(millis()-started)>=12000U) {
-                Serial.printf("[RFOTA] Reply NOT sent to %s after %u attempts \"%s\"\n",controller.c_str(),attempt,text.c_str());
-                return false;
-            }
-            if(watchdog)esp_task_wdt_reset();
-            delay(200+random(0,200));
-        }
-    };
+    auto sendText=[&](const String& text) {return sendControlText(controller,local,text);};
     if(auth.status!=REMOTE_AUTH::Status::Accepted && auth.status!=REMOTE_AUTH::Status::Replay) {
         sendText("AUTH FAILED");return true;
     }
     STATION_Utils::learnReturnPath(controller,packet);
-    if(!messageId.isEmpty())sendText("ack"+messageId);
-    if(auth.status==REMOTE_AUTH::Status::Replay)return true;
+    if(auth.status==REMOTE_AUTH::Status::Replay) {
+        // The relay's copy of a command answered later: the channel is free now.
+        if(pendingReply.active && pendingReply.envelope==envelope && !relayExpected) {
+            flushPendingReply("relay repeat heard");return true;
+        }
+        if(!messageId.isEmpty())sendText("ack"+messageId);
+        return true;
+    }
+    flushPendingReply("newer command");
+    if(!messageId.isEmpty() && !relayExpected)sendText("ack"+messageId);
     AprsOtaCommand command;String answer;
     bool switchFast=false,returnNormal=false;
     if(!AprsOtaCommand::parse(std::string(auth.command.c_str()),command))answer="OTA BAD COMMAND";
@@ -476,12 +496,23 @@ bool handleAprsControl(const String& packet) {
     else {answer="OTA FAST IN 2S LEASE="+String(command.lease);switchFast=true;}
     // Transmit the application response on the CURRENT profile before any
     // switch. A failed transmit must never trigger the requested transition.
+    if(relayExpected) {
+        // Long enough for the relay to queue and repeat the whole frame.
+        const uint32_t air=LoRa_Utils::otaTimeOnAirMs(packet.length()+3);
+        pendingReply.active=true;pendingReply.switchFast=switchFast;pendingReply.returnNormal=returnNormal;
+        pendingReply.lease=command.lease;pendingReply.deadline=millis()+2*air+3000;
+        pendingReply.controller=controller;pendingReply.local=local;pendingReply.ackId=messageId;
+        pendingReply.answer=answer;pendingReply.envelope=envelope;
+        Serial.printf("[RFOTA] Reply deferred until the relay repeat (at most %lums)\n",(unsigned long)(2*air+3000));
+        return true;
+    }
     bool sent=sendText(answer);
     if(sent && switchFast)profile.prepare(millis(),command.lease);
     if(sent && returnNormal)cancel();
     return true;
 }
 void tick() {
+    if(pendingReply.active && int32_t(millis()-pendingReply.deadline)>=0)flushPendingReply("relay repeat not heard");
     if(watchdog)esp_task_wdt_reset();
     if(pending && uint32_t(millis()-bootAt)>180000U)rollback();
     if(rebootAt && int32_t(millis()-rebootAt)>=0) {Serial.flush();ESP.restart();}

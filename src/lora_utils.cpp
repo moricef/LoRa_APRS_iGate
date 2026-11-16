@@ -844,6 +844,7 @@ namespace LoRa_Utils {
         return size>=51 && !memcmp(frame,"\x3c\xff\x7e\x02",4) &&
             (frame[4]==25 || (frame[4]==128 && size>=57 && frame[35]==25));
     }
+    uint32_t otaTimeOnAirMs(size_t size) {return uint32_t(radio.getTimeOnAir(size)/1000);}
     bool sendOtaFrame(const uint8_t* frame,size_t size,bool channelAccess) {
         uint8_t routed[255];
         if(RF_ROUTE::routedReply()) {
