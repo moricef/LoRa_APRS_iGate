@@ -125,6 +125,14 @@ namespace SYSLOG_Utils {
         }
     }
 
+    void logRxt(const String& rxtLine) {
+        if (rxtLine.length() > 0 && Config.syslog.active && networkManager->isConnected()) {
+            String syslogPacket = createSyslogStart();
+            syslogPacket.concat(rxtLine);
+            sendSyslogPacket(syslogPacket);
+        }
+    }
+
     void logAPRSISTx(const String& packet) {
         if (Config.syslog.active && networkManager->isConnected()) {
             String syslogPacket = createSyslogStart();

@@ -53,6 +53,7 @@ ___________________________________________________________________*/
 #include "battery_utils.h"
 #include "board_pinout.h"
 #include "syslog_utils.h"
+#include "rxt_syslog.h"
 #include "power_utils.h"
 #include "sleep_utils.h"
 #include "mqtt_utils.h"
@@ -271,6 +272,16 @@ void loop() {
             String rawRxtField = LoRa_Utils::getLastRxtField();
             if (Config.digi.ecoMode == 0) {
                 APRS_JSON_Utils::recordRx(packet, localRx, rawRxtField, hopMetrics);
+            }
+            if (rawRxtField.length() > 0 && Config.syslog.active) {
+                // Follows the "RX /" line already sent for this packet (see rxt_syslog.h).
+                std::vector<RXT_Syslog::Hop> hops;
+                for (const LoRa_Utils::RxtHopMetric& hop : hopMetrics) {
+                    hops.push_back({hop.fromNode.c_str(), hop.toNode.c_str(), hop.hasData, hop.rssi, hop.snr, hop.fo, hop.tth});
+                }
+                const int gt = packet.indexOf('>');
+                const String source = gt > 0 ? packet.substring(0, gt) : String("UNKNOWN");
+                SYSLOG_Utils::logRxt(RXT_Syslog::format(source.c_str(), hops).c_str());
             }
             if (Config.digi.ecoMode == 0 && rawRxtField.length() > 0) {
                 if (rxtDashboardEntries.size() >= 10) {
