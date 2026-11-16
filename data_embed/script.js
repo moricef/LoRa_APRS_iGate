@@ -619,14 +619,24 @@ form.addEventListener("submit", async (event) => {
     document.getElementById("wifi.APs").value =
         document.querySelectorAll(".network").length;
 
+    saveModal.show();
+
+    // A rejected setting (for example a malformed key) is answered at once
+    // with 4xx and its reason. Show it instead of reporting a save. A
+    // network error means the station is restarting after a valid save.
     fetch(form.action, {
         method: form.method,
         body: new FormData(form),
-    });
-
-    saveModal.show();
-
-    setTimeout(checkConnection, 2000);
+    })
+        .then(async (response) => {
+            if (!response.ok) {
+                saveModal.hide();
+                alert("Settings not saved: " + (await response.text()));
+                return;
+            }
+            setTimeout(checkConnection, 2000);
+        })
+        .catch(() => setTimeout(checkConnection, 2000));
 });
 
 fetchSettings();
