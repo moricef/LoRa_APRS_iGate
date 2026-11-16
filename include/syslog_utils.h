@@ -29,6 +29,7 @@ namespace SYSLOG_Utils {
     void logAPRSISTx(const String& packet);
     void logLoRaTx(const String& packet);
     void logCRCError(const String& packet, const int rssi, const float snr, const int freqError);
+    void logRxt(const String& rxtLine);
     void setup();
 
 }
