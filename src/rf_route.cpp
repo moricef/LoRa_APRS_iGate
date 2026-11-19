@@ -1,4 +1,5 @@
 #include "rf_route.h"
+#include "remote_auth.h"
 #ifdef ENABLE_RF_ROUTE
 #include <Arduino.h>
 #include <Preferences.h>
@@ -172,6 +173,13 @@ bool routedReply() {return replyContext;}
 size_t wrapReply(const uint8_t* f,size_t n,uint8_t* out) {return replyContext?encode(routeota::TARGET_RELAY,f,n,out):0;}
 bool configureTarget(const char* src,const char* relay,const char* encoded) {return save(ROLE_TARGET,src,Config.callsign.c_str(),relay,encoded);}
 bool networkKeyConfigured() {uint8_t k[32];bool ok=loadNetworkKey(k);memset(k,0,sizeof k);return ok;}
+bool networkKeyFingerprint(char out[7]) {
+    uint8_t k[32];if(!loadNetworkKey(k))return false;
+    String f=REMOTE_AUTH::keyFingerprint(k);memset(k,0,sizeof k);
+    if(f.length()!=6)return false;
+    memcpy(out,f.c_str(),7);
+    return true;
+}
 bool setNetworkKey(const char* encoded) {
     uint8_t k[32];if(!encoded||!decodeKey(encoded,k))return false;
     Preferences p;bool ok=false;

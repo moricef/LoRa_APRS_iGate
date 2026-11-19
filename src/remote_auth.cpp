@@ -206,6 +206,24 @@ bool otaTag(const uint8_t* frame,size_t size,uint8_t digest[32]) {
     return ok;
 }
 
+String keyFingerprint(const uint8_t key[32]) {
+    uint8_t digest[32] = {};
+    const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (info == nullptr || mbedtls_md(info, key, 32, digest) != 0) return "";
+    char text[7];
+    snprintf(text, sizeof(text), "%02x%02x%02x", digest[0], digest[1], digest[2]);
+    return String(text);
+}
+
+String fingerprint() {
+    const std::lock_guard<std::mutex> lock(authMutex);
+    uint8_t secret[kSecretLength];
+    if (!loadSecret(secret)) return "";
+    const String text = keyFingerprint(secret);
+    secureZero(secret, sizeof(secret));
+    return text;
+}
+
 bool configured() {
     Preferences preferences;
     if (!preferences.begin(kNamespace, true)) return false;

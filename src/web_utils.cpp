@@ -177,9 +177,12 @@ namespace WEB_Utils {
         data["display"]["alwaysOn"]    = Config.display.alwaysOn;
         data["display"]["timeout"]     = Config.display.timeout;
         data["remoteManagement"]["authKeyConfigured"] = REMOTE_AUTH::configured();
+        data["remoteManagement"]["authKeyFingerprint"] = REMOTE_AUTH::fingerprint();
 #ifdef ENABLE_RF_ROUTE
         data["remoteManagement"]["routeKeySupported"]  = true;
         data["remoteManagement"]["routeKeyConfigured"] = RF_ROUTE::networkKeyConfigured();
+        char routeFingerprint[7] = {};
+        if (RF_ROUTE::networkKeyFingerprint(routeFingerprint)) data["remoteManagement"]["routeKeyFingerprint"] = routeFingerprint;
 #else
         data["remoteManagement"]["routeKeySupported"]  = false;
 #endif

@@ -17,6 +17,8 @@ size_t wrapReply(const uint8_t*,size_t,uint8_t*);
 bool configureTarget(const char* controller,const char* relay,const char* encodedKey);
 // Network route key, installed locally with the station secret (43 Base64URL characters).
 bool networkKeyConfigured();
+// See REMOTE_AUTH::keyFingerprint(): 6 hex digits and NUL; false without a route key.
+bool networkKeyFingerprint(char out[7]);
 bool setNetworkKey(const char* encodedKey);
 bool clearNetworkKey();
 // Route set by a signed RF command; nullptr on success, otherwise the reply text.
@@ -38,6 +40,7 @@ inline bool routedReply() {return false;}
 inline size_t wrapReply(const uint8_t*,size_t,uint8_t*) {return 0;}
 inline bool configureTarget(const char*,const char*,const char*) {return false;}
 inline bool networkKeyConfigured() {return false;}
+inline bool networkKeyFingerprint(char*) {return false;}
 inline bool setNetworkKey(const char*) {return false;}
 inline bool clearNetworkKey() {return false;}
 inline const char* setRadioRelay(const char*,const char*,const char* =nullptr,const char* =nullptr) {return "OTA ROUTE UNSUPPORTED";}

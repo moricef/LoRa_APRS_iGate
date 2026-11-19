@@ -281,7 +281,7 @@ function loadSettings(settings) {
     document.getElementById("remoteManagement.authClear").checked       = false;
     document.getElementById("remoteManagement.authStatus").textContent  =
         settings.remoteManagement.authKeyConfigured
-            ? "Authentication key installed"
+            ? "Authentication key installed" + fingerprintText(settings.remoteManagement.authKeyFingerprint)
             : "No authentication key installed";
     // Shown only by firmware built with radio update routes.
     document.getElementById("remoteManagement.routeKeyBlock").hidden    = !settings.remoteManagement.routeKeySupported;
@@ -289,8 +289,10 @@ function loadSettings(settings) {
     document.getElementById("remoteManagement.routeKeyClear").checked   = false;
     document.getElementById("remoteManagement.routeKeyStatus").textContent =
         settings.remoteManagement.routeKeyConfigured
-            ? "Route key installed"
+            ? "Route key installed" + fingerprintText(settings.remoteManagement.routeKeyFingerprint)
             : "No route key installed";
+    updateKeyLength("remoteManagement.authSecret");
+    updateKeyLength("remoteManagement.routeKey");
 
     // NTP
     document.getElementById("ntp.server").value                         = settings.ntp.server;
@@ -307,6 +309,27 @@ function loadSettings(settings) {
     updateImage();
 }
 
+// Same fingerprint as Graywolf shows for the key it holds: compare the two.
+function fingerprintText(fingerprint) {
+    return fingerprint ? " \u2014 fingerprint " + fingerprint : "";
+}
+
+// A key is exactly 43 characters; show the count so a truncated copy is seen
+// before saving. Empty field: the installed key is kept.
+function updateKeyLength(fieldId) {
+    const input = document.getElementById(fieldId);
+    const label = document.getElementById(fieldId + "Length");
+    if (!input || !label) return;
+    const n = input.value.trim().length;
+    label.textContent = n === 0 ? "" : n + "/43 characters" + (n === 43 ? "" : " \u2014 a key is exactly 43 characters");
+    label.classList.toggle("text-danger", n !== 0 && n !== 43);
+}
+
+["remoteManagement.authSecret", "remoteManagement.routeKey"].forEach((fieldId) => {
+    const input = document.getElementById(fieldId);
+    if (input) input.addEventListener("input", () => updateKeyLength(fieldId));
+});
+
 function generateRemoteAuthSecret(fieldId = "remoteManagement.authSecret") {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
@@ -318,6 +341,7 @@ function generateRemoteAuthSecret(fieldId = "remoteManagement.authSecret") {
     input.value = secret;
     input.focus();
     input.select();
+    updateKeyLength(fieldId);
 }
 
 function showToast(message) {

@@ -33,6 +33,11 @@ namespace REMOTE_AUTH {
     };
 
     bool configured();
+    // First 3 bytes of SHA-256 over the 32 key bytes, as 6 lowercase hex digits.
+    // Lets an operator compare the key installed here with Graywolf's
+    // without showing it. Empty when no key is installed.
+    String keyFingerprint(const uint8_t key[32]);
+    String fingerprint();
     uint64_t acceptedCounter();
     bool setSecret(const String& base64UrlSecret);
     bool clearSecret();

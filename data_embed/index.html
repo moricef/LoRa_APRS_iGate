@@ -1366,6 +1366,7 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                         <button class="btn btn-outline-secondary" type="button" onclick="generateRemoteAuthSecret()"
                                             >Generate</button>
                                     </div>
+                                    <small id="remoteManagement.authSecretLength" class="d-block"></small>
                                     <small id="remoteManagement.authStatus">No authentication key installed</small>
                                 </div>
                                 <div class="col-12 mt-3">
@@ -1399,6 +1400,7 @@ body{background:var(--msh-bg);color:var(--msh-text);font-family:"Inter",system-u
                                     <small class="form-text text-muted"
                                         >Enter the same key on every station that relays or receives radio updates, and in the update application. Relay and target routes are then set by signed commands (OTA=RELAY, OTA=VIA).</small
                                     >
+                                    <small id="remoteManagement.routeKeyLength" class="d-block"></small>
                                     <small id="remoteManagement.routeKeyStatus" class="d-block">No route key installed</small>
                                     <div class="form-check mt-2">
                                         <input
