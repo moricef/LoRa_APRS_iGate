@@ -330,6 +330,37 @@ function updateKeyLength(fieldId) {
     if (input) input.addEventListener("input", () => updateKeyLength(fieldId));
 });
 
+// Saves only this key, at once and without a reboot (keys are stored apart
+// from the settings file), then shows the fingerprint the board answers.
+function saveRemoteKey(kind) {
+    const fieldId = kind === "route" ? "remoteManagement.routeKey" : "remoteManagement.authSecret";
+    const statusId = kind === "route" ? "remoteManagement.routeKeyStatus" : "remoteManagement.authStatus";
+    const label = kind === "route" ? "Route key installed" : "Authentication key installed";
+    const input = document.getElementById(fieldId);
+    const key = input.value.trim();
+    if (key.length !== 43) {
+        alert("Key not saved: a key is exactly 43 characters (" + key.length + " entered).");
+        return;
+    }
+    const body = new FormData();
+    body.append("kind", kind);
+    body.append("key", key);
+    fetch("/remote-key", { method: "POST", body })
+        .then(async (response) => {
+            const text = await response.text();
+            if (!response.ok) {
+                alert("Key not saved: " + text);
+                return;
+            }
+            document.getElementById(statusId).textContent = label + fingerprintText(text);
+            input.value = "";
+            input.type = "password";
+            updateKeyLength(fieldId);
+            showToast(label + fingerprintText(text));
+        })
+        .catch(() => alert("Key not saved: the station did not answer."));
+}
+
 function generateRemoteAuthSecret(fieldId = "remoteManagement.authSecret") {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);

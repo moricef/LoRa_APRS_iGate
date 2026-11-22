@@ -549,8 +549,9 @@ namespace WEB_Utils {
         } else if (request->hasParam("remoteManagement.routeKey", true)) {
             String routeKey = request->getParam("remoteManagement.routeKey", true)->value();
             routeKey.trim();
-            if (routeKey.length() > 0 && !RF_ROUTE::setNetworkKey(routeKey.c_str())) {
-                request->send(400, "text/plain", "Route key must be 32 bytes encoded as 43 Base64URL characters without padding");
+            const char* routeKeyError = routeKey.length() > 0 ? RF_ROUTE::replaceNetworkKey(routeKey.c_str()) : nullptr;
+            if (routeKeyError) {
+                request->send(400, "text/plain", routeKeyError);
                 return;
             }
         }
@@ -584,6 +585,44 @@ namespace WEB_Utils {
             AsyncWebServerResponse *response = request->beginResponse(500, "text/html", errorPage);
             request->send(response);
         }
+    }
+
+    // Saves one key without the full settings save and its reboot; the keys
+    // live in NVS and are read when used. Answers the new fingerprint.
+    void handleSaveKey(AsyncWebServerRequest *request) {
+        if (Config.webadmin.active && !request->authenticate(Config.webadmin.username.c_str(), Config.webadmin.password.c_str()))
+            return request->requestAuthentication();
+        if (!request->hasParam("kind", true) || !request->hasParam("key", true)) {
+            request->send(400, "text/plain", "Missing key");
+            return;
+        }
+        const String kind = request->getParam("kind", true)->value();
+        String key = request->getParam("key", true)->value();
+        key.trim();
+        if (kind == "command") {
+            if (Config.remoteManagement.authController.length() == 0) {
+                request->send(400, "text/plain", "Save the Authorized Graywolf controller first");
+                return;
+            }
+            if (!REMOTE_AUTH::setSecret(key)) {
+                request->send(400, "text/plain", "Secret must be 32 bytes encoded as 43 Base64URL characters without padding");
+                return;
+            }
+            request->send(200, "text/plain", REMOTE_AUTH::fingerprint());
+            return;
+        }
+        if (kind == "route") {
+            const char* error = RF_ROUTE::replaceNetworkKey(key.c_str());
+            if (error) {
+                request->send(400, "text/plain", error);
+                return;
+            }
+            char fingerprint[7] = {};
+            RF_ROUTE::networkKeyFingerprint(fingerprint);
+            request->send(200, "text/plain", fingerprint);
+            return;
+        }
+        request->send(400, "text/plain", "Unknown key");
     }
 
     void handleAction(AsyncWebServerRequest *request) {
@@ -665,6 +704,7 @@ namespace WEB_Utils {
             server.on("/configuration.json", HTTP_GET, handleReadConfiguration);
             server.on("/configuration.json", HTTP_POST, handleWriteConfiguration);
             server.on("/action", HTTP_POST, handleAction);
+            server.on("/remote-key", HTTP_POST, handleSaveKey);
             server.on("/style.css", HTTP_GET, handleStyle);
             server.on("/script.js", HTTP_GET, handleScript);
             server.on("/bootstrap.css", HTTP_GET, handleBootstrapStyle);

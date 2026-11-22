@@ -19,7 +19,10 @@ bool configureTarget(const char* controller,const char* relay,const char* encode
 bool networkKeyConfigured();
 // See REMOTE_AUTH::keyFingerprint(): 6 hex digits and NUL; false without a route key.
 bool networkKeyFingerprint(char out[7]);
-bool setNetworkKey(const char* encodedKey);
+// Installs the network route key and, when a relay or target route is
+// configured, the same key in that route, so one key is in effect.
+// nullptr on success, otherwise the reason. Refused during an update.
+const char* replaceNetworkKey(const char* encodedKey);
 bool clearNetworkKey();
 // Route set by a signed RF command; nullptr on success, otherwise the reply text.
 // previous/next empty or null: the controller and the target themselves.
@@ -41,7 +44,7 @@ inline size_t wrapReply(const uint8_t*,size_t,uint8_t*) {return 0;}
 inline bool configureTarget(const char*,const char*,const char*) {return false;}
 inline bool networkKeyConfigured() {return false;}
 inline bool networkKeyFingerprint(char*) {return false;}
-inline bool setNetworkKey(const char*) {return false;}
+inline const char* replaceNetworkKey(const char*) {return "Radio update routes are not supported by this firmware";}
 inline bool clearNetworkKey() {return false;}
 inline const char* setRadioRelay(const char*,const char*,const char* =nullptr,const char* =nullptr) {return "OTA ROUTE UNSUPPORTED";}
 inline const char* setRadioTarget(const char*,const char*) {return "OTA ROUTE UNSUPPORTED";}

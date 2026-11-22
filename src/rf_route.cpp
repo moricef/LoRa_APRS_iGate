@@ -180,11 +180,20 @@ bool networkKeyFingerprint(char out[7]) {
     memcpy(out,f.c_str(),7);
     return true;
 }
-bool setNetworkKey(const char* encoded) {
-    uint8_t k[32];if(!encoded||!decodeKey(encoded,k))return false;
+const char* replaceNetworkKey(const char* encoded) {
+    uint8_t k[32];
+    if(!encoded||!decodeKey(encoded,k))return "Route key must be 32 bytes encoded as 43 Base64URL characters without padding";
+    if(busy()||RF_OTA::busy()) {memset(k,0,sizeof k);return "Route key not changed: a radio update is in progress";}
     Preferences p;bool ok=false;
     if(p.begin(kNetKeyNamespace,false)) {ok=p.putBytes("key",k,32)==32;p.end();}
-    memset(k,0,sizeof k);return ok;
+    // A configured route keeps its own copy of the key: replace it as well.
+    if(ok && role!=ROLE_OFF) {
+        ok=false;
+        if(p.begin("ota-route",false)) {ok=p.putBytes("key",k,32)==32;p.end();}
+        if(ok)memcpy(key,k,32);
+    }
+    memset(k,0,sizeof k);
+    return ok?nullptr:"Route key storage error";
 }
 bool clearNetworkKey() {
     Preferences p;if(!p.begin(kNetKeyNamespace,false))return false;
