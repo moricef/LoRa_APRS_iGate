@@ -373,6 +373,7 @@ namespace DIGI_Utils {
             }
         }
         if (queryMessage) { TELEMETRY_Utils::incDrop(); return; }                  // answer should not be repeated.
+        if (!Config.loramodule.txActive) return;    // TX off: commands are still read above, nothing is relayed
 
         String loraPacket = generateDigipeatedPacket(packet, thirdPartyPacket);
         if (loraPacket != "") {
