@@ -55,6 +55,7 @@ static_assert(STATION_Utils::DEDUP_RETURN_ROUTE == PACKET_DEDUP::RETURN_ROUTE,
               "return-route de-duplication destination mismatch");
 
 bool saveNewDigiEcoModeConfig   = false;
+bool pendingTxOff               = false;   // ?TX=OFF accepted, applied once the output buffer is empty
 bool packetIsBeacon             = false;
 
 
@@ -272,6 +273,15 @@ namespace STATION_Utils {
             std::string(aprsDestination.c_str(), aprsDestination.length()));
     }
 
+    // ?TX=OFF must not drop its own ack and answer: the radio is switched
+    // off only after everything queued before it has been transmitted.
+    static void applyPendingTxOff() {
+        if (pendingTxOff && outputPacketBuffer.empty()) {
+            Config.loramodule.txActive  = false;
+            pendingTxOff                = false;
+        }
+    }
+
     void processOutputPacketBufferUltraEcoMode() {
         size_t currentIndex = 0;
         while (currentIndex < outputPacketBuffer.size()) {                  // this sends all packets from output buffer
@@ -284,6 +294,7 @@ namespace STATION_Utils {
             currentIndex++;
         }
         outputPacketBuffer.clear();
+        applyPendingTxOff();
         //
         if (saveNewDigiEcoModeConfig) {
             Config.writeFile();
@@ -314,6 +325,7 @@ namespace STATION_Utils {
                 delay(4000);
             }
         }
+        applyPendingTxOff();
         if (saveNewDigiEcoModeConfig) {
             Config.writeFile();
             delay(1000);

@@ -32,6 +32,7 @@ extern float                            snr;
 extern int                              freqOffset;
 extern bool                             shouldSleepLowVoltage;
 extern bool                             saveNewDigiEcoModeConfig;
+extern bool                             pendingTxOff;
 extern String                           versionNumber;
 
 
@@ -175,18 +176,21 @@ namespace QUERY_Utils {
                     Config.loramodule.txActive = true;
                     answer = "TX=ON";
                 }
+                pendingTxOff = false;       // also cancels a ?TX=OFF whose answer is still queued
             } else if (queryQuestion == "?TX=OFF") {
-                if (!radioTxActive) {
+                if (!radioTxActive || pendingTxOff) {
                     answer = "TX was OFF";
                 } else {
-                    Config.loramodule.txActive = false;
+                    pendingTxOff = true;    // TX is cut once the ack and this answer are sent
                     answer = "TX=OFF";
                 }
             } else if (queryQuestion == "?TX=?") {
-                answer = (radioTxActive) ? "TX=ON" : "TX=OFF";
+                answer = (radioTxActive && !pendingTxOff) ? "TX=ON" : "TX=OFF";
             } else if (queryQuestion == "?COMMIT") {     // saving for next reboot
                 answer = "New Config Saved";
+                if (pendingTxOff) Config.loramodule.txActive = false;   // save TX as it will be once the answer is sent
                 Config.writeFile();
+                if (pendingTxOff) Config.loramodule.txActive = true;
             }
         }
 
