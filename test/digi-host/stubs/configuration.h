@@ -13,6 +13,7 @@ struct Digi {
 struct LoraModule {
     int txFreq = 433775000;
     int rxFreq = 433775000;
+    bool txActive = true;
 };
 
 struct Configuration {
