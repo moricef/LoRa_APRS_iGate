@@ -3,24 +3,24 @@
     "environment": "ttgo-lora32-v21-ota",
     "directory": "ttgo-lora32-v21_SD",
     "version": "4.0.2RXT-OTA2.3",
-    "build_date": "2026-11-22 17:29:28 UTC",
-    "bytes": 1795520,
-    "sha256": "510c5633ca9f128829d8ab0a468e143e5983cfac0d95fb78977307c2ba32ef65"
+    "build_date": "2026-11-24 20:47:32 UTC",
+    "bytes": 1795632,
+    "sha256": "668138a0c5da29ed34ef41a0ebfd4decfe9b26cd2b61e98afa2f6d19f2210fb3"
   },
   {
     "environment": "heltec_wifi_lora_32_V3_2-ota",
     "directory": "heltec_wifi_lora_32_V3_2",
     "version": "4.0.2RXT-OTA2.3",
-    "build_date": "2026-11-22 17:29:46 UTC",
-    "bytes": 1731856,
-    "sha256": "0dd165cdc26e6df177cdb70fdf1fe17838ffbb841e236cf4aacf87d74b4ebefb"
+    "build_date": "2026-11-24 20:47:54 UTC",
+    "bytes": 1731968,
+    "sha256": "8d47236b8af6dfa97230412568a5328434b128024105feff27df5952d2740b7b"
   },
   {
     "environment": "QRPLabs_LightGateway_Plus_1_0-ota",
     "directory": "QRPLabs_LightGateway_Plus_1_0",
     "version": "4.0.2RXT-OTA2.3",
-    "build_date": "2026-11-22 17:30:04 UTC",
-    "bytes": 1747392,
-    "sha256": "07c105b9dba996aa3277be54a0494306b3e7e862d47b92b5f29766166dc61ae7"
+    "build_date": "2026-11-24 20:48:16 UTC",
+    "bytes": 1747504,
+    "sha256": "0aa417ca4c2b9dee15a7de5f6d4e412ed6e1866e08cb228bd8f8cd99921b5691"
   }
 ]
