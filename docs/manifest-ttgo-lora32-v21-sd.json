@@ -1,6 +1,6 @@
 {
   "name": "LoRa APRS iGate - TTGO LoRa32 v2.1 SD (RXT + LoRa OTA)",
-  "version": "4.0.2RXT-OTA2.3 (2026-11-23 20:14:15 UTC, unified configurable OTA controller/relay/target, RXT v2, durable resume, authenticated activation and confirmation)",
+  "version": "4.0.2RXT-OTA2.3 (2026-11-24 20:47:32 UTC, unified configurable OTA controller/relay/target, RXT v2, durable resume, authenticated activation and confirmation)",
   "new_install_prompt_erase": true,
   "builds": [
     {
