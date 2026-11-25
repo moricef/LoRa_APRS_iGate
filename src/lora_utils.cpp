@@ -143,6 +143,21 @@ APRSPacket lastAprsPacket;
 
 namespace LoRa_Utils {
 
+    // Configured power brought into the range the radio chip accepts, so that a
+    // value out of range never stops the radio setup. The value keeps the board
+    // convention used in setup(): SX126x boards without a 1 W module add 2 dB.
+    int validPower(int requested) {
+        #if defined(HAS_SX1278) || defined(HAS_SX1276)
+            int power = constrain(requested, 2, 20);        // PA_BOOST: below 2 dBm RadioLib switches to RFO, not wired on most modules
+            if (power > 17 && power < 20) power = 17;       // PA_BOOST accepts only 2-17 or 20 dBm
+            return power;
+        #elif (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
+            return constrain(requested, -11, 20);           // the chip receives power + 2, within -9 to 22 dBm
+        #else
+            return constrain(requested, -9, 22);            // SX126x / LLCC68 driving a 1 W module directly
+        #endif
+    }
+
     // === RXT HELPERS ===
     // --- RSSI ENCODER/DECODER HELPER ---
     // RSSI Encoder (Physical dBm -> ASCII char)
@@ -451,16 +466,20 @@ namespace LoRa_Utils {
         radio.setDio2AsRfSwitch(true);
         #endif*/
 
+        int power = validPower(Config.loramodule.power);
+        if (power != Config.loramodule.power) {
+            Utils::println("LoRa power adjusted: " + String(Config.loramodule.power) + " -> " + String(power));
+        }
         #ifdef HAS_1W_LORA  // Ebyte E22 400M30S (SX1268) / 900M30S (SX1262) / Ebyte E220 400M30S (LLCC68)
-            state = radio.setOutputPower(Config.loramodule.power); // max value 20dB for 1W modules as they have Low Noise Amp
+            state = radio.setOutputPower(power); // max value 20dB for 1W modules as they have Low Noise Amp
             radio.setCurrentLimit(140); // to be validated (100 , 120, 140)?
         #endif
         #if defined(HAS_SX1278) || defined(HAS_SX1276)
-            state = radio.setOutputPower(Config.loramodule.power); 
+            state = radio.setOutputPower(power);
             radio.setCurrentLimit(100);
         #endif
         #if (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
-            state = radio.setOutputPower(Config.loramodule.power + 2); 
+            state = radio.setOutputPower(power + 2);
             radio.setCurrentLimit(140);
         #endif
 
@@ -782,7 +801,7 @@ namespace LoRa_Utils {
         otaSelectedProfile=custom?p:labota::RadioProfile();otaCustomProfile=custom;return true;
     }
     static labota::RadioProfile otaNormalProfile() {
-        int power=Config.loramodule.power;
+        int power=validPower(Config.loramodule.power);
 #if (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
         power+=2; // same board adjustment as setup()
 #endif
