@@ -452,7 +452,7 @@ namespace APRS_IS_Utils {
         #else
             if (aprsIsClient.connected()) {
                 if (aprsIsClient.available()) {
-                    String aprsisPacket = aprsIsClient.readStringUntil('\r');
+                    String aprsisPacket = aprsIsClient.readStringUntil('\n');   // lines end with "\r\n"; reading up to '\r' left the '\n' and the next read waited 1 s for another '\r'
                     aprsisPacket.trim();
                     processAPRSISPacket(aprsisPacket);
                 }
