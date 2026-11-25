@@ -635,12 +635,12 @@ function loadReceivedPackets(packets) {
             const element = document.createElement("tr");
             const displayedTime = formatPacketTime(packet);
 
-            element.innerHTML = `
-                        <td>${displayedTime.text}</td>
-                        <td>${packet.packet}</td>
-                        <td>${packet.RSSI}</td>
-                        <td>${packet.SNR}</td>
-                    `;
+            // Received data is shown as text, never parsed as HTML.
+            [displayedTime.text, packet.packet, packet.RSSI, packet.SNR].forEach((value) => {
+                const cell = document.createElement("td");
+                cell.textContent = String(value ?? "");
+                element.appendChild(cell);
+            });
             if (displayedTime.estimated) {
                 element.cells[0].title = "Estimated from this browser clock; the digipeater has no synchronized time";
             }
@@ -962,6 +962,15 @@ function setMapMessage(text) {
  *   aprs-symbols-24-2.png = Overlay characters
  */
 
+function escapeHtml(value) {    // shows received data as text inside HTML strings (map popups / icons)
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 function getAprsSymbolIcon(symbol, callsign = "") {
 
     if (!symbol || String(symbol).length < 2) {
@@ -1118,7 +1127,7 @@ function getAprsSymbolIcon(symbol, callsign = "") {
                         -1px  1px 0 #fff,
                          1px  1px 0 #fff;
                     pointer-events:none;
-                ">${callsign}</span>
+                ">${escapeHtml(callsign)}</span>
             </div>
         `,
         iconSize: [24, 24],
@@ -1220,12 +1229,12 @@ function loadMapStations(stations) {
     (stations || []).forEach((s) => {
         if (s.lat === 0 && s.lon === 0) return;     // descartar estaciones sin fix
 
-        const popup = `<b>${s.callsign}</b>`
-            + (s.lastHeard ? `<br>Last: ${s.lastHeard}` : "")
-            + `<br>RSSI ${s.RSSI} / SNR ${s.SNR}`
-            + `<br>Packets: ${s.count}`
-            + `<br><b>${describeMapPath(s)}</b>`
-            + (s.path ? `<br><small>Path: ${s.path}</small>` : "");
+        const popup = `<b>${escapeHtml(s.callsign)}</b>`
+            + (s.lastHeard ? `<br>Last: ${escapeHtml(s.lastHeard)}` : "")
+            + `<br>RSSI ${escapeHtml(s.RSSI)} / SNR ${escapeHtml(s.SNR)}`
+            + `<br>Packets: ${escapeHtml(s.count)}`
+            + `<br><b>${escapeHtml(describeMapPath(s))}</b>`
+            + (s.path ? `<br><small>Path: ${escapeHtml(s.path)}</small>` : "");
 
         const aprsIcon =
             getAprsSymbolIcon(s.symbol, s.callsign);
@@ -1367,7 +1376,7 @@ window.showMap = function () {
                     iconAnchor: [9, 9]
                 });
                 L.marker([lat, lon], { icon: iGateIcon })
-                    .bindPopup(`<b>${callsign}</b><br>This station`)
+                    .bindPopup(`<b>${escapeHtml(callsign)}</b><br>This station`)
                     .addTo(mapInstance);        // directo al mapa: no se borra en los refrescos
             }
         })
