@@ -269,7 +269,8 @@ void rollback() {
     ESP.restart();
 }
 void serialCommands() {
-    while(Serial.available()) {
+    // Native USB returns -1 after Serial.end(), including in eco mode.
+    while(Serial.available() > 0) {
         char c=char(Serial.read());
         if(c=='\n') {
             serialInput[serialLength]=0;
