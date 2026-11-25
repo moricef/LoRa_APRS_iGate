@@ -60,6 +60,7 @@ namespace LoRa_Utils {
         int localFo;
         std::vector<RxtHopMetric> hops;
     };
+    int     validPower(int requested);
     void    setup();
     RxtRxContext captureRxtRxContext();
     bool    takeCrcError(RxtRxContext& context);
