@@ -85,7 +85,8 @@ namespace Utils {
             return;
         }
 
-        String statusPacket = APRSPacketLib::generateBasePacket(Config.callsign, "APLRG1", Config.beacon.path);
+        String statusCallsign = Config.tacticalCallsign == "" ? Config.callsign : Config.tacticalCallsign;
+        String statusPacket = APRSPacketLib::generateBasePacket(statusCallsign, "APLRG1", Config.beacon.path);
         statusPacket += sendOverAPRSIS ? ",qAC:>" : ":>";
         statusPacket += Config.beacon.statusPacket;
 
