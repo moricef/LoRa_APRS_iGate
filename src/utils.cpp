@@ -194,7 +194,8 @@ namespace Utils {
                 if (Config.beacon.gpsActive && Config.digi.ecoMode == 0) {
                     GPS_Utils::getData();
                     if (gps.location.isUpdated() && gps.location.lat() != 0.0 && gps.location.lng() != 0.0) {
-                        String basePacket   = APRSPacketLib::generateBasePacket(Config.callsign, "APLRG1", Config.beacon.path);
+                        String beaconCallsign = (stationCallsignIsValid && Config.tacticalCallsign != "") ? Config.tacticalCallsign : Config.callsign;
+                        String basePacket   = APRSPacketLib::generateBasePacket(beaconCallsign, "APLRG1", Config.beacon.path);
                         String encodedGPS   = APRSPacketLib::encodeGPSIntoBase91(gps.location.lat(),gps.location.lng(), 0, 0, Config.beacon.symbol, false, 0, true, Config.beacon.ambiguityLevel);
 
                         beaconPacket    = basePacket;
