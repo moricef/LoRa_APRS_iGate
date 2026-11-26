@@ -20,6 +20,9 @@
 #include "ota_rendezvous.h"
 #include "station_utils.h"
 #include "window_flash_store.h"
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+#include "hal/usb_serial_jtag_ll.h"
+#endif
 
 extern Configuration Config;
 extern NetworkManager* networkManager;
@@ -268,7 +271,20 @@ void rollback() {
     // If no rollback slot is available, reset rather than silently confirm.
     ESP.restart();
 }
+// Native USB console (ESP32-S3 USB Serial/JTAG, e.g. QRP Labs): in the
+// Arduino core we build with, a reply written while the driver briefly
+// believes the host is gone is parked in its buffer with no send scheduled,
+// and leaves only with the next write (seen as TXDONE arriving with the
+// answer to the next bridge command). Re-arm the send interrupt so parked
+// bytes go out; same step as the upstream fix (arduino-esp32 #12606).
+// Serial.flush() would not help: in that state it discards the buffer.
+static void kickUsbTx() {
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+    usb_serial_jtag_ll_ena_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_IN_EMPTY);
+#endif
+}
 void serialCommands() {
+    static uint32_t lastLineAt=0;
     // Native USB returns -1 after Serial.end(), including in eco mode.
     while(Serial.available() > 0) {
         char c=char(Serial.read());
@@ -313,11 +329,16 @@ void serialCommands() {
             }
 #endif
             serialLength=0;serialOverflow=false;memset(serialInput,0,sizeof serialInput);
+            lastLineAt=millis();kickUsbTx();
         } else if(c!='\r') {
             if(serialLength+1<sizeof serialInput)serialInput[serialLength++]=c;
             else serialOverflow=true;
         }
     }
+    // Keep re-arming while bridging (frames received over the air are also
+    // reported on USB) and shortly after a command, until any parked reply
+    // has left.
+    if(bridgeOn || (lastLineAt && millis()-lastLineAt<200)) kickUsbTx();
 }
 }
 namespace RF_OTA {

@@ -13,6 +13,7 @@ class SerialCommandsTests(unittest.TestCase):
         function = source[start:end]
         harness = r'''
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -33,6 +34,11 @@ unsigned serialLength = 0;
 bool serialOverflow = false;
 std::vector<std::string> commands;
 bool bridgeCommand(const char* line) { commands.emplace_back(line); return true; }
+uint32_t now = 1;
+uint32_t millis() { return now; }
+unsigned kicks = 0;
+void kickUsbTx() { ++kicks; }
+bool bridgeOn = false;
 '''
         harness += function
         harness += r'''
@@ -53,6 +59,13 @@ int main() {
     Serial.input = std::string(40, 'X') + "\nBRIDGE OFF\n";
     serialCommands();
     assert(commands.size() == 3 && commands[2] == "BRIDGE OFF");
+    // USB send re-arm: after each line, while bridging, and for 200 ms after a command.
+    now += 1000; unsigned k = kicks;
+    serialCommands(); assert(kicks == k);
+    bridgeOn = true; serialCommands(); assert(kicks == k + 1);
+    bridgeOn = false; Serial.input = "PROFILE 0\n"; serialCommands(); assert(kicks == k + 3);
+    now += 150; serialCommands(); assert(kicks == k + 4);
+    now += 100; serialCommands(); assert(kicks == k + 4);
 }
 '''
         with tempfile.TemporaryDirectory() as folder:
