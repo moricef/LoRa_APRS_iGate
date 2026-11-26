@@ -87,28 +87,12 @@ LoRa_Utils::RxtRxContext lastCrcError = {false, 0, 0.0F, 0, 0};
 #define DIFS_SLOTS      2       // Number of secuential CAD slots to consider a free channel to Tx
 int  backoffMax         = 4;    // Max Backoff value (number of CAD slots to wait before Tx)
 
-// Define RadioLib interrupt handler and web sanitizer locally since they are exclusive to lora_utils.cpp
+// RadioLib interrupt handler.
 #if defined(ESP8266) || defined(ESP32)
 IRAM_ATTR
 #endif
 void setFlag(void) {
     operationDone = true;
-}
-
-String sanitizeForWeb(const String& input) {
-    String output = "";
-    for (unsigned int i = 0; i < input.length(); i++) {
-        char c = input.charAt(i);
-        switch (c) {
-            case '<': output += "&lt;"; break;
-            case '>': output += "&gt;"; break;
-            case '&': output += "&amp;"; break;
-            case '\"': output += "&quot;"; break;
-            case '\'': output += "&#39;"; break;
-            default: output += c; break;
-        }
-    }
-    return output;
 }
 
 #ifdef HAS_SX1262
@@ -868,7 +852,8 @@ namespace LoRa_Utils {
                                     ReceivedPacket receivedPacket;
                                     receivedPacket.rxTime   = NTP_Utils::getFormatedTime();
                                     receivedPacket.receivedAtMillis = millis();
-                                    receivedPacket.packet   = sanitizeForWeb(cleanPacket);
+                                    // JSON serialization and textContent handle escaping.
+                                    receivedPacket.packet   = cleanPacket;
                                     receivedPacket.RSSI     = rssi;
                                     receivedPacket.SNR      = snr;
                                     receivedPackets.push_back(receivedPacket);
